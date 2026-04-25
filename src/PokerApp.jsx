@@ -2164,6 +2164,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const [settlementOpen, setSettlementOpen] = useState(false); // מודל חלוקת כספים
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false); // מודל אישור איפוס
   const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
+  const [savedEvening, setSavedEvening] = useState(false); // האם הערב כבר נשמר
 
   // שמירה אוטומטית של מצב הערב לאחסון מקומי בדפדפן
   useEffect(() => {
@@ -2196,6 +2197,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const reset = () => {
     setParticipants([]); setHost(''); setClosing(false); setFinalChips({});
     setPendingAdditions([]); setShowAddPlayer(false);
+    setSavedEvening(false);
     setSessionDate(new Date().toISOString().split('T')[0]);
     try { window.localStorage.removeItem(LIVE_SESSION_KEY); } catch {}
   };
@@ -2282,9 +2284,29 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       date: sessionDate, season: currentSeason, pot: totalPot, results,
       host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true
     });
+    setSavedEvening(true);
     reset();
     setHasLoadedSaved(false);
     onClose();
+  };
+
+  // שמירה ממסך החלוקה - שומר בלי לסגור את המודל
+  const handleSaveFromSettlement = () => {
+    if (!isBalanced) return alert(`הסכומים לא מאוזנים! יש פער של ${balance > 0 ? '+' : ''}${balance} ₪`);
+    if (savedEvening) return; // כבר נשמר
+    
+    const results = {};
+    participants.forEach(p => {
+      const chips = Number(finalChips[p.name]) || 0;
+      const buyIn = p.buyIns * 20;
+      results[p.name] = chips - buyIn;
+    });
+    
+    onSave({
+      date: sessionDate, season: currentSeason, pot: totalPot, results,
+      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true
+    });
+    setSavedEvening(true);
   };
 
   const availablePlayers = players.filter(p => !participants.find(part => part.name === p));
@@ -2514,7 +2536,10 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
         finalChips={finalChips}
         host={host}
         sessionDate={sessionDate}
-        totalPot={totalPot} />
+        totalPot={totalPot}
+        isBalanced={isBalanced}
+        onSaveEvening={handleSaveFromSettlement}
+        alreadySaved={savedEvening} />
 
       {/* מודל אישור איפוס */}
       {resetConfirmOpen && (
@@ -2553,7 +2578,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
 };
 
 // ===== מודל חלוקת כספים ושיתוף =====
-const SettlementModal = ({ isOpen, onClose, participants, finalChips, host, sessionDate, totalPot }) => {
+const SettlementModal = ({ isOpen, onClose, participants, finalChips, host, sessionDate, totalPot, isBalanced, onSaveEvening, alreadySaved }) => {
   const shareCardRef = useRef(null);
   const [sharing, setSharing] = useState(false);
 
@@ -2742,16 +2767,33 @@ const SettlementModal = ({ isOpen, onClose, participants, finalChips, host, sess
         </div>
 
         {/* כפתורי פעולה */}
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <button onClick={onClose}
-            className="rounded-lg border border-stone-700 bg-stone-900 px-4 py-3 text-stone-300 hover:bg-stone-800 font-bold">
-            סגור
-          </button>
-          <button onClick={handleDownload} disabled={sharing}
-            className="rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 px-4 py-3 font-bold text-white hover:from-amber-500 shadow-lg shadow-amber-900/40 flex items-center justify-center gap-2 disabled:opacity-50">
-            {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            {sharing ? 'מכין...' : 'שתף / הורד'}
-          </button>
+        <div className="mt-4 space-y-2">
+          {/* כפתור שמירה - מוצג רק אם מאוזן */}
+          {isBalanced && onSaveEvening && (
+            <button 
+              onClick={onSaveEvening} 
+              disabled={alreadySaved}
+              className={`w-full rounded-lg px-4 py-3 font-bold flex items-center justify-center gap-2 transition ${
+                alreadySaved 
+                  ? 'bg-stone-800 text-stone-500 cursor-not-allowed' 
+                  : 'bg-gradient-to-br from-emerald-600 to-emerald-700 text-white hover:from-emerald-500 shadow-lg shadow-emerald-900/40'
+              }`}>
+              <Check className="h-4 w-4" /> 
+              {alreadySaved ? '✓ נשמר' : 'שמור ערב'}
+            </button>
+          )}
+          
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={onClose}
+              className="rounded-lg border border-stone-700 bg-stone-900 px-4 py-3 text-stone-300 hover:bg-stone-800 font-bold">
+              סגור
+            </button>
+            <button onClick={handleDownload} disabled={sharing}
+              className="rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 px-4 py-3 font-bold text-white hover:from-amber-500 shadow-lg shadow-amber-900/40 flex items-center justify-center gap-2 disabled:opacity-50">
+              {sharing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {sharing ? 'מכין...' : 'שתף / הורד'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
