@@ -805,6 +805,7 @@ const AddSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, admi
 // ===== היסטוריה =====
 const SessionHistory = ({ sessions, onDelete, isAdmin }) => {
   const sorted = [...sessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+  const [expandedIdx, setExpandedIdx] = useState(null);
   return (
     <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur">
       <div className="border-b border-stone-800 bg-gradient-to-r from-amber-950/40 to-stone-900/40 px-6 py-4">
@@ -812,17 +813,22 @@ const SessionHistory = ({ sessions, onDelete, isAdmin }) => {
           <Calendar className="h-5 w-5" />
           היסטוריית מפגשים ({sessions.length})
         </h3>
+        <div className="text-xs text-stone-500 mt-1">לחץ על מפגש כדי לראות את כל השחקנים</div>
       </div>
       <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
         {sorted.map((s, i) => {
           const winners = Object.entries(s.results).filter(([_, v]) => v > 0).sort((a, b) => b[1] - a[1]);
           const losers = Object.entries(s.results).filter(([_, v]) => v < 0).sort((a, b) => a[1] - b[1]);
+          const zeros = Object.entries(s.results).filter(([_, v]) => v === 0);
           const winner = winners[0]; const loser = losers[0];
+          const isExpanded = expandedIdx === i;
           return (
-            <div key={i} className="border-b border-stone-900 p-4 hover:bg-stone-900/30 transition">
+            <div key={i} className="border-b border-stone-900 hover:bg-stone-900/30 transition">
+              <div className="p-4 cursor-pointer" onClick={() => setExpandedIdx(isExpanded ? null : i)}>
               <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <div className="text-sm font-bold text-stone-100">
+                  <div className="text-sm font-bold text-stone-100 flex items-center gap-2">
+                    <span className={`text-stone-500 transition-transform inline-block ${isExpanded ? 'rotate-90' : ''}`}>▶</span>
                     {new Date(s.date).toLocaleDateString('he-IL', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
                   </div>
                   {s.host && <div className="text-xs text-stone-500">מארח: <span className="text-amber-400">{s.host}</span></div>}
@@ -831,7 +837,7 @@ const SessionHistory = ({ sessions, onDelete, isAdmin }) => {
                   {s.addedBy && <div className="text-xs text-stone-600">הוסף ע"י: <span className="text-violet-400">{s.addedBy}</span></div>}
                 </div>
                 {isAdmin && onDelete && (
-                  <button onClick={() => { if (confirm('למחוק את המפגש?')) onDelete(s.date); }} className="text-stone-600 hover:text-rose-400 p-1">
+                  <button onClick={(e) => { e.stopPropagation(); if (confirm('למחוק את המפגש?')) onDelete(s.date); }} className="text-stone-600 hover:text-rose-400 p-1">
                     <X className="h-4 w-4" />
                   </button>
                 )}
@@ -840,6 +846,32 @@ const SessionHistory = ({ sessions, onDelete, isAdmin }) => {
                 {winner && <span>🏆 <span className="text-amber-300 font-bold">{winner[0]}</span> <span className="text-emerald-400 tabular-nums">+{winner[1]}</span></span>}
                 {loser && <span>💀 <span className="text-rose-300 font-bold">{loser[0]}</span> <span className="text-rose-400 tabular-nums">{loser[1]}</span></span>}
               </div>
+              </div>
+              {isExpanded && (
+                <div className="px-4 pb-4 pt-1 border-t border-stone-900/50 bg-stone-950/40">
+                  <div className="text-xs text-stone-500 mb-2 font-bold">כל השחקנים במפגש:</div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                    {winners.map(([name, val]) => (
+                      <div key={name} className="rounded-lg bg-emerald-950/30 border border-emerald-800/40 px-3 py-2 flex items-center justify-between">
+                        <span className="text-sm font-bold text-emerald-200">{name}</span>
+                        <span className="text-sm tabular-nums font-bold text-emerald-400">+{val}</span>
+                      </div>
+                    ))}
+                    {zeros.map(([name, val]) => (
+                      <div key={name} className="rounded-lg bg-stone-900/50 border border-stone-700/40 px-3 py-2 flex items-center justify-between">
+                        <span className="text-sm font-bold text-stone-300">{name}</span>
+                        <span className="text-sm tabular-nums text-stone-500">0</span>
+                      </div>
+                    ))}
+                    {losers.map(([name, val]) => (
+                      <div key={name} className="rounded-lg bg-rose-950/30 border border-rose-800/40 px-3 py-2 flex items-center justify-between">
+                        <span className="text-sm font-bold text-rose-200">{name}</span>
+                        <span className="text-sm tabular-nums font-bold text-rose-400">{val}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
