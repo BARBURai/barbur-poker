@@ -39,7 +39,7 @@ const HOSTING_SCHEDULE = HOSTING_DATA;
 const ALL_QUOTES = QUOTES_DATA;
 
 // ===== אחסון משותף - Firebase Firestore =====
-const STORAGE_KEY = 'poker_group_state_v3';
+const STORAGE_KEY = 'poker_group_state_v4';
 const QUOTES_STORAGE_KEY = 'poker_quotes_state_v1';
 const GALLERY_STORAGE_KEY = 'poker_gallery_state_v1';
 
