@@ -42,6 +42,11 @@ const ALL_QUOTES = QUOTES_DATA;
 const STORAGE_KEY = 'poker_group_state_v4';
 const QUOTES_STORAGE_KEY = 'poker_quotes_state_v1';
 const GALLERY_STORAGE_KEY = 'poker_gallery_state_v1';
+// 🆕 מפתחות לגיבויים
+const BACKUPS_INDEX_KEY = 'poker_backups_index_v1'; // רשימת מפתחות גיבויים
+const BACKUP_KEY_PREFIX = 'poker_backup_'; // פרפיקס לכל גיבוי בודד
+const AUTO_BACKUP_INTERVAL_DAYS = 7; // גיבוי אוטומטי כל 7 ימים
+const MAX_BACKUPS_TO_KEEP = 12; // שומר 12 גיבויים אחרונים (3 חודשים)
 
 const loadState = async (key = STORAGE_KEY) => {
   return await fbLoadState(key);
@@ -2768,18 +2773,20 @@ const SettlementModal = ({ isOpen, onClose, participants, finalChips, host, sess
 
         {/* כפתורי פעולה */}
         <div className="mt-4 space-y-2">
-          {/* כפתור שמירה - מוצג רק אם מאוזן */}
-          {isBalanced && onSaveEvening && (
+          {/* 🆕 כפתור שמירה - מוצג כשהפונקציה זמינה */}
+          {onSaveEvening && (
             <button 
               onClick={onSaveEvening} 
-              disabled={alreadySaved}
+              disabled={alreadySaved || !isBalanced}
               className={`w-full rounded-lg px-4 py-3 font-bold flex items-center justify-center gap-2 transition ${
                 alreadySaved 
                   ? 'bg-stone-800 text-stone-500 cursor-not-allowed' 
+                  : !isBalanced
+                  ? 'bg-stone-800 text-stone-500 cursor-not-allowed opacity-60'
                   : 'bg-gradient-to-br from-emerald-600 to-emerald-700 text-white hover:from-emerald-500 shadow-lg shadow-emerald-900/40'
               }`}>
               <Check className="h-4 w-4" /> 
-              {alreadySaved ? '✓ נשמר' : 'שמור ערב'}
+              {alreadySaved ? '✓ נשמר' : !isBalanced ? 'לא מאוזן - לא ניתן לשמור' : 'שמור ערב'}
             </button>
           )}
           
@@ -3738,6 +3745,413 @@ const GalleryImageModal = ({ image, likes, currentUser, isAdmin, canGoNext, canG
 };
 
 
+// ===== מודל ניהול גיבויים =====
+const BackupsModal = ({ isOpen, onClose, backupsList, onCreateBackup, onDownload, onRestore, onUploadFile, onRefresh }) => {
+  const fileInputRef = useRef(null);
+  const [creating, setCreating] = useState(false);
+  
+  if (!isOpen) return null;
+
+  const handleCreate = async () => {
+    setCreating(true);
+    await onCreateBackup();
+    setCreating(false);
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) onUploadFile(file);
+    e.target.value = ''; // איפוס כדי שאפשר יהיה לבחור שוב את אותו קובץ
+  };
+
+  const formatDate = (iso) => {
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString('he-IL', { 
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    } catch { return iso; }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur p-4" dir="rtl">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border-2 border-cyan-700/50 bg-gradient-to-br from-stone-900 to-stone-950 p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-extrabold text-cyan-200 flex items-center gap-2">
+            💾 גיבוי ושחזור
+          </h2>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-200">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* פעולות עיקריות */}
+        <div className="space-y-2 mb-5">
+          <button onClick={handleCreate} disabled={creating}
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-700 px-4 py-3 text-white font-bold hover:from-emerald-500 shadow-lg shadow-emerald-900/40 disabled:opacity-50">
+            {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {creating ? 'יוצר גיבוי...' : '📥 גיבוי עכשיו (הורדה לדרייב)'}
+          </button>
+          
+          <button onClick={() => fileInputRef.current?.click()}
+            className="w-full flex items-center justify-center gap-2 rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 px-4 py-3 text-white font-bold hover:from-amber-500 shadow-lg shadow-amber-900/40">
+            <Upload className="h-4 w-4" />
+            📤 שחזור מקובץ JSON (מהדרייב)
+          </button>
+          <input ref={fileInputRef} type="file" accept=".json,application/json" onChange={handleFileSelect} className="hidden" />
+        </div>
+
+        {/* מידע על גיבויים אוטומטיים */}
+        <div className="rounded-lg bg-cyan-950/30 border border-cyan-700/40 p-3 text-xs text-cyan-200 mb-4">
+          ℹ️ <strong>גיבוי אוטומטי:</strong> האפליקציה שומרת באופן אוטומטי snapshot של כל הנתונים <strong>אחת לשבוע</strong>. נשמרים 12 גיבויים אחרונים (3 חודשים).
+        </div>
+
+        {/* רשימת הגיבויים האוטומטיים */}
+        <div className="mb-2 flex items-center justify-between">
+          <h3 className="text-sm font-bold text-stone-300">📋 גיבויים שמורים בענן ({backupsList.length})</h3>
+          <button onClick={onRefresh} className="text-xs text-cyan-400 hover:text-cyan-300">🔄 רענן</button>
+        </div>
+
+        {backupsList.length === 0 ? (
+          <div className="rounded-lg bg-stone-800/40 border border-stone-700/40 p-4 text-center text-stone-500 text-sm">
+            אין גיבויים שמורים. לחץ על "גיבוי עכשיו" ליצירת הראשון.
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {backupsList.map((backup) => (
+              <div key={backup.id} className="rounded-lg bg-stone-800/40 border border-stone-700/40 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <div className="text-sm font-bold text-stone-100 flex items-center gap-2">
+                      {backup.type === 'auto' ? '🔄 אוטומטי' : '📥 ידני'}
+                      <span className="text-stone-400 text-xs font-normal">{formatDate(backup.timestamp)}</span>
+                    </div>
+                    {backup.meta && (
+                      <div className="text-xs text-stone-500 mt-1">
+                        {backup.meta.sessionsCount} מפגשים · {backup.meta.hostingCount} אירוחים · {backup.meta.phonesCount} טלפונים
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => onDownload(backup)}
+                    className="flex-1 rounded bg-cyan-700 hover:bg-cyan-600 px-3 py-1.5 text-white text-xs font-bold flex items-center justify-center gap-1">
+                    <Download className="h-3 w-3" /> הורדה
+                  </button>
+                  <button onClick={() => onRestore(backup)}
+                    className="flex-1 rounded bg-amber-700 hover:bg-amber-600 px-3 py-1.5 text-white text-xs font-bold">
+                    🔄 שחזור
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// ===== מודל מנהל - ניהול פרטי תשלום של כל השחקנים =====
+const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave }) => {
+  const [editingPlayer, setEditingPlayer] = useState(null);
+  const [phone, setPhone] = useState('');
+  const [app, setApp] = useState('both');
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+
+  if (!isOpen) return null;
+
+  const startEdit = (name) => {
+    const current = phones[name] || {};
+    setEditingPlayer(name);
+    setPhone(current.phone || '');
+    setApp(current.app || 'both');
+    setError('');
+  };
+
+  const cancelEdit = () => {
+    setEditingPlayer(null);
+    setPhone('');
+    setApp('both');
+    setError('');
+  };
+
+  const saveEdit = () => {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length !== 10 || !digits.startsWith('05')) {
+      setError('מספר חייב להיות 10 ספרות, מתחיל ב-05');
+      return;
+    }
+    onSave(editingPlayer, { phone: digits, app });
+    cancelEdit();
+  };
+
+  const removePhone = (name) => {
+    if (!confirm(`למחוק את פרטי התשלום של ${name}?`)) return;
+    onSave(name, null);
+  };
+
+  // מיון: קודם מי שיש לו טלפון, ואז מי שאין
+  const sortedPlayers = [...players].sort((a, b) => {
+    const aHas = !!phones[a]?.phone;
+    const bHas = !!phones[b]?.phone;
+    if (aHas !== bHas) return aHas ? -1 : 1;
+    return a.localeCompare(b, 'he');
+  });
+  const filtered = sortedPlayers.filter(p => p.includes(search));
+
+  const withPhones = sortedPlayers.filter(p => phones[p]?.phone).length;
+  const withoutPhones = sortedPlayers.length - withPhones;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur p-4" dir="rtl">
+      <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border-2 border-purple-700/50 bg-gradient-to-br from-stone-900 to-stone-950 p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-extrabold text-purple-200 flex items-center gap-2">
+            📱 ניהול פרטי תשלום
+          </h2>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-200">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 mb-4">
+          <div className="rounded-lg bg-emerald-950/30 border border-emerald-700/40 p-3 text-center">
+            <div className="text-2xl font-bold text-emerald-300">{withPhones}</div>
+            <div className="text-xs text-emerald-400">✓ עם טלפון</div>
+          </div>
+          <div className="rounded-lg bg-amber-950/30 border border-amber-700/40 p-3 text-center">
+            <div className="text-2xl font-bold text-amber-300">{withoutPhones}</div>
+            <div className="text-xs text-amber-400">⚠️ חסר טלפון</div>
+          </div>
+        </div>
+
+        <input
+          type="text"
+          placeholder="🔍 חיפוש שחקן..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full rounded-lg bg-stone-800 border border-stone-700 px-4 py-2 text-stone-100 mb-3 focus:border-purple-600 focus:outline-none text-sm"
+        />
+
+        <div className="space-y-2">
+          {filtered.map(name => {
+            const data = phones[name];
+            const hasPhone = !!data?.phone;
+            const isEditing = editingPlayer === name;
+            
+            if (isEditing) {
+              return (
+                <div key={name} className="rounded-lg bg-purple-950/40 border border-purple-700/50 p-3 space-y-2">
+                  <div className="font-bold text-purple-200">{name}</div>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    dir="ltr"
+                    placeholder="0501234567"
+                    value={phone}
+                    onChange={(e) => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }}
+                    className="w-full rounded bg-stone-800 border border-stone-700 px-3 py-2 text-stone-100 tabular-nums text-center"
+                    maxLength={10}
+                  />
+                  {error && <div className="text-rose-400 text-xs">⚠️ {error}</div>}
+                  <div className="grid grid-cols-3 gap-1">
+                    <button onClick={() => setApp('bit')} className={`rounded px-2 py-1.5 text-xs font-bold ${app === 'bit' ? 'bg-blue-600 text-white' : 'bg-stone-800 text-stone-400'}`}>💙 Bit</button>
+                    <button onClick={() => setApp('paybox')} className={`rounded px-2 py-1.5 text-xs font-bold ${app === 'paybox' ? 'bg-purple-600 text-white' : 'bg-stone-800 text-stone-400'}`}>💜 PayBox</button>
+                    <button onClick={() => setApp('both')} className={`rounded px-2 py-1.5 text-xs font-bold ${app === 'both' ? 'bg-emerald-600 text-white' : 'bg-stone-800 text-stone-400'}`}>✅ שתיהן</button>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={cancelEdit} className="flex-1 rounded bg-stone-800 px-3 py-1.5 text-stone-300 text-sm font-bold">ביטול</button>
+                    <button onClick={saveEdit} className="flex-1 rounded bg-emerald-700 px-3 py-1.5 text-white text-sm font-bold">שמירה</button>
+                  </div>
+                </div>
+              );
+            }
+            
+            return (
+              <div key={name} className={`flex items-center justify-between rounded-lg border p-3 transition ${
+                hasPhone ? 'bg-stone-800/40 border-stone-700/40' : 'bg-amber-950/20 border-amber-800/30'
+              }`}>
+                <div className="flex-1">
+                  <div className="font-bold text-stone-100">{name}</div>
+                  {hasPhone ? (
+                    <div className="text-xs text-stone-400 tabular-nums" dir="ltr">
+                      {data.phone.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3')}
+                      {' · '}
+                      {data.app === 'bit' ? '💙' : data.app === 'paybox' ? '💜' : '✅'}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-amber-400">⚠️ חסר טלפון</div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => startEdit(name)} className="rounded bg-purple-700 px-3 py-1.5 text-white text-xs font-bold hover:bg-purple-600">
+                    {hasPhone ? 'ערוך' : 'הוסף'}
+                  </button>
+                  {hasPhone && (
+                    <button onClick={() => removePhone(name)} className="rounded bg-stone-800 px-2 py-1.5 text-rose-400 hover:bg-rose-950/50">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
+        {filtered.length === 0 && (
+          <div className="text-center text-stone-500 py-8">לא נמצאו שחקנים</div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// ===== מודל הזדהות / עריכת פרטי תשלום =====
+const PhoneSetupModal = ({ isOpen, onClose, playerName, currentPhone, onSave, isFirstTime = false, canCancel = false, isAdmin = false }) => {
+  const [phone, setPhone] = useState('');
+  const [app, setApp] = useState('both');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setPhone(currentPhone?.phone || '');
+      setApp(currentPhone?.app || 'both');
+      setError('');
+    }
+  }, [isOpen, currentPhone]);
+
+  const formatPhone = (val) => {
+    const digits = val.replace(/\D/g, '').slice(0, 10);
+    return digits;
+  };
+
+  const validate = () => {
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length !== 10) return 'מספר חייב להיות 10 ספרות';
+    if (!digits.startsWith('05')) return 'מספר חייב להתחיל ב-05';
+    return null;
+  };
+
+  const handleSubmit = () => {
+    const err = validate();
+    if (err) { setError(err); return; }
+    onSave({ phone: phone.replace(/\D/g, ''), app });
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  // 🔐 האם הטלפון נעול - אחרי שמולא פעם אחת, רק מנהל יכול לערוך
+  const isPhoneLocked = !!currentPhone?.phone && !isFirstTime && !isAdmin;
+  // האם ניתן לשנות את האפליקציה - תמיד ניתן (לא רגיש)
+  const canEditApp = true;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur p-4" dir="rtl">
+      <div className="w-full max-w-md rounded-2xl border-2 border-amber-700/50 bg-gradient-to-br from-stone-900 to-stone-950 p-6 shadow-2xl">
+        <div className="text-center mb-4">
+          <div className="text-4xl mb-2">{isPhoneLocked ? '🔒' : '📱'}</div>
+          <h2 className="text-2xl font-extrabold text-amber-200 mb-1">
+            {isFirstTime ? `שלום ${playerName}! 👋` : 'פרטי תשלום שלי'}
+          </h2>
+          <p className="text-stone-400 text-sm">
+            {isFirstTime 
+              ? 'הזן את מספר הטלפון שלך לצורך העברות עתידיות בביט'
+              : isPhoneLocked
+              ? 'המספר שלך שמור במערכת לצורך העברות בביט'
+              : 'עדכון פרטי התשלום שלך'}
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-bold text-stone-300 mb-2">
+              📱 מספר טלפון לביט {isFirstTime && <span className="text-rose-400">*</span>}
+              {isPhoneLocked && <span className="text-amber-500 text-xs mr-2">🔒 נעול</span>}
+            </label>
+            <input
+              type="tel"
+              inputMode="numeric"
+              dir="ltr"
+              placeholder="0501234567"
+              value={phone}
+              onChange={(e) => { setPhone(formatPhone(e.target.value)); setError(''); }}
+              disabled={isPhoneLocked}
+              className={`w-full rounded-lg border px-4 py-3 text-lg tabular-nums focus:outline-none text-center transition ${
+                isPhoneLocked
+                  ? 'bg-stone-900 border-stone-800 text-stone-500 cursor-not-allowed'
+                  : 'bg-stone-800 border-stone-700 text-stone-100 focus:border-amber-600'
+              }`}
+              maxLength={10}
+            />
+            {error && <div className="text-rose-400 text-xs mt-1 text-right">⚠️ {error}</div>}
+            {!isPhoneLocked && (
+              <div className="text-stone-500 text-xs mt-1 text-right">10 ספרות, מתחיל ב-05</div>
+            )}
+            {isPhoneLocked && (
+              <div className="text-amber-400/80 text-xs mt-2 text-right bg-amber-950/30 border border-amber-800/30 rounded p-2">
+                ℹ️ לעדכון מספר הטלפון - פנה למנהל הקבוצה
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-stone-300 mb-2">
+              💸 אפליקציה מועדפת להעברות (אופציונלי)
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setApp('bit')}
+                className={`rounded-lg px-3 py-2.5 font-bold text-sm transition border ${
+                  app === 'bit' ? 'bg-blue-600 text-white border-blue-500' : 'bg-stone-800 text-stone-400 border-stone-700 hover:bg-stone-700'
+                }`}>
+                💙 Bit
+              </button>
+              <button onClick={() => setApp('paybox')}
+                className={`rounded-lg px-3 py-2.5 font-bold text-sm transition border ${
+                  app === 'paybox' ? 'bg-purple-600 text-white border-purple-500' : 'bg-stone-800 text-stone-400 border-stone-700 hover:bg-stone-700'
+                }`}>
+                💜 PayBox
+              </button>
+              <button onClick={() => setApp('both')}
+                className={`rounded-lg px-3 py-2.5 font-bold text-sm transition border ${
+                  app === 'both' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-stone-800 text-stone-400 border-stone-700 hover:bg-stone-700'
+                }`}>
+                ✅ שתיהן
+              </button>
+            </div>
+            <div className="text-stone-500 text-xs mt-1 text-right">ניתן לשנות בכל זמן</div>
+          </div>
+
+          <div className="rounded-lg bg-blue-950/30 border border-blue-700/40 p-3 text-xs text-blue-200">
+            💙 <strong>מטרת הטלפון:</strong> ביצוע העברות עתידיות בביט בין חברי הקבוצה אחרי ערבי פוקר. הטלפון נשמר רק במערכת של הקבוצה ולא נחשף לאף גורם חיצוני.
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            {canCancel && (
+              <button onClick={onClose}
+                className="flex-1 rounded-lg border border-stone-700 bg-stone-900 px-4 py-3 text-stone-300 hover:bg-stone-800 font-bold">
+                {isPhoneLocked ? 'סגור' : 'ביטול'}
+              </button>
+            )}
+            <button onClick={handleSubmit}
+              disabled={isPhoneLocked && app === (currentPhone?.app || 'both')}
+              className="flex-1 rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 px-4 py-3 font-bold text-white hover:from-amber-500 shadow-lg shadow-amber-900/40 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
+              <Check className="h-4 w-4" />
+              {isFirstTime ? 'סיימתי' : isPhoneLocked ? 'שמירה' : 'שמירה'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 // ===== האפליקציה הראשית =====
 export default function PokerApp() {
   const [showSplash, setShowSplash] = useState(true);
@@ -3766,6 +4180,24 @@ export default function PokerApp() {
   // גלריית ידיים מנצחות
   const [galleryImages, setGalleryImages] = useState([]);
   const [galleryLikes, setGalleryLikes] = useState({});
+  
+  // 🆕 פרטי תשלום של שחקנים: { 'רון': { phone: '0501234567', app: 'bit' }, ... }
+  const [phones, setPhones] = useState({});
+  
+  // 🆕 מצב מסך הזדהות (טלפון) - מוצג למשתמש חדש שאין לו טלפון
+  const [phoneSetupOpen, setPhoneSetupOpen] = useState(false);
+  
+  // 🆕 מודל עריכת פרטי תשלום (פעולה יזומה מהדשבורד)
+  const [phoneEditOpen, setPhoneEditOpen] = useState(false);
+  
+  // 🆕 מודל מנהל - ניהול טלפונים של כל השחקנים
+  const [adminPhonesOpen, setAdminPhonesOpen] = useState(false);
+  // 🆕 שם השחקן שהמנהל עורך כעת
+  const [adminEditingPhone, setAdminEditingPhone] = useState(null);
+  
+  // 🆕 גיבויים - מודל ניהול גיבויים
+  const [backupsModalOpen, setBackupsModalOpen] = useState(false);
+  const [backupsList, setBackupsList] = useState([]); // רשימת snapshots ב-Firebase
   
   // האם יש ערב פעיל בניהול חי
   const [hasLiveSession, setHasLiveSession] = useState(false);
@@ -3805,6 +4237,7 @@ export default function PokerApp() {
         if (saved.players) setPlayers(saved.players);
       }
       if (saved?.hostingSchedule) setHostingSchedule(saved.hostingSchedule);
+      if (saved?.phones) setPhones(saved.phones);
       
       const savedQuotes = await loadState(QUOTES_STORAGE_KEY);
       if (savedQuotes?.deletedIds) setDeletedQuoteIds(savedQuotes.deletedIds);
@@ -3858,6 +4291,16 @@ export default function PokerApp() {
   const sessions = useMemo(() => allSessions.filter(s => (s.season || 2026) === selectedSeason), [allSessions, selectedSeason]);
   const stats = useMemo(() => calculateStats(sessions, players), [sessions, players]);
   
+  // 🆕 בודק אם משתמש קיים שאין לו טלפון - הצגת מסך הזדהות
+  useEffect(() => {
+    if (!loading && currentUser && !phoneSetupOpen) {
+      const userPhone = phones[currentUser];
+      if (!userPhone || !userPhone.phone) {
+        setPhoneSetupOpen(true);
+      }
+    }
+  }, [loading, currentUser, phones]);
+  
   // רשימת שחקנים ממוינת לפי מספר מפגשים בכל ההיסטוריה (מהפעיל ביותר לפחות פעיל)
   const sortedPlayers = useMemo(() => {
     const counts = {};
@@ -3886,11 +4329,300 @@ export default function PokerApp() {
     }
   }, [stats.length]);
 
-  const persistSessions = async (sessions, players, hostingScheduleParam) => {
+  const persistSessions = async (sessions, players, hostingScheduleParam, phonesParam) => {
     setSyncing(true);
-    await saveState({ sessions, players, hostingSchedule: hostingScheduleParam || hostingSchedule }, STORAGE_KEY);
+    await saveState({ 
+      sessions, 
+      players, 
+      hostingSchedule: hostingScheduleParam || hostingSchedule,
+      phones: phonesParam || phones
+    }, STORAGE_KEY);
     setSyncing(false);
   };
+
+  // 🆕 שמירת פרטי תשלום של שחקן
+  const persistPhones = async (newPhones) => {
+    setPhones(newPhones);
+    setSyncing(true);
+    await saveState({ 
+      sessions: allSessions, 
+      players, 
+      hostingSchedule,
+      phones: newPhones
+    }, STORAGE_KEY);
+    setSyncing(false);
+  };
+
+  // 🆕 שמירת פרטי תשלום של שחקן בודד (משתמש מעדכן את עצמו או מנהל מעדכן אחר)
+  const handleSavePhone = async (playerName, phoneData) => {
+    const newPhones = { ...phones };
+    if (phoneData === null) {
+      delete newPhones[playerName];
+    } else {
+      newPhones[playerName] = phoneData;
+    }
+    await persistPhones(newPhones);
+  };
+
+  // 🆕 ===== מערכת גיבויים =====
+  
+  // יוצר אובייקט גיבוי מלא של כל הנתונים
+  const buildBackupSnapshot = () => {
+    const snapshot = {
+      version: 4,
+      timestamp: new Date().toISOString(),
+      app: {
+        sessions: allSessions,
+        players: players,
+        hostingSchedule: hostingSchedule,
+        phones: phones,
+      },
+      quotes: {
+        deletedIds: deletedQuoteIds,
+        likes: quoteLikes,
+        userQuotes: userQuotes,
+      },
+      gallery: {
+        images: galleryImages,
+        likes: galleryLikes,
+      },
+      meta: {
+        sessionsCount: allSessions.length,
+        playersCount: players.length,
+        hostingCount: hostingSchedule.length,
+        phonesCount: Object.keys(phones).length,
+        quotesCount: 975 - deletedQuoteIds.length + userQuotes.length,
+        galleryCount: galleryImages.length,
+      }
+    };
+    return snapshot;
+  };
+
+  // טעינת רשימת הגיבויים הקיימים
+  const loadBackupsList = async () => {
+    try {
+      const index = await loadState(BACKUPS_INDEX_KEY);
+      const list = (index?.backups || []).sort((a, b) => 
+        new Date(b.timestamp) - new Date(a.timestamp)
+      );
+      setBackupsList(list);
+      return list;
+    } catch (e) {
+      console.error('Failed to load backups list:', e);
+      return [];
+    }
+  };
+
+  // יצירת גיבוי חדש - ידני או אוטומטי
+  const createBackup = async (backupType = 'manual') => {
+    try {
+      const snapshot = buildBackupSnapshot();
+      const backupId = `${BACKUP_KEY_PREFIX}${snapshot.timestamp.replace(/[:.]/g, '-')}`;
+      
+      // שמירת הגיבוי עצמו
+      await saveState(snapshot, backupId);
+      
+      // עדכון הרשימה
+      const index = await loadState(BACKUPS_INDEX_KEY) || { backups: [] };
+      index.backups = index.backups || [];
+      index.backups.unshift({
+        id: backupId,
+        timestamp: snapshot.timestamp,
+        type: backupType,
+        meta: snapshot.meta,
+      });
+      
+      // ניקוי גיבויים ישנים (שומר רק MAX_BACKUPS_TO_KEEP)
+      if (index.backups.length > MAX_BACKUPS_TO_KEEP) {
+        const toDelete = index.backups.slice(MAX_BACKUPS_TO_KEEP);
+        index.backups = index.backups.slice(0, MAX_BACKUPS_TO_KEEP);
+        // ננסה למחוק את הישנים (לא קריטי אם נכשל)
+        for (const old of toDelete) {
+          try { await saveState(null, old.id); } catch {}
+        }
+      }
+      
+      await saveState(index, BACKUPS_INDEX_KEY);
+      try { 
+        window.localStorage.setItem('poker_last_backup_at', snapshot.timestamp); 
+      } catch {}
+      
+      await loadBackupsList();
+      return { success: true, snapshot, backupId };
+    } catch (e) {
+      console.error('Backup failed:', e);
+      return { success: false, error: e.message };
+    }
+  };
+
+  // הורדת גיבוי כקובץ JSON להעלאה לדרייב
+  const downloadBackupAsFile = (snapshot) => {
+    const data = snapshot || buildBackupSnapshot();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const dateStr = new Date(data.timestamp).toISOString().split('T')[0];
+    a.href = url;
+    a.download = `barbur-poker-backup-${dateStr}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // גיבוי + הורדה (פעולה ידנית)
+  const handleManualBackup = async () => {
+    const result = await createBackup('manual');
+    if (result.success) {
+      downloadBackupAsFile(result.snapshot);
+      alert(`✓ גיבוי נוצר ויורד למחשב!\n\nכעת תוכל לגרור את הקובץ לתיקייה בגוגל דרייב.`);
+    } else {
+      alert(`⚠️ הגיבוי נכשל: ${result.error}`);
+    }
+  };
+
+  // הורדת גיבוי קיים מהרשימה
+  const handleDownloadExistingBackup = async (backupItem) => {
+    try {
+      const snapshot = await loadState(backupItem.id);
+      if (snapshot) {
+        downloadBackupAsFile(snapshot);
+      } else {
+        alert('הגיבוי לא נמצא');
+      }
+    } catch (e) {
+      alert(`⚠️ ההורדה נכשלה: ${e.message}`);
+    }
+  };
+
+  // שחזור מגיבוי
+  const handleRestoreBackup = async (backupItem) => {
+    if (!confirm(
+      `⚠️ האם אתה בטוח שברצונך לשחזר את הנתונים?\n\n` +
+      `תאריך הגיבוי: ${new Date(backupItem.timestamp).toLocaleString('he-IL')}\n\n` +
+      `כל הנתונים הנוכחיים יוחלפו! ההמלצה היא קודם ליצור גיבוי ידני.`
+    )) return;
+    
+    try {
+      const snapshot = await loadState(backupItem.id);
+      if (!snapshot) { alert('הגיבוי לא נמצא'); return; }
+      
+      // שחזור הנתונים
+      if (snapshot.app) {
+        if (snapshot.app.sessions) setAllSessions(snapshot.app.sessions);
+        if (snapshot.app.players) setPlayers(snapshot.app.players);
+        if (snapshot.app.hostingSchedule) setHostingSchedule(snapshot.app.hostingSchedule);
+        if (snapshot.app.phones) setPhones(snapshot.app.phones);
+        await saveState({
+          sessions: snapshot.app.sessions,
+          players: snapshot.app.players,
+          hostingSchedule: snapshot.app.hostingSchedule,
+          phones: snapshot.app.phones,
+        }, STORAGE_KEY);
+      }
+      if (snapshot.quotes) {
+        setDeletedQuoteIds(snapshot.quotes.deletedIds || []);
+        setQuoteLikes(snapshot.quotes.likes || {});
+        setUserQuotes(snapshot.quotes.userQuotes || []);
+        await saveState(snapshot.quotes, QUOTES_STORAGE_KEY);
+      }
+      if (snapshot.gallery) {
+        setGalleryImages(snapshot.gallery.images || []);
+        setGalleryLikes(snapshot.gallery.likes || {});
+        await saveState(snapshot.gallery, GALLERY_STORAGE_KEY);
+      }
+      
+      alert(`✓ הנתונים שוחזרו בהצלחה מהגיבוי של ${new Date(backupItem.timestamp).toLocaleDateString('he-IL')}`);
+      setBackupsModalOpen(false);
+    } catch (e) {
+      alert(`⚠️ השחזור נכשל: ${e.message}`);
+    }
+  };
+
+  // העלאת קובץ גיבוי מהדרייב לשחזור
+  const handleUploadBackupFile = async (file) => {
+    try {
+      const text = await file.text();
+      const snapshot = JSON.parse(text);
+      
+      if (!snapshot.version || !snapshot.app || !snapshot.timestamp) {
+        alert('⚠️ הקובץ אינו קובץ גיבוי תקין');
+        return;
+      }
+      
+      if (!confirm(
+        `⚠️ זוהה קובץ גיבוי תקין מהתאריך:\n${new Date(snapshot.timestamp).toLocaleString('he-IL')}\n\n` +
+        `האם לשחזר ממנו? כל הנתונים הנוכחיים יוחלפו!`
+      )) return;
+      
+      // שחזור (אותו לוגיקה כמו handleRestoreBackup)
+      if (snapshot.app.sessions) setAllSessions(snapshot.app.sessions);
+      if (snapshot.app.players) setPlayers(snapshot.app.players);
+      if (snapshot.app.hostingSchedule) setHostingSchedule(snapshot.app.hostingSchedule);
+      if (snapshot.app.phones) setPhones(snapshot.app.phones);
+      await saveState({
+        sessions: snapshot.app.sessions,
+        players: snapshot.app.players,
+        hostingSchedule: snapshot.app.hostingSchedule,
+        phones: snapshot.app.phones,
+      }, STORAGE_KEY);
+      
+      if (snapshot.quotes) {
+        setDeletedQuoteIds(snapshot.quotes.deletedIds || []);
+        setQuoteLikes(snapshot.quotes.likes || {});
+        setUserQuotes(snapshot.quotes.userQuotes || []);
+        await saveState(snapshot.quotes, QUOTES_STORAGE_KEY);
+      }
+      if (snapshot.gallery) {
+        setGalleryImages(snapshot.gallery.images || []);
+        setGalleryLikes(snapshot.gallery.likes || {});
+        await saveState(snapshot.gallery, GALLERY_STORAGE_KEY);
+      }
+      
+      alert(`✓ הנתונים שוחזרו בהצלחה!`);
+      setBackupsModalOpen(false);
+    } catch (e) {
+      alert(`⚠️ הקובץ פגום או לא תקין: ${e.message}`);
+    }
+  };
+
+  // 🆕 גיבוי אוטומטי - בודק אם עברו 7 ימים מהגיבוי האחרון
+  useEffect(() => {
+    if (loading) return;
+    if (!allSessions.length) return; // עדיין לא נטען
+    
+    const checkAutoBackup = async () => {
+      try {
+        const lastBackupStr = window.localStorage.getItem('poker_last_backup_at');
+        const now = new Date();
+        let shouldBackup = false;
+        
+        if (!lastBackupStr) {
+          shouldBackup = true; // אף פעם לא היה גיבוי
+        } else {
+          const lastBackup = new Date(lastBackupStr);
+          const daysDiff = (now - lastBackup) / (1000 * 60 * 60 * 24);
+          if (daysDiff >= AUTO_BACKUP_INTERVAL_DAYS) {
+            shouldBackup = true;
+          }
+        }
+        
+        if (shouldBackup) {
+          console.log('🔄 גיבוי אוטומטי...');
+          const result = await createBackup('auto');
+          if (result.success) {
+            console.log('✓ גיבוי אוטומטי הושלם:', result.backupId);
+          }
+        }
+      } catch (e) {
+        console.error('Auto backup check failed:', e);
+      }
+    };
+    
+    // עיכוב קטן כדי לא להפריע לטעינה
+    const timer = setTimeout(checkAutoBackup, 5000);
+    return () => clearTimeout(timer);
+  }, [loading, allSessions.length]);
 
   const handleHostingUpdate = async (newSchedule) => {
     setHostingSchedule(newSchedule);
@@ -3900,6 +4632,10 @@ export default function PokerApp() {
   const handleUserSelect = (name) => {
     setCurrentUser(name);
     try { window.localStorage.setItem('poker_user_name', name); } catch {}
+    // 🆕 אם אין למשתמש טלפון - הצג מסך הזדהות
+    if (!phones[name] || !phones[name].phone) {
+      setPhoneSetupOpen(true);
+    }
   };
 
   const handleSwitchUser = () => {
@@ -4288,6 +5024,21 @@ export default function PokerApp() {
                   החלף
                 </button>
               </div>
+              {/* 🆕 כפתור פרטי תשלום */}
+              <button onClick={() => { setMenuOpen(false); setPhoneEditOpen(true); }}
+                className="mt-3 w-full flex items-center justify-between rounded-lg bg-stone-800/60 border border-stone-700/50 px-3 py-2 text-stone-300 hover:bg-stone-800 transition text-sm">
+                <span className="flex items-center gap-2">
+                  <span>📱</span>
+                  <span>פרטי תשלום שלי</span>
+                </span>
+                {phones[currentUser]?.phone ? (
+                  <span className="text-xs text-emerald-400 tabular-nums" dir="ltr">
+                    ✓ {phones[currentUser].phone.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3')}
+                  </span>
+                ) : (
+                  <span className="text-xs text-amber-400">⚠️ חסר</span>
+                )}
+              </button>
             </div>
 
             {/* פעולות מנהל */}
@@ -4306,6 +5057,18 @@ export default function PokerApp() {
                   className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-blue-700/80 to-blue-800/80 border border-blue-700/50 px-4 py-3 text-white font-bold hover:from-blue-600 hover:to-blue-700 transition text-sm">
                   <span className="text-xl">📸</span>
                   <span>עדכון ערב בתמונה</span>
+                </button>
+                {/* 🆕 כפתור ניהול טלפונים */}
+                <button onClick={() => { setMenuOpen(false); setAdminPhonesOpen(true); }}
+                  className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-purple-700/80 to-purple-800/80 border border-purple-700/50 px-4 py-3 text-white font-bold hover:from-purple-600 hover:to-purple-700 transition text-sm">
+                  <span className="text-xl">📱</span>
+                  <span>ניהול פרטי תשלום</span>
+                </button>
+                {/* 🆕 כפתור גיבוי ושחזור */}
+                <button onClick={() => { setMenuOpen(false); loadBackupsList(); setBackupsModalOpen(true); }}
+                  className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-cyan-700/80 to-cyan-800/80 border border-cyan-700/50 px-4 py-3 text-white font-bold hover:from-cyan-600 hover:to-cyan-700 transition text-sm">
+                  <span className="text-xl">💾</span>
+                  <span>גיבוי ושחזור</span>
                 </button>
               </div>
             )}
@@ -4364,6 +5127,46 @@ export default function PokerApp() {
         onSave={handleSaveSession} players={sortedPlayers} currentSeason={selectedSeason} adminName={currentUser} />
       
       <AdminLoginModal isOpen={loginOpen} onClose={() => setLoginOpen(false)} onLogin={handleAdminLogin} currentUser={currentUser} />
+
+      {/* 🆕 מודל הזדהות (כניסה ראשונה - חובה למלא טלפון) */}
+      <PhoneSetupModal 
+        isOpen={phoneSetupOpen}
+        onClose={() => setPhoneSetupOpen(false)}
+        playerName={currentUser}
+        currentPhone={phones[currentUser]}
+        onSave={(data) => handleSavePhone(currentUser, data)}
+        isFirstTime={true}
+        canCancel={false} />
+
+      {/* 🆕 מודל עריכת פרטי תשלום (פעולה יזומה - אפשר לבטל) */}
+      <PhoneSetupModal 
+        isOpen={phoneEditOpen}
+        onClose={() => setPhoneEditOpen(false)}
+        playerName={currentUser}
+        currentPhone={phones[currentUser]}
+        onSave={(data) => handleSavePhone(currentUser, data)}
+        isFirstTime={false}
+        canCancel={true}
+        isAdmin={isAdmin} />
+
+      {/* 🆕 מודל מנהל - ניהול טלפונים של כל השחקנים */}
+      <AdminPhonesModal
+        isOpen={adminPhonesOpen}
+        onClose={() => setAdminPhonesOpen(false)}
+        players={players}
+        phones={phones}
+        onSave={handleSavePhone} />
+
+      {/* 🆕 מודל ניהול גיבויים */}
+      <BackupsModal
+        isOpen={backupsModalOpen}
+        onClose={() => setBackupsModalOpen(false)}
+        backupsList={backupsList}
+        onCreateBackup={handleManualBackup}
+        onDownload={handleDownloadExistingBackup}
+        onRestore={handleRestoreBackup}
+        onUploadFile={handleUploadBackupFile}
+        onRefresh={loadBackupsList} />
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=Assistant:wght@300;400;500;600;700;800&display=swap');
