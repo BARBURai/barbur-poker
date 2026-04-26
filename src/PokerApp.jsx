@@ -2542,7 +2542,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
         host={host}
         sessionDate={sessionDate}
         totalPot={totalPot}
-        isBalanced={isBalanced}
         onSaveEvening={handleSaveFromSettlement}
         alreadySaved={savedEvening} />
 
@@ -2583,7 +2582,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
 };
 
 // ===== מודל חלוקת כספים ושיתוף =====
-const SettlementModal = ({ isOpen, onClose, participants, finalChips, host, sessionDate, totalPot, isBalanced, onSaveEvening, alreadySaved }) => {
+const SettlementModal = ({ isOpen, onClose, participants, finalChips, host, sessionDate, totalPot, onSaveEvening, alreadySaved }) => {
   const shareCardRef = useRef(null);
   const [sharing, setSharing] = useState(false);
 
