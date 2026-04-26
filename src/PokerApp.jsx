@@ -8,6 +8,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 
+// ===== ברבור (PNG מוטמע כ-base64 לאנימציית קונפטי) =====
+const SWAN_DATA_URL = "data:image/png;base64,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";
+
 // ===== הרשאות מנהל =====
 const ADMIN_PASSWORD = 'barbur2026'; // סיסמה זמנית - להחליף בסיסמה האמיתית
 const ADMIN_NAMES = ['רון', 'גילי'];
@@ -506,6 +509,115 @@ const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, sele
   );
 };
 
+// 🔥 חישוב רצף ניצחונות עבור שחקן
+// מחזיר את מספר הערבים ברציפות שהשחקן ניצח (רק ערבים שהוא השתתף בהם)
+// אם דילג על ערבים - לא נשבר הרצף, מתעלם מהם
+// עוצר ברגע שמגיעים לערב עם הפסד או שוויון
+const calculateStreak = (playerName, sessions) => {
+  if (!playerName || !sessions || sessions.length === 0) return 0;
+  
+  // סינון רק ערבים שהשחקן שיחק בהם, ומיון מהאחרון לראשון
+  const playerSessions = sessions
+    .filter(s => s.results && typeof s.results[playerName] === 'number')
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  
+  if (playerSessions.length === 0) return 0;
+  
+  // ספירת רצף ניצחונות מהערב האחרון אחורה
+  let streak = 0;
+  for (const s of playerSessions) {
+    if (Number(s.results[playerName]) > 0) {
+      streak++;
+    } else {
+      break; // הפסיד או שוויון - הרצף נשבר
+    }
+  }
+  return streak;
+};
+
+// 🔥 קומפוננטת להבה - SVG מצויר עם אנימציה
+// מציג להבה מתנודדת ליד שם השחקן בטבלת הדירוג
+// streak: מספר הניצחונות ברצף - קובע גודל וצבע הלהבה
+const FlameIcon = ({ streak }) => {
+  if (streak < 2) return null; // הצגה רק מ-2+
+  
+  // קביעת רמת הלהבה - גודל וצבע
+  let size, intensity;
+  if (streak >= 7) {
+    size = 22;
+    intensity = 'mega'; // אדום-כתום בוהק
+  } else if (streak >= 5) {
+    size = 19;
+    intensity = 'high'; // כתום עז
+  } else if (streak >= 3) {
+    size = 16;
+    intensity = 'medium'; // כתום רגיל
+  } else {
+    size = 14;
+    intensity = 'low'; // צהוב-כתום
+  }
+  
+  // צבעי gradient לפי רמת הלהבה
+  const colors = {
+    low:    { outer: '#fbbf24', mid: '#f59e0b', inner: '#fde047' },
+    medium: { outer: '#ea580c', mid: '#fb923c', inner: '#fbbf24' },
+    high:   { outer: '#dc2626', mid: '#f97316', inner: '#fde047' },
+    mega:   { outer: '#7f1d1d', mid: '#dc2626', inner: '#fbbf24' },
+  };
+  const c = colors[intensity];
+  const id = `flame-${intensity}-${streak}`;
+  
+  return (
+    <span 
+      className="inline-flex items-center gap-0.5 align-middle mr-1 streak-flame"
+      title={`${streak} ניצחונות ברציפות 🔥`}>
+      <svg 
+        width={size} 
+        height={size * 1.3} 
+        viewBox="0 0 24 32" 
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+        <defs>
+          <radialGradient id={`${id}-grad`} cx="50%" cy="70%" r="60%">
+            <stop offset="0%" stopColor={c.inner}/>
+            <stop offset="50%" stopColor={c.mid}/>
+            <stop offset="100%" stopColor={c.outer}/>
+          </radialGradient>
+        </defs>
+        {/* גוף הלהבה - צורת אש קלאסית */}
+        <path 
+          className="flame-body"
+          d="M12 2 C 14 6, 18 9, 18 15 C 18 22, 15 26, 12 30 C 9 26, 6 22, 6 15 C 6 11, 8 9, 12 2 Z"
+          fill={`url(#${id}-grad)`}
+          stroke={c.outer}
+          strokeWidth="0.5"
+        />
+        {/* ליבת הלהבה - חמה יותר */}
+        <path 
+          className="flame-core"
+          d="M12 10 C 13 13, 14.5 15, 14.5 19 C 14.5 23, 13 26, 12 28 C 11 26, 9.5 23, 9.5 19 C 9.5 16, 10.5 14, 12 10 Z"
+          fill={c.inner}
+          opacity="0.85"
+        />
+        {/* נקודת אור פנימית */}
+        {streak >= 5 && (
+          <circle cx="12" cy="22" r="1.5" fill="white" opacity="0.7"/>
+        )}
+      </svg>
+      {streak >= 3 && (
+        <span 
+          className={`text-[10px] font-extrabold tabular-nums ${
+            intensity === 'mega' ? 'text-red-400' :
+            intensity === 'high' ? 'text-orange-400' :
+            'text-amber-400'
+          }`}>
+          {streak}
+        </span>
+      )}
+    </span>
+  );
+};
+
 // ===== טבלה ראשית =====
 const MainLeaderboard = ({ stats, sessions }) => {
   const latestDate = getLatestSessionDate(sessions);
@@ -569,12 +681,15 @@ const MainLeaderboard = ({ stats, sessions }) => {
           <tbody>
             {stats.map((p, i) => {
               const rowBg = i % 2 === 0 ? 'bg-stone-950' : 'bg-stone-900/50';
+              // 🔥 חישוב רצף ניצחונות לשחקן הנוכחי
+              const streak = calculateStreak(p.name, sessions);
               return (
                 <tr key={p.name} className="group hover:bg-amber-950/10">
                   <td className={`sticky right-0 z-20 ${rowBg} group-hover:bg-amber-950/20 border-b border-l border-stone-800 px-3 py-3 font-bold text-stone-500 tabular-nums whitespace-nowrap shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]`}>
                     {i + 1}{i < 3 && <span className="mr-1">{['🥇','🥈','🥉'][i]}</span>}
                   </td>
                   <td className={`sticky z-20 ${rowBg} group-hover:bg-amber-950/20 border-b border-l border-stone-800 px-3 py-3 font-bold text-stone-100 whitespace-nowrap shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]`} style={{ right: '55px' }}>
+                    <FlameIcon streak={streak} />
                     {p.name}
                   </td>
                   {columns.map(c => (
@@ -2337,6 +2452,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false); // מודל אישור איפוס
   const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
   const [savedEvening, setSavedEvening] = useState(false); // האם הערב כבר נשמר
+  // 🎉 אנימציית Confetti לרווח של המשתמש הנוכחי
+  const [confettiShown, setConfettiShown] = useState(false); // הוצג כבר במסך הזה (כדי לא להפעיל שוב)
+  const [confettiActive, setConfettiActive] = useState(false);
   
   // 🆕 העברת אירוח
   const [hostingPaymentMode, setHostingPaymentMode] = useState('host'); // 'host' | 'other' | 'none'
@@ -2457,6 +2575,29 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const totalChipsOut = Object.values(finalChips).reduce((sum, c) => sum + (Number(c) || 0), 0);
   const balance = totalChipsOut - totalPot;
   const isBalanced = Math.abs(balance) < 0.01;
+
+  // 🎉 הפעלת Confetti כשהאיזון תקין והמשתמש הנוכחי ברווח חיובי
+  // מופעל פעם אחת בלבד בכל פתיחת מודל הסגירה
+  useEffect(() => {
+    if (!closing || !isBalanced || confettiShown) return;
+    // בדיקת רווח של המשתמש הנוכחי (adminName מועבר כפרופ ומכיל את שם המשתמש)
+    const myParticipation = participants.find(p => p.name === adminName);
+    if (!myParticipation) return; // המשתמש לא משתתף בערב
+    const myChips = Number(finalChips[adminName]) || 0;
+    const myProfit = myChips - myParticipation.buyIns * 20;
+    if (myProfit > 0) {
+      setConfettiActive(true);
+      setConfettiShown(true); // לא להפעיל שוב באותו ערב
+    }
+  }, [closing, isBalanced, confettiShown, adminName, participants, finalChips]);
+
+  // איפוס דגל confetti כשהמודל נסגר/נפתח מחדש
+  useEffect(() => {
+    if (!isOpen) {
+      setConfettiShown(false);
+      setConfettiActive(false);
+    }
+  }, [isOpen]);
 
   const handleStartClosing = () => {
     if (participants.length < 2) return alert('צריך לפחות 2 שחקנים');
@@ -2912,6 +3053,20 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
           </div>
         </div>
       )}
+      
+      {/* 🎉 אנימציית Confetti לרווח */}
+      <Confetti 
+        active={confettiActive} 
+        onComplete={() => setConfettiActive(false)}
+        message={(() => {
+          if (!adminName) return '🚰 צינורות פתוחים!';
+          const myParticipation = participants.find(p => p.name === adminName);
+          if (!myParticipation) return '🚰 צינורות פתוחים!';
+          const myChips = Number(finalChips[adminName]) || 0;
+          const myProfit = myChips - myParticipation.buyIns * 20;
+          return `🚰 צינורות פתוחים! +${myProfit} ₪`;
+        })()}
+      />
     </div>
   );
 };
@@ -3397,6 +3552,257 @@ const isReminderExpired = (reminder) => {
   return daysDiff >= PAYMENT_EXPIRY_DAYS;
 };
 
+// 🎉 קומפוננטת Confetti - אפקט חגיגה עם 4 צינורות מים שיורים ברבורים צבעוניים
+// 4 צינורות (פינות + מרכז) עם עיצוב צינור מים אמיתי - PVC כחלחל עם חיבורים וברגים
+// במקום פתקי נייר - ברבורים קטנים (התאמה לקבוצה "פוקר ברבורי תל מונד")
+// משתמשת ב-CSS animation בלבד, ללא תלויות חיצוניות
+// פרופ message אופציונלי - הודעה שתופיע במרכז המסך לצד הconfetti
+const Confetti = ({ active, onComplete, message }) => {
+  // הגדרת מקורות הירייה - 4 צינורות בקונפיגורציה זהה לדמו
+  const SOURCES = useMemo(() => [
+    { side: 'left',  offsetPct: 12, angle: 60 }, // צינור שמאלי - יורה ימינה למעלה חזק
+    { side: 'left',  offsetPct: 32, angle: 80 }, // צינור שמאל-מרכז - יורה כמעט ישר למעלה
+    { side: 'right', offsetPct: 32, angle: 80 }, // צינור ימין-מרכז - יורה כמעט ישר למעלה
+    { side: 'right', offsetPct: 12, angle: 60 }, // צינור ימני - יורה שמאלה למעלה חזק
+  ], []);
+  
+  // יצירת 72 ברבורים פעם אחת בלבד - 18 מכל צינור
+  // ברבורים יוצאים בקשת ושטים בעדינות עם נפנוף קל - לא נופלים בצורה מסחררת
+  const swans = useMemo(() => {
+    const all = [];
+    SOURCES.forEach((src, srcIdx) => {
+      for (let i = 0; i < 18; i++) {
+        const directionMultiplier = src.side === 'left' ? 1 : -1;
+        const angle = src.angle + (Math.random() - 0.5) * 30;
+        const distance = 200 + Math.random() * 250;
+        const radians = (angle * Math.PI) / 180;
+        const peakX = Math.cos(radians) * distance * directionMultiplier;
+        const peakY = -Math.sin(radians) * distance;
+        const driftX = (Math.random() - 0.5) * 80;
+        const fallX = peakX + driftX;
+        const fallY = -peakY * 1.3;
+        
+        all.push({
+          id: srcIdx * 100 + i,
+          srcIdx,
+          side: src.side,
+          offsetPct: src.offsetPct,
+          peakX, peakY, fallX, fallY,
+          delay: Math.random() * 1.2, // 0-1.2 שניות פיזור
+          duration: 4 + Math.random() * 2, // 4-6 שניות (איטי ומכובד)
+          // הברבור פונה לכיוון התנועה: ברבורי שמאל פונים ימינה, ברבורי ימין שמאלה
+          flipped: directionMultiplier < 0,
+          // נפנוף עדין במקום סיבוב מסחרר
+          bobDelay: Math.random() * 1.5,
+          bobDuration: 1.2 + Math.random() * 0.8,
+          size: 28 + Math.random() * 12, // ברבורים גדולים: 28-40px
+        });
+      }
+    });
+    return all;
+  }, [active, SOURCES]); // יוצר חדש בכל הפעלה
+  
+  // ניקוי אוטומטי אחרי 7 שניות (האנימציה איטית - 4-6 שניות + פיזור delay)
+  // 🔊 גם משמיע סאונד water whoosh בהפעלה
+  useEffect(() => {
+    if (!active) return;
+    
+    // 🔊 הפעלת סאונד water whoosh - רעש מים מתפרצים מהצינורות
+    // משתמש ב-Web Audio API (לא צריך קובץ חיצוני)
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (AudioCtx) {
+        const ctx = new AudioCtx();
+        const bufferSize = ctx.sampleRate * 1.2; // 1.2 שניות
+        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        // יצירת רעש לבן (white noise)
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = (Math.random() * 2 - 1) * 0.5;
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        // פילטר low-pass שיורד מ-2000Hz ל-200Hz - יוצר אפקט "מים מתרוקנים"
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(2000, ctx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 1);
+        // gain - מתחיל חזק ודועך
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(0.4, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        noise.start();
+        noise.stop(ctx.currentTime + 1.2);
+        // סגירת ה-context אחרי הסאונד כדי לפנות משאבים
+        setTimeout(() => { try { ctx.close(); } catch {} }, 1500);
+      }
+    } catch (e) {
+      // אם הסאונד נכשל (אסור על iOS לפעמים) - האנימציה ממשיכה בלעדיו
+      console.warn('Confetti sound failed:', e);
+    }
+    
+    const timer = setTimeout(() => {
+      if (onComplete) onComplete();
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [active, onComplete]);
+  
+  if (!active) return null;
+  
+  // SVG של צינור מים אמיתי - גודל מלא (סגנון פינתי) או קטן (סגנון מרכזי)
+  const renderPipe = (size, idSuffix) => {
+    const isLarge = size === 'large';
+    const w = isLarge ? 46 : 40;
+    const h = isLarge ? 150 : 125;
+    return (
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id={`waterPipe-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#1e3a5f"/>
+            <stop offset="15%" stopColor="#3b6996"/>
+            <stop offset="40%" stopColor="#7eb1d7"/>
+            <stop offset="55%" stopColor="#b8d4e8"/>
+            <stop offset="75%" stopColor="#5b8bb5"/>
+            <stop offset="100%" stopColor="#1e3a5f"/>
+          </linearGradient>
+          <linearGradient id={`coupling-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#0f172a"/>
+            <stop offset="20%" stopColor="#334155"/>
+            <stop offset="50%" stopColor="#94a3b8"/>
+            <stop offset="80%" stopColor="#334155"/>
+            <stop offset="100%" stopColor="#0f172a"/>
+          </linearGradient>
+          <radialGradient id={`water-${idSuffix}`} cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stopColor="#67e8f9"/>
+            <stop offset="60%" stopColor="#0891b2"/>
+            <stop offset="100%" stopColor="#0e7490"/>
+          </radialGradient>
+        </defs>
+        {isLarge ? (
+          <>
+            {/* צינור גדול (פינות) - h=150, w=46 */}
+            <rect x="11" y="35" width="24" height="100" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="16" y="35" width="2" height="100" fill="white" opacity="0.5"/>
+            <ellipse cx="23" cy="135" rx="14" ry="3" fill="#0f172a"/>
+            <rect x="9" y="128" width="28" height="9" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="7" y="78" width="32" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="11" cy="85" r="1.5" fill="#1e293b"/>
+            <circle cx="35" cy="85" r="1.5" fill="#1e293b"/>
+            <rect x="6" y="20" width="34" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="10" cy="27" r="1.5" fill="#1e293b"/>
+            <circle cx="36" cy="27" r="1.5" fill="#1e293b"/>
+            <ellipse cx="23" cy="20" rx="17" ry="5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <ellipse cx="20" cy="18.5" rx="5" ry="1" fill="white" opacity="0.7"/>
+          </>
+        ) : (
+          <>
+            {/* צינור בינוני (מרכז) - h=125, w=40 */}
+            <rect x="9" y="30" width="22" height="85" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="14" y="30" width="2" height="85" fill="white" opacity="0.5"/>
+            <ellipse cx="20" cy="115" rx="12" ry="3" fill="#0f172a"/>
+            <rect x="7" y="108" width="26" height="8" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="5" y="65" width="30" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="9" cy="71.5" r="1.3" fill="#1e293b"/>
+            <circle cx="31" cy="71.5" r="1.3" fill="#1e293b"/>
+            <rect x="4" y="17" width="32" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="8" cy="23.5" r="1.3" fill="#1e293b"/>
+            <circle cx="32" cy="23.5" r="1.3" fill="#1e293b"/>
+            <ellipse cx="20" cy="17" rx="16" ry="4.5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <ellipse cx="17" cy="15.5" rx="4" ry="0.8" fill="white" opacity="0.7"/>
+          </>
+        )}
+      </svg>
+    );
+  };
+  
+  // 🦢 תמונת ברבור אמיתית מ-Freepik (PNG מוטמע)
+  // הברבור הוא לבן עם מקור כתום וצוואר בצורת S - אסתטי וקלאסי
+  // size = רוחב הברבור בפיקסלים, flipped = להפוך לכיוון השני (השמאלי)
+  const renderSwan = (color, size, flipped) => (
+    <img 
+      src={SWAN_DATA_URL}
+      alt="ברבור"
+      width={size}
+      height={size}
+      style={{ 
+        transform: flipped ? 'scaleX(-1)' : 'none', 
+        display: 'block',
+        // אופציונלי: צביעה עדינה לגיוון - לא משתמשים בinside כי הברבור לבן
+        filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+      }}
+    />
+  );
+  
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[200] overflow-hidden">
+      {/* הודעה במרכז (אופציונלי) */}
+      {message && (
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center animate-confetti-message">
+          <div className="rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 border-2 border-amber-400 px-6 py-4 shadow-2xl shadow-amber-900/50">
+            <div className="text-2xl md:text-3xl font-extrabold text-white whitespace-nowrap">
+              {message}
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* 🚰 4 צינורות מים */}
+      {/* צינור שמאלי - גדול, נטוי ימינה */}
+      <div className="absolute" style={{ bottom: '8%', left: '6%', transform: 'rotate(-25deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('large', 'L')}
+      </div>
+      {/* צינור שמאל-מרכז - בינוני, נטוי קל ימינה */}
+      <div className="absolute" style={{ bottom: '8%', left: '30%', transform: 'rotate(-12deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('medium', 'LC')}
+      </div>
+      {/* צינור ימין-מרכז - בינוני, נטוי קל שמאלה */}
+      <div className="absolute" style={{ bottom: '8%', right: '30%', transform: 'rotate(12deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('medium', 'RC')}
+      </div>
+      {/* צינור ימני - גדול, נטוי שמאלה */}
+      <div className="absolute" style={{ bottom: '8%', right: '6%', transform: 'rotate(25deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('large', 'R')}
+      </div>
+      
+      {/* 🦢 ברבורים יוצאים מהצינורות */}
+      {/* wrapper חיצוני - מטפל בקשת התעופה (היציאה מהצינור והנפילה) */}
+      {/* div פנימי - מטפל בנפנוף עדין של הברבור עצמו */}
+      {swans.map(s => (
+        <div
+          key={s.id}
+          className="absolute swan-flight"
+          style={{
+            // נקודת התחלה - פתח הצינור (8% מתחתית + ~140px מעל)
+            bottom: 'calc(8% + 140px)',
+            [s.side]: `calc(${s.offsetPct}% + 0px)`,
+            width: `${s.size}px`,
+            height: `${s.size}px`,
+            // משתני CSS לאנימציה של הקשת
+            '--peak-x': `${s.peakX}px`,
+            '--peak-y': `${s.peakY}px`,
+            '--fall-x': `${s.fallX}px`,
+            '--fall-y': `${s.fallY}px`,
+            animation: `swan-arc ${s.duration}s ${s.delay}s ease-out forwards`,
+            opacity: 0,
+          }}>
+          {/* div פנימי - נפנוף עדין */}
+          <div 
+            className="swan-bob"
+            style={{
+              animation: `swan-bob ${s.bobDuration}s ${s.bobDelay}s ease-in-out infinite`,
+              transformOrigin: 'center',
+            }}>
+            {renderSwan(null, s.size, s.flipped)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // 🆕 פותח אפליקציית תשלום (Bit/PayBox) עם העתקת מספר טלפון ללוח
 // targetApp: 'bit' | 'paybox'
 // משתמש ב-Universal Links הרשמיים של האפליקציות:
@@ -3469,14 +3875,17 @@ const PaymentReminders = ({ playerName, reminders, phones, onMarkSent, onConfirm
   };
   
   // סינון - רק תזכורות פעילות (לא expired/confirmed) שקשורות למשתמש
+  // 🆕 toReceive כולל גם pending - כדי שהמקבל יראה כמה אנשים חייבים לו
   const myReminders = useMemo(() => {
     if (!playerName || !reminders) return { toSend: [], toReceive: [] };
     
     const active = reminders.filter(r => !isReminderExpired(r));
     
     const toSend = active.filter(r => r.from === playerName && r.status !== 'confirmed');
-    const toReceive = active.filter(r => r.to === playerName && r.status !== 'confirmed' && r.status !== 'pending');
-    // הערה: מקבל רואה רק תזכורות שסומנו כ-marked_sent (כי pending = השולח עדיין לא לחץ)
+    // 🆕 המקבל רואה את כל התזכורות שמופנות אליו, חוץ מאישורים סופיים (confirmed)
+    // המצב pending = "מישהו חייב לך - עדיין לא העביר"
+    // המצב marked_sent = "מישהו סימן שהעביר - מחכה לאישור שלך"
+    const toReceive = active.filter(r => r.to === playerName && r.status !== 'confirmed');
     
     // מיון לפי תאריך - ישן ראשון
     toSend.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -3509,8 +3918,13 @@ const PaymentReminders = ({ playerName, reminders, phones, onMarkSent, onConfirm
       {/* תשלומים שצריך להעביר */}
       {myReminders.toSend.length > 0 && (
         <div className="space-y-2">
-          <div className="text-xs font-bold text-rose-300 uppercase tracking-wider">
-            ← אתה צריך להעביר ({myReminders.toSend.length})
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-xs font-bold text-rose-300 uppercase tracking-wider">
+              ← אתה צריך להעביר ({myReminders.toSend.length})
+            </div>
+            <div className="text-base font-extrabold text-rose-300 tabular-nums">
+              סה״כ {myReminders.toSend.reduce((s, r) => s + (Number(r.amount) || 0), 0)} ₪
+            </div>
           </div>
           {myReminders.toSend.map(r => {
             const targetPhone = phones?.[r.to]?.phone;
@@ -3640,24 +4054,38 @@ const PaymentReminders = ({ playerName, reminders, phones, onMarkSent, onConfirm
       )}
 
       {/* תשלומים שצריך לקבל */}
-      {myReminders.toReceive.length > 0 && (
-        <div className="space-y-2">
-          <div className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
-            → אתה אמור לקבל ({myReminders.toReceive.length})
-          </div>
-          {myReminders.toReceive.map(r => {
-            const sessionDateObj = new Date(r.sessionDate);
-            const dateStr = sessionDateObj.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
-            
-            return (
-              <div key={r.id} className={`rounded-xl border p-3 ${
+      {myReminders.toReceive.length > 0 && (() => {
+        const pendingTotal = myReminders.toReceive.filter(r => r.status === 'pending').reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const markedTotal = myReminders.toReceive.filter(r => r.status === 'marked_sent').reduce((s, r) => s + (Number(r.amount) || 0), 0);
+        const grandTotal = pendingTotal + markedTotal;
+        
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
+                → אתה אמור לקבל ({myReminders.toReceive.length})
+              </div>
+              <div className="text-base font-extrabold text-emerald-300 tabular-nums">
+                סה״כ {grandTotal} ₪
+              </div>
+            </div>
+            {myReminders.toReceive.map(r => {
+              const sessionDateObj = new Date(r.sessionDate);
+              const dateStr = sessionDateObj.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+              // 🆕 הבחנה בין שני מצבים:
+              // pending = השולח עדיין לא לחץ "העתק ופתח" - זה רק חיווי "מישהו חייב לך"
+              // marked_sent = השולח לחץ "העתק ופתח" - מחכה לאישור שלך
+              const isMarkedSent = r.status === 'marked_sent';
+              
+              return (
+                <div key={r.id} className={`rounded-xl border p-3 ${
                 r.type === 'hosting'
                   ? 'border-purple-700/50 bg-purple-950/20'
                   : 'border-emerald-700/50 bg-emerald-950/20'
-              }`}>
+              } ${!isMarkedSent ? 'opacity-80' : ''}`}>
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       {r.type === 'hosting' ? (
                         <span className="rounded-md bg-purple-900/60 border border-purple-700/50 px-1.5 py-0.5 text-[10px] font-bold text-purple-200">
                           🏠 אירוח
@@ -3667,10 +4095,22 @@ const PaymentReminders = ({ playerName, reminders, phones, onMarkSent, onConfirm
                           ערב {dateStr}
                         </span>
                       )}
+                      {/* תווית סטטוס */}
+                      {isMarkedSent ? (
+                        <span className="rounded-md bg-emerald-900/60 border border-emerald-700/50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
+                          ✓ סימן שהעביר
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-amber-900/60 border border-amber-700/50 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                          ⏳ ממתין להעברה
+                        </span>
+                      )}
                     </div>
                     <div className="text-sm text-stone-200">
                       <span className="font-bold text-emerald-300">{r.from}</span>
-                      <span className="text-stone-400"> סימן שהעביר לך</span>
+                      <span className="text-stone-400">
+                        {isMarkedSent ? ' סימן שהעביר לך' : ' צריך להעביר לך'}
+                      </span>
                     </div>
                   </div>
                   <div className="text-2xl font-extrabold text-emerald-300 tabular-nums whitespace-nowrap">
@@ -3678,17 +4118,25 @@ const PaymentReminders = ({ playerName, reminders, phones, onMarkSent, onConfirm
                   </div>
                 </div>
                 
-                <button 
-                  onClick={() => onConfirmReceived(r.id)}
-                  className="w-full rounded-lg bg-emerald-700 hover:bg-emerald-600 px-3 py-2 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition">
-                  <Check className="h-3.5 w-3.5" />
-                  <span>קיבלתי ✓</span>
-                </button>
+                {/* כפתור "קיבלתי" - רק אם השולח כבר סימן שהעביר */}
+                {isMarkedSent ? (
+                  <button 
+                    onClick={() => onConfirmReceived(r.id)}
+                    className="w-full rounded-lg bg-emerald-700 hover:bg-emerald-600 px-3 py-2 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition">
+                    <Check className="h-3.5 w-3.5" />
+                    <span>קיבלתי ✓</span>
+                  </button>
+                ) : (
+                  <div className="text-center text-[11px] text-stone-500 italic py-1">
+                    ממתין להעברה מ-{r.from}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
-      )}
+        );
+      })()}
 
       {/* 🔔 טוסט - הודעה קצרה אחרי לחיצה על "העתק ופתח" */}
       {toast && (
@@ -3705,6 +4153,45 @@ const PaymentReminders = ({ playerName, reminders, phones, onMarkSent, onConfirm
 
 // ===== דשבורד קומפקטי =====
 const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onMarkPaymentSent, onConfirmPaymentReceived }) => {
+  // 🎉 Confetti בכניסה - אם המשתמש ניצח בערב האחרון ועוד לא ראה
+  const [confettiActive, setConfettiActive] = useState(false);
+  const [confettiMessage, setConfettiMessage] = useState('');
+  
+  useEffect(() => {
+    if (!currentUser || !sessions || sessions.length === 0) return;
+    
+    // מציאת הערב האחרון של המשתמש (לפי תאריך)
+    const sortedSessions = [...sessions].sort((a, b) => 
+      new Date(b.date) - new Date(a.date)
+    );
+    const lastSession = sortedSessions.find(s => 
+      s.results && typeof s.results[currentUser] === 'number'
+    );
+    
+    if (!lastSession) return;
+    const myProfit = Number(lastSession.results[currentUser]) || 0;
+    if (myProfit <= 0) return; // לא רווח - אין confetti
+    
+    // בדיקה אם המשתמש כבר ראה confetti לערב הזה
+    const sessionKey = `${lastSession.date}_${lastSession.season || 2026}`;
+    const seenKey = `confetti_seen_${currentUser}_${sessionKey}`;
+    
+    try {
+      const alreadySeen = window.localStorage.getItem(seenKey);
+      if (alreadySeen) return;
+      
+      // השהיה קצרה כדי שהדשבורד יספיק להיטען לפני האנימציה
+      const timer = setTimeout(() => {
+        setConfettiMessage(`🚰 צינורות פתוחים! +${myProfit} ₪`);
+        setConfettiActive(true);
+        window.localStorage.setItem(seenKey, '1');
+      }, 600);
+      return () => clearTimeout(timer);
+    } catch (e) {
+      // localStorage לא זמין - דלג
+    }
+  }, [currentUser, sessions]);
+  
   return (
     <div className="space-y-3">
       <PaymentReminders 
@@ -3724,6 +4211,11 @@ const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGo
           onPlayersChange={setSelectedChartPlayers}
           isMobile={isMobile} />
       </div>
+      {/* 🎉 אנימציית Confetti - מופעלת בכניסה לאפליקציה אחרי ערב מנצח */}
+      <Confetti 
+        active={confettiActive} 
+        onComplete={() => setConfettiActive(false)}
+        message={confettiMessage} />
     </div>
   );
 };
@@ -6086,6 +6578,102 @@ export default function PokerApp() {
           100% { opacity: 1; transform: translate(-50%, 0); }
         }
         .animate-fade-in-up { animation: fade-in-up 0.3s ease-out; }
+        /* 🎉 אנימציות Confetti - יציאה מצינור בקשת (פתקים מסחררים) */
+        @keyframes confetti-arc {
+          /* התחלה - בפתח הצינור, שקוף */
+          0% {
+            opacity: 0;
+            transform: translate(0, 0) rotate(var(--start-rotation, 0deg));
+          }
+          /* יציאה מהירה */
+          5% {
+            opacity: 1;
+          }
+          /* שיא הקשת - מהירות מקסימלית, אחרי 30% מהזמן */
+          35% {
+            opacity: 1;
+            transform: translate(var(--peak-x, 0), var(--peak-y, 0)) rotate(calc(var(--start-rotation, 0deg) + 360deg));
+          }
+          /* נפילה כבידתית - יורדים, מסתובבים */
+          85% {
+            opacity: 1;
+          }
+          /* סוף - נופל למטה ומתעמעם */
+          100% {
+            opacity: 0;
+            transform: translate(var(--fall-x, 0), var(--fall-y, 0)) rotate(var(--end-rotation, 720deg));
+          }
+        }
+        .confetti-piece {
+          will-change: transform, opacity;
+        }
+        /* 🦢 אנימציות ברבור - תעופה בקשת בלי סיבוב מסחרר */
+        @keyframes swan-arc {
+          0% { opacity: 0; transform: translate(0, 0); }
+          5% { opacity: 1; }
+          35% { opacity: 1; transform: translate(var(--peak-x, 0), var(--peak-y, 0)); }
+          85% { opacity: 1; }
+          100% { opacity: 0; transform: translate(var(--fall-x, 0), var(--fall-y, 0)); }
+        }
+        /* נפנוף עדין של הברבור - תזוזה קלה מעלה-מטה עם נטייה */
+        @keyframes swan-bob {
+          0%, 100% { transform: translateY(0) rotate(-3deg); }
+          50% { transform: translateY(-4px) rotate(3deg); }
+        }
+        .swan-flight { will-change: transform, opacity; }
+        /* הודעת ניצחון */
+        @keyframes confetti-message {
+          0% { 
+            opacity: 0; 
+            transform: translate(-50%, -50%) scale(0.5);
+          }
+          15% { 
+            opacity: 1; 
+            transform: translate(-50%, -50%) scale(1.1);
+          }
+          25% { 
+            transform: translate(-50%, -50%) scale(1);
+          }
+          75% { 
+            opacity: 1; 
+            transform: translate(-50%, -50%) scale(1);
+          }
+          100% { 
+            opacity: 0; 
+            transform: translate(-50%, -50%) scale(0.95);
+          }
+        }
+        .animate-confetti-message {
+          animation: confetti-message 4s ease-out forwards;
+        }
+        /* 🔥 אנימציה להבת Hot Streak - הבהוב ותנועה קלה */
+        @keyframes flame-flicker {
+          0%, 100% { 
+            transform: scale(1) rotate(-1deg);
+            filter: brightness(1) drop-shadow(0 0 3px rgba(251, 146, 60, 0.6));
+          }
+          25% { 
+            transform: scale(1.08) rotate(1.5deg);
+            filter: brightness(1.15) drop-shadow(0 0 5px rgba(251, 146, 60, 0.8));
+          }
+          50% { 
+            transform: scale(0.95) rotate(-0.5deg);
+            filter: brightness(0.95) drop-shadow(0 0 2px rgba(251, 146, 60, 0.5));
+          }
+          75% { 
+            transform: scale(1.05) rotate(1deg);
+            filter: brightness(1.1) drop-shadow(0 0 4px rgba(251, 146, 60, 0.7));
+          }
+        }
+        .streak-flame svg {
+          animation: flame-flicker 1.4s ease-in-out infinite;
+          transform-origin: center bottom;
+        }
+        /* גרסה מהירה יותר ללהבות גדולות */
+        .streak-flame:has(svg[height="28"]) svg,
+        .streak-flame:has(svg[height="24"]) svg {
+          animation-duration: 1s;
+        }
       `}</style>
     </div>
   );
