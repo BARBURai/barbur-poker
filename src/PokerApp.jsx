@@ -42,6 +42,9 @@ const ALL_QUOTES = QUOTES_DATA;
 const STORAGE_KEY = 'poker_group_state_v4';
 const QUOTES_STORAGE_KEY = 'poker_quotes_state_v1';
 const GALLERY_STORAGE_KEY = 'poker_gallery_state_v1';
+// 🆕 מפתח לתזכורות תשלום (מערכת חדשה - לא בסשנים)
+const PAYMENTS_STORAGE_KEY = 'poker_payment_reminders_v1';
+const PAYMENT_EXPIRY_DAYS = 7; // אחרי 7 ימים → expired ונעלם
 // 🆕 מפתחות לגיבויים
 const BACKUPS_INDEX_KEY = 'poker_backups_index_v1'; // רשימת מפתחות גיבויים
 const BACKUP_KEY_PREFIX = 'poker_backup_'; // פרפיקס לכל גיבוי בודד
@@ -599,10 +602,28 @@ const AddSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, admi
   const [host, setHost] = useState('');
   const [error, setError] = useState('');
   const fileInputRef = useRef(null);
+  
+  // 🆕 העברת אירוח
+  const [hostingPaymentMode, setHostingPaymentMode] = useState('host'); // 'host' | 'other' | 'none'
+  const [hostingPaymentTo, setHostingPaymentTo] = useState('');
+  const [hostingPaymentAmount, setHostingPaymentAmount] = useState(50);
+  const [hostingPaymentCustom, setHostingPaymentCustom] = useState('');
+
+  // 🆕 כשמשתנה המארח - אם המצב 'host' אז מתעדכן גם היעד
+  useEffect(() => {
+    if (hostingPaymentMode === 'host') {
+      setHostingPaymentTo(host);
+    }
+  }, [host, hostingPaymentMode]);
 
   const reset = () => {
     setStep('upload'); setImage(null); setImagePreview(null); setParsing(false);
     setResults([]); setHost(''); setError('');
+    // 🆕 איפוס העברת אירוח
+    setHostingPaymentMode('host');
+    setHostingPaymentTo('');
+    setHostingPaymentAmount(50);
+    setHostingPaymentCustom('');
   };
   const handleClose = () => { reset(); onClose(); };
 
@@ -663,12 +684,33 @@ const AddSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, admi
   const addPlayerRow = () => setResults([...results, { name: players[0], amount: 0 }]);
   const removeRow = (idx) => setResults(results.filter((_, i) => i !== idx));
 
+  // 🆕 חישוב נתוני העברת אירוח
+  const buildHostingPayment = () => {
+    if (hostingPaymentMode === 'none') return null;
+    const target = hostingPaymentMode === 'host' ? host : hostingPaymentTo;
+    if (!target) return null;
+    let amount = hostingPaymentAmount;
+    if (amount === 'custom') {
+      amount = Number(hostingPaymentCustom) || 0;
+    }
+    if (!amount || amount <= 0) return null;
+    return { to: target, amount: Number(amount) };
+  };
+
   const handleSave = () => {
     const validResults = results.filter(r => r.name && r.amount !== '' && r.amount !== 0);
     const resultsObj = {};
     validResults.forEach(r => { resultsObj[r.name] = (resultsObj[r.name] || 0) + Number(r.amount); });
     const pot = Object.values(resultsObj).filter(v => v > 0).reduce((a, b) => a + b, 0);
-    onSave({ date: sessionDate, season: currentSeason, pot, results: resultsObj, host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString() });
+    // 🆕 כל מי שיש לו תוצאה (חיובית/שלילית/אפס) נחשב משתתף
+    const participantNames = results.filter(r => r.name && r.amount !== '').map(r => r.name);
+    onSave({ 
+      date: sessionDate, season: currentSeason, pot, results: resultsObj, 
+      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(),
+      hostingPayment: buildHostingPayment(), // 🆕
+      participantNames, // 🆕
+      manualEntry: true // 🆕 סמן שזה הזנה ידנית (לא תמונה ולא לייב)
+    });
     reset(); onClose();
   };
 
@@ -789,6 +831,131 @@ const AddSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, admi
                   </button>
                 </div>
               </div>
+
+              {/* 🆕 בלוק העברת אירוח - רק כשיש לפחות 2 שחקנים עם תוצאות */}
+              {results.filter(r => r.name && r.amount !== '' && r.amount !== 0).length >= 2 && (
+                <div className="rounded-xl border-2 border-amber-700/40 bg-gradient-to-br from-amber-950/30 to-stone-900/60 p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xl">🏠</span>
+                    <div className="text-sm font-bold text-amber-200">העברת אירוח</div>
+                  </div>
+
+                  {/* שאלה 1: למי משלמים? */}
+                  <div>
+                    <div className="text-xs text-stone-400 mb-2">למי משלמים על האירוח?</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button 
+                        onClick={() => { setHostingPaymentMode('host'); setHostingPaymentTo(host); }}
+                        disabled={!host}
+                        className={`rounded-lg px-2 py-3 text-xs font-bold transition border ${
+                          hostingPaymentMode === 'host'
+                            ? 'bg-emerald-700 text-white border-emerald-500 ring-2 ring-emerald-400'
+                            : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700 disabled:opacity-40 disabled:cursor-not-allowed'
+                        }`}>
+                        <div className="text-lg mb-0.5">🏠</div>
+                        <div className="leading-tight">{host || 'אין מארח'}</div>
+                      </button>
+                      <button 
+                        onClick={() => { setHostingPaymentMode('other'); if (hostingPaymentTo === host) setHostingPaymentTo(''); }}
+                        className={`rounded-lg px-2 py-3 text-xs font-bold transition border ${
+                          hostingPaymentMode === 'other'
+                            ? 'bg-amber-700 text-white border-amber-500 ring-2 ring-amber-400'
+                            : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                        }`}>
+                        <div className="text-lg mb-0.5">🍿</div>
+                        <div className="leading-tight">שחקן אחר</div>
+                      </button>
+                      <button 
+                        onClick={() => setHostingPaymentMode('none')}
+                        className={`rounded-lg px-2 py-3 text-xs font-bold transition border ${
+                          hostingPaymentMode === 'none'
+                            ? 'bg-rose-800 text-white border-rose-600 ring-2 ring-rose-400'
+                            : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                        }`}>
+                        <div className="text-lg mb-0.5">❌</div>
+                        <div className="leading-tight">לא משלמים</div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* בחירת שחקן אחר */}
+                  {hostingPaymentMode === 'other' && (
+                    <div>
+                      <div className="text-xs text-stone-400 mb-2">בחר שחקן:</div>
+                      <select 
+                        value={hostingPaymentTo} 
+                        onChange={e => setHostingPaymentTo(e.target.value)}
+                        className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white text-sm">
+                        <option value="">בחר...</option>
+                        {results.filter(r => r.name && r.amount !== '').map((r, i) => (
+                          <option key={`${r.name}-${i}`} value={r.name}>{r.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* שאלה 2: כמה? */}
+                  {hostingPaymentMode !== 'none' && (
+                    <div>
+                      <div className="text-xs text-stone-400 mb-2">כמה משלמים?</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button 
+                          onClick={() => setHostingPaymentAmount(50)}
+                          className={`rounded-lg px-3 py-2.5 text-sm font-bold transition border ${
+                            hostingPaymentAmount === 50
+                              ? 'bg-emerald-700 text-white border-emerald-500 ring-2 ring-emerald-400'
+                              : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                          }`}>
+                          50 ₪
+                        </button>
+                        <button 
+                          onClick={() => setHostingPaymentAmount(80)}
+                          className={`rounded-lg px-3 py-2.5 text-sm font-bold transition border ${
+                            hostingPaymentAmount === 80
+                              ? 'bg-amber-700 text-white border-amber-500 ring-2 ring-amber-400'
+                              : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                          }`}>
+                          80 ₪ <span className="text-[10px] opacity-70">פרימיום</span>
+                        </button>
+                        <button 
+                          onClick={() => setHostingPaymentAmount('custom')}
+                          className={`rounded-lg px-3 py-2.5 text-sm font-bold transition border ${
+                            hostingPaymentAmount === 'custom'
+                              ? 'bg-purple-700 text-white border-purple-500 ring-2 ring-purple-400'
+                              : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                          }`}>
+                          אחר
+                        </button>
+                      </div>
+                      {hostingPaymentAmount === 'custom' && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <input 
+                            type="number" 
+                            value={hostingPaymentCustom}
+                            onChange={e => setHostingPaymentCustom(e.target.value)}
+                            placeholder="סכום"
+                            className="flex-1 rounded-lg border border-stone-700 bg-stone-800 px-3 py-2 text-white text-center text-sm tabular-nums" />
+                          <span className="text-stone-400 text-sm">₪</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* סיכום */}
+                  {hostingPaymentMode !== 'none' && hostingPaymentTo && (
+                    <div className="rounded-lg bg-emerald-950/40 border border-emerald-700/40 px-3 py-2 text-xs text-emerald-200 flex items-center justify-between">
+                      <span>כל אחד ישלם:</span>
+                      <span className="font-bold">
+                        {hostingPaymentAmount === 'custom' 
+                          ? (hostingPaymentCustom ? `${hostingPaymentCustom} ₪` : '?')
+                          : `${hostingPaymentAmount} ₪`} 
+                        ← {hostingPaymentTo}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <button onClick={() => setStep('upload')}
                   className="flex-1 rounded-lg border border-stone-700 bg-stone-900 px-4 py-3 text-stone-300 hover:bg-stone-800">
@@ -2170,15 +2337,25 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false); // מודל אישור איפוס
   const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
   const [savedEvening, setSavedEvening] = useState(false); // האם הערב כבר נשמר
+  
+  // 🆕 העברת אירוח
+  const [hostingPaymentMode, setHostingPaymentMode] = useState('host'); // 'host' | 'other' | 'none'
+  const [hostingPaymentTo, setHostingPaymentTo] = useState(''); // למי משלמים
+  const [hostingPaymentAmount, setHostingPaymentAmount] = useState(50); // 50 / 80 / מספר אחר
+  const [hostingPaymentCustom, setHostingPaymentCustom] = useState(''); // שדה "אחר"
 
   // שמירה אוטומטית של מצב הערב לאחסון מקומי בדפדפן
   useEffect(() => {
     if (!isOpen || !hasLoadedSaved) return;
-    const state = { sessionDate, host, participants, closing, finalChips };
+    const state = { 
+      sessionDate, host, participants, closing, finalChips,
+      hostingPaymentMode, hostingPaymentTo, hostingPaymentAmount, hostingPaymentCustom
+    };
     try {
       window.localStorage.setItem(LIVE_SESSION_KEY, JSON.stringify(state));
     } catch {}
-  }, [sessionDate, host, participants, closing, finalChips, isOpen, hasLoadedSaved]);
+  }, [sessionDate, host, participants, closing, finalChips, isOpen, hasLoadedSaved,
+      hostingPaymentMode, hostingPaymentTo, hostingPaymentAmount, hostingPaymentCustom]);
 
   // טעינת מצב שמור כשפותחים
   useEffect(() => {
@@ -2193,17 +2370,34 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
           setParticipants(state.participants);
           setClosing(!!state.closing);
           setFinalChips(state.finalChips || {});
+          // 🆕 שחזור העברת אירוח
+          if (state.hostingPaymentMode !== undefined) setHostingPaymentMode(state.hostingPaymentMode);
+          if (state.hostingPaymentTo !== undefined) setHostingPaymentTo(state.hostingPaymentTo);
+          if (state.hostingPaymentAmount !== undefined) setHostingPaymentAmount(state.hostingPaymentAmount);
+          if (state.hostingPaymentCustom !== undefined) setHostingPaymentCustom(state.hostingPaymentCustom);
         }
       }
     } catch {}
     setHasLoadedSaved(true);
   }, [isOpen, hasLoadedSaved]);
 
+  // 🆕 כשמשתנה המארח - אם המצב הוא 'host' אז מתעדכן גם היעד
+  useEffect(() => {
+    if (hostingPaymentMode === 'host') {
+      setHostingPaymentTo(host);
+    }
+  }, [host, hostingPaymentMode]);
+
   const reset = () => {
     setParticipants([]); setHost(''); setClosing(false); setFinalChips({});
     setPendingAdditions([]); setShowAddPlayer(false);
     setSavedEvening(false);
     setSessionDate(new Date().toISOString().split('T')[0]);
+    // 🆕 איפוס העברת אירוח
+    setHostingPaymentMode('host');
+    setHostingPaymentTo('');
+    setHostingPaymentAmount(50);
+    setHostingPaymentCustom('');
     try { window.localStorage.removeItem(LIVE_SESSION_KEY); } catch {}
   };
 
@@ -2275,6 +2469,19 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     setFinalChips(initial);
   };
 
+  // 🆕 חישוב נתוני העברת אירוח - מחזיר אובייקט או null
+  const buildHostingPayment = () => {
+    if (hostingPaymentMode === 'none') return null;
+    const target = hostingPaymentMode === 'host' ? host : hostingPaymentTo;
+    if (!target) return null;
+    let amount = hostingPaymentAmount;
+    if (amount === 'custom') {
+      amount = Number(hostingPaymentCustom) || 0;
+    }
+    if (!amount || amount <= 0) return null;
+    return { to: target, amount: Number(amount) };
+  };
+
   const handleFinalSave = () => {
     if (!isBalanced) return alert(`הסכומים לא מאוזנים! יש פער של ${balance > 0 ? '+' : ''}${balance} ₪`);
     
@@ -2287,7 +2494,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     
     onSave({
       date: sessionDate, season: currentSeason, pot: totalPot, results,
-      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true
+      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true,
+      hostingPayment: buildHostingPayment(), // 🆕
+      participantNames: participants.map(p => p.name) // 🆕 לחישוב תזכורות
     });
     setSavedEvening(true);
     reset();
@@ -2309,7 +2518,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     
     onSave({
       date: sessionDate, season: currentSeason, pot: totalPot, results,
-      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true
+      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true,
+      hostingPayment: buildHostingPayment(), // 🆕
+      participantNames: participants.map(p => p.name) // 🆕
     });
     setSavedEvening(true);
   };
@@ -2510,6 +2721,130 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                   </div>
                 </div>
               </div>
+
+              {/* 🆕 בלוק העברת אירוח */}
+              {isBalanced && (
+                <div className="rounded-xl border-2 border-amber-700/40 bg-gradient-to-br from-amber-950/30 to-stone-900/60 p-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xl">🏠</span>
+                    <div className="text-sm font-bold text-amber-200">העברת אירוח</div>
+                  </div>
+
+                  {/* שאלה 1: למי משלמים? */}
+                  <div>
+                    <div className="text-xs text-stone-400 mb-2">למי משלמים על האירוח?</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button 
+                        onClick={() => { setHostingPaymentMode('host'); setHostingPaymentTo(host); }}
+                        disabled={!host}
+                        className={`rounded-lg px-2 py-3 text-xs font-bold transition border ${
+                          hostingPaymentMode === 'host'
+                            ? 'bg-emerald-700 text-white border-emerald-500 ring-2 ring-emerald-400'
+                            : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700 disabled:opacity-40 disabled:cursor-not-allowed'
+                        }`}>
+                        <div className="text-lg mb-0.5">🏠</div>
+                        <div className="leading-tight">{host || 'אין מארח'}</div>
+                      </button>
+                      <button 
+                        onClick={() => { setHostingPaymentMode('other'); if (hostingPaymentTo === host) setHostingPaymentTo(''); }}
+                        className={`rounded-lg px-2 py-3 text-xs font-bold transition border ${
+                          hostingPaymentMode === 'other'
+                            ? 'bg-amber-700 text-white border-amber-500 ring-2 ring-amber-400'
+                            : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                        }`}>
+                        <div className="text-lg mb-0.5">🍿</div>
+                        <div className="leading-tight">שחקן אחר</div>
+                      </button>
+                      <button 
+                        onClick={() => setHostingPaymentMode('none')}
+                        className={`rounded-lg px-2 py-3 text-xs font-bold transition border ${
+                          hostingPaymentMode === 'none'
+                            ? 'bg-rose-800 text-white border-rose-600 ring-2 ring-rose-400'
+                            : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                        }`}>
+                        <div className="text-lg mb-0.5">❌</div>
+                        <div className="leading-tight">לא משלמים</div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* בחירת שחקן אחר */}
+                  {hostingPaymentMode === 'other' && (
+                    <div>
+                      <div className="text-xs text-stone-400 mb-2">בחר שחקן:</div>
+                      <select 
+                        value={hostingPaymentTo} 
+                        onChange={e => setHostingPaymentTo(e.target.value)}
+                        className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white text-sm">
+                        <option value="">בחר...</option>
+                        {participants.map(p => (
+                          <option key={p.name} value={p.name}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* שאלה 2: כמה? */}
+                  {hostingPaymentMode !== 'none' && (
+                    <div>
+                      <div className="text-xs text-stone-400 mb-2">כמה משלמים?</div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <button 
+                          onClick={() => setHostingPaymentAmount(50)}
+                          className={`rounded-lg px-3 py-2.5 text-sm font-bold transition border ${
+                            hostingPaymentAmount === 50
+                              ? 'bg-emerald-700 text-white border-emerald-500 ring-2 ring-emerald-400'
+                              : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                          }`}>
+                          50 ₪
+                        </button>
+                        <button 
+                          onClick={() => setHostingPaymentAmount(80)}
+                          className={`rounded-lg px-3 py-2.5 text-sm font-bold transition border ${
+                            hostingPaymentAmount === 80
+                              ? 'bg-amber-700 text-white border-amber-500 ring-2 ring-amber-400'
+                              : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                          }`}>
+                          80 ₪ <span className="text-[10px] opacity-70">פרימיום</span>
+                        </button>
+                        <button 
+                          onClick={() => setHostingPaymentAmount('custom')}
+                          className={`rounded-lg px-3 py-2.5 text-sm font-bold transition border ${
+                            hostingPaymentAmount === 'custom'
+                              ? 'bg-purple-700 text-white border-purple-500 ring-2 ring-purple-400'
+                              : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-700'
+                          }`}>
+                          אחר
+                        </button>
+                      </div>
+                      {hostingPaymentAmount === 'custom' && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <input 
+                            type="number" 
+                            value={hostingPaymentCustom}
+                            onChange={e => setHostingPaymentCustom(e.target.value)}
+                            placeholder="סכום"
+                            className="flex-1 rounded-lg border border-stone-700 bg-stone-800 px-3 py-2 text-white text-center text-sm tabular-nums" />
+                          <span className="text-stone-400 text-sm">₪</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* סיכום */}
+                  {hostingPaymentMode !== 'none' && hostingPaymentTo && (
+                    <div className="rounded-lg bg-emerald-950/40 border border-emerald-700/40 px-3 py-2 text-xs text-emerald-200 flex items-center justify-between">
+                      <span>כל אחד ישלם:</span>
+                      <span className="font-bold">
+                        {hostingPaymentAmount === 'custom' 
+                          ? (hostingPaymentCustom ? `${hostingPaymentCustom} ₪` : '?')
+                          : `${hostingPaymentAmount} ₪`} 
+                        ← {hostingPaymentTo}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-col gap-2">
                 {/* כפתור חלוקת כספים - רק כשמאוזן */}
@@ -2995,10 +3330,389 @@ const PeriodicTables = ({ allSessions, players }) => {
 };
 
 
+// ===== מערכת תזכורות תשלום =====
+// 🆕 פונקציה ליצירת ID לתזכורת
+const makePaymentId = () => `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+// 🆕 בונה רשימת תזכורות מערב סגור
+const buildRemindersFromSession = (sessionData) => {
+  const { results, hostingPayment, participantNames, date, season } = sessionData;
+  const sessionId = `${date}_${season || 2026}`;
+  const reminders = [];
+  const createdAt = new Date().toISOString();
+
+  // 1. תזכורות חלוקת כספים (settlement) - רק אם הסכומים מאוזנים
+  // אם יש פער של יותר מ-1₪ בין רווחים להפסדים, מדלגים על חלוקה (כי אז calculateSettlements יוצר תזכורות שגויות)
+  const totalBalance = Object.values(results || {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
+  const isBalanced = Math.abs(totalBalance) < 1; // סבילות של 1₪ לטיפול בעיגולים
+  
+  if (isBalanced) {
+    const transfers = calculateSettlements(results || {});
+    transfers.forEach(t => {
+      reminders.push({
+        id: makePaymentId(),
+        sessionId,
+        sessionDate: date,
+        type: 'settlement',
+        from: t.from,
+        to: t.to,
+        amount: t.amount,
+        status: 'pending', // pending | marked_sent | confirmed
+        createdAt,
+        markedSentAt: null,
+        confirmedAt: null,
+      });
+    });
+  }
+
+  // 2. תזכורת העברת אירוח (hosting) - רק אם הוגדרה (לא תלוי באיזון)
+  if (hostingPayment && hostingPayment.to && hostingPayment.amount > 0) {
+    const payers = (participantNames || Object.keys(results || {})).filter(n => n !== hostingPayment.to);
+    payers.forEach(payer => {
+      reminders.push({
+        id: makePaymentId(),
+        sessionId,
+        sessionDate: date,
+        type: 'hosting',
+        from: payer,
+        to: hostingPayment.to,
+        amount: hostingPayment.amount,
+        status: 'pending',
+        createdAt,
+        markedSentAt: null,
+        confirmedAt: null,
+      });
+    });
+  }
+
+  return reminders;
+};
+
+// 🆕 בודק האם תזכורת פגה (>7 ימים)
+const isReminderExpired = (reminder) => {
+  if (reminder.status === 'confirmed') return false; // מאושר - לא פג
+  const created = new Date(reminder.createdAt);
+  const now = new Date();
+  const daysDiff = (now - created) / (1000 * 60 * 60 * 24);
+  return daysDiff >= PAYMENT_EXPIRY_DAYS;
+};
+
+// 🆕 פותח אפליקציית תשלום (Bit/PayBox) עם העתקת מספר טלפון ללוח
+// targetApp: 'bit' | 'paybox'
+// משתמש ב-Universal Links הרשמיים של האפליקציות:
+// - Bit: https://www.bitpay.co.il/app (אם האפליקציה מותקנת - נפתחת. אם לא - דף נחיתה)
+// - PayBox: https://links.payboxapp.com/ (אם האפליקציה מותקנת - נפתחת. אם לא - דף נחיתה)
+// 🔧 לא משתמש ב-async/await כדי לשמור על user gesture context (חיוני לClipboard ב-iOS Safari)
+const copyPhoneAndOpenApp = (phone, targetApp) => {
+  // 1. העתקת מספר הטלפון ללוח - חייב להיות ראשון בתוך ה-user gesture
+  if (phone) {
+    const cleanPhone = phone.replace(/\D/g, '');
+    try {
+      if (navigator.clipboard?.writeText) {
+        // אין await - אנחנו לא רוצים לאבד user gesture context
+        navigator.clipboard.writeText(cleanPhone).catch(e => console.warn('clipboard failed', e));
+      } else {
+        // fallback ישן לדפדפנים שלא תומכים ב-Clipboard API
+        const ta = document.createElement('textarea');
+        ta.value = cleanPhone;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch {}
+        document.body.removeChild(ta);
+      }
+    } catch (e) { console.warn('clipboard failed', e); }
+  }
+
+  // 2. פתיחת האפליקציה דרך Universal Link רשמי
+  // ב-iOS/Android: אם האפליקציה מותקנת - נפתחת; אם לא - דף נחיתה
+  // בדסקטופ: דף נחיתה רגיל בדפדפן
+  const url = targetApp === 'bit' 
+    ? 'https://www.bitpay.co.il/app' 
+    : 'https://links.payboxapp.com/';
+  
+  try {
+    // window.open עם _blank כדי שלא יחליף את הדף הנוכחי
+    window.open(url, '_blank');
+  } catch (e) { 
+    console.warn(`Failed to open ${targetApp}:`, e); 
+  }
+};
+
+// 🆕 קומפוננטת תזכורות תשלום בדשבורד
+const PaymentReminders = ({ playerName, reminders, phones, onMarkSent, onConfirmReceived }) => {
+  // 🔔 טוסט - הודעה קצרה למשתמש אחרי לחיצה על "העתק ופתח"
+  const [toast, setToast] = useState(null); // { message, type } | null
+  
+  // 🔧 wrapper - לחיצה אחת = העתקה + פתיחה + סימון "העברתי" אוטומטי + טוסט
+  // 🆕 הסדר חשוב: clipboard + window.open ראשון (חייב להיות ב-user gesture),
+  //    אחר כך React state updates ו-Firebase write (יכולים להיות אחרי)
+  const handleCopyAndOpen = (phone, targetApp, reminderId, alreadyMarkedSent) => {
+    if (!phone) return;
+    
+    // 1. העתקה + פתיחת אפליקציה - ראשונים, חייבים להיות בתוך user gesture
+    copyPhoneAndOpenApp(phone, targetApp);
+    
+    // 2. סימון אוטומטי כ"סימנתי שהעברתי" (רץ ברקע ל-Firebase)
+    if (reminderId && !alreadyMarkedSent && onMarkSent) {
+      onMarkSent(reminderId);
+    }
+    
+    // 3. טוסט הסבר למשתמש
+    const appLabel = targetApp === 'bit' ? 'Bit' : 'PayBox';
+    setToast({ 
+      message: `✓ הטלפון הועתק! הדבק במסך ההעברה ב-${appLabel}`,
+      type: 'success'
+    });
+    setTimeout(() => setToast(null), 3500);
+  };
+  
+  // סינון - רק תזכורות פעילות (לא expired/confirmed) שקשורות למשתמש
+  const myReminders = useMemo(() => {
+    if (!playerName || !reminders) return { toSend: [], toReceive: [] };
+    
+    const active = reminders.filter(r => !isReminderExpired(r));
+    
+    const toSend = active.filter(r => r.from === playerName && r.status !== 'confirmed');
+    const toReceive = active.filter(r => r.to === playerName && r.status !== 'confirmed' && r.status !== 'pending');
+    // הערה: מקבל רואה רק תזכורות שסומנו כ-marked_sent (כי pending = השולח עדיין לא לחץ)
+    
+    // מיון לפי תאריך - ישן ראשון
+    toSend.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    toReceive.sort((a, b) => new Date(a.markedSentAt || a.createdAt) - new Date(b.markedSentAt || b.createdAt));
+    
+    return { toSend, toReceive };
+  }, [playerName, reminders]);
+
+  if (myReminders.toSend.length === 0 && myReminders.toReceive.length === 0) {
+    return null; // אין תזכורות - לא מציגים שום דבר
+  }
+
+  const formatPhone = (phone) => {
+    if (!phone) return '';
+    return phone.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3');
+  };
+
+  return (
+    <div className="rounded-2xl border-2 border-amber-700/40 bg-gradient-to-br from-amber-950/30 via-stone-900/40 to-stone-950/40 p-4 backdrop-blur space-y-3">
+      <div className="flex items-center gap-2">
+        <span className="text-2xl">💸</span>
+        <div>
+          <div className="text-base font-extrabold text-amber-200">תזכורות תשלום</div>
+          <div className="text-xs text-stone-400">
+            תוקף: 7 ימים מיום הערב
+          </div>
+        </div>
+      </div>
+
+      {/* תשלומים שצריך להעביר */}
+      {myReminders.toSend.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-rose-300 uppercase tracking-wider">
+            ← אתה צריך להעביר ({myReminders.toSend.length})
+          </div>
+          {myReminders.toSend.map(r => {
+            const targetPhone = phones?.[r.to]?.phone;
+            const targetApp = phones?.[r.to]?.app || 'both'; // ברירת מחדל = שתיהן
+            const isSent = r.status === 'marked_sent';
+            const sessionDateObj = new Date(r.sessionDate);
+            const dateStr = sessionDateObj.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+            
+            return (
+              <div key={r.id} className={`rounded-xl border p-3 transition ${
+                isSent 
+                  ? 'border-amber-700/60 bg-amber-950/30' 
+                  : r.type === 'hosting'
+                  ? 'border-purple-700/50 bg-purple-950/20'
+                  : 'border-stone-700/50 bg-stone-900/50'
+              }`}>
+                {/* כותרת הכרטיס */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      {r.type === 'hosting' ? (
+                        <span className="rounded-md bg-purple-900/60 border border-purple-700/50 px-1.5 py-0.5 text-[10px] font-bold text-purple-200">
+                          🏠 אירוח
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-stone-800 border border-stone-700 px-1.5 py-0.5 text-[10px] font-bold text-stone-300">
+                          ערב {dateStr}
+                        </span>
+                      )}
+                      {/* תווית האפליקציה המועדפת של המקבל */}
+                      {targetPhone && targetApp === 'bit' && (
+                        <span className="rounded-md bg-blue-900/60 border border-blue-700/50 px-1.5 py-0.5 text-[10px] font-bold text-blue-200">
+                          💙 מעדיף Bit
+                        </span>
+                      )}
+                      {targetPhone && targetApp === 'paybox' && (
+                        <span className="rounded-md bg-purple-900/60 border border-purple-700/50 px-1.5 py-0.5 text-[10px] font-bold text-purple-200">
+                          💜 מעדיף PayBox
+                        </span>
+                      )}
+                      {isSent && (
+                        <span className="rounded-md bg-amber-900/60 border border-amber-700/50 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                          ⏳ ממתין לאישור
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-base font-bold text-stone-100 truncate">
+                      ל{r.to}
+                    </div>
+                    {targetPhone && (
+                      <div className="text-xs text-stone-400 tabular-nums" dir="ltr">
+                        📱 {formatPhone(targetPhone)}
+                      </div>
+                    )}
+                    {!targetPhone && (
+                      <div className="text-xs text-amber-400">
+                        ⚠️ אין טלפון רשום - בקש מהמנהל
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-2xl font-extrabold text-amber-300 tabular-nums whitespace-nowrap">
+                    {r.amount} ₪
+                  </div>
+                </div>
+                
+                {/* כפתורים - מותאמים להעדפת המקבל */}
+                {/* 🆕 לחיצה על כפתור התשלום = העתקה + פתיחה + סימון אוטומטי כ"העברתי" */}
+                <div className="flex flex-col gap-2 mt-2">
+                  {/* שורת כפתורי תשלום */}
+                  {targetApp === 'bit' && (
+                    <button 
+                      onClick={() => handleCopyAndOpen(targetPhone, 'bit', r.id, isSent)}
+                      disabled={!targetPhone}
+                      className={`rounded-lg disabled:opacity-40 disabled:cursor-not-allowed px-3 py-2.5 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition ${
+                        isSent ? 'bg-blue-800/70 hover:bg-blue-700' : 'bg-blue-700 hover:bg-blue-600'
+                      }`}>
+                      <span>📋</span>
+                      <span>{isSent ? 'העתק שוב ופתח Bit' : 'העתק טלפון ופתח Bit'}</span>
+                    </button>
+                  )}
+                  {targetApp === 'paybox' && (
+                    <button 
+                      onClick={() => handleCopyAndOpen(targetPhone, 'paybox', r.id, isSent)}
+                      disabled={!targetPhone}
+                      className={`rounded-lg disabled:opacity-40 disabled:cursor-not-allowed px-3 py-2.5 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition ${
+                        isSent ? 'bg-purple-800/70 hover:bg-purple-700' : 'bg-purple-700 hover:bg-purple-600'
+                      }`}>
+                      <span>📋</span>
+                      <span>{isSent ? 'העתק שוב ופתח PayBox' : 'העתק טלפון ופתח PayBox'}</span>
+                    </button>
+                  )}
+                  {targetApp === 'both' && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button 
+                        onClick={() => handleCopyAndOpen(targetPhone, 'bit', r.id, isSent)}
+                        disabled={!targetPhone}
+                        className={`rounded-lg disabled:opacity-40 disabled:cursor-not-allowed px-3 py-2.5 text-xs font-bold text-white flex items-center justify-center gap-1 transition ${
+                          isSent ? 'bg-blue-800/70 hover:bg-blue-700' : 'bg-blue-700 hover:bg-blue-600'
+                        }`}>
+                        <span>💙</span>
+                        <span>Bit</span>
+                      </button>
+                      <button 
+                        onClick={() => handleCopyAndOpen(targetPhone, 'paybox', r.id, isSent)}
+                        disabled={!targetPhone}
+                        className={`rounded-lg disabled:opacity-40 disabled:cursor-not-allowed px-3 py-2.5 text-xs font-bold text-white flex items-center justify-center gap-1 transition ${
+                          isSent ? 'bg-purple-800/70 hover:bg-purple-700' : 'bg-purple-700 hover:bg-purple-600'
+                        }`}>
+                        <span>💜</span>
+                        <span>PayBox</span>
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* טקסט סטטוס: "ממתין לאישור" אחרי שהמשתמש לחץ */}
+                  {isSent && (
+                    <div className="text-center text-[11px] text-amber-300/80 italic flex items-center justify-center gap-1">
+                      <span>⏳</span>
+                      <span>סומן כהועבר • ממתין לאישור {r.to}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* תשלומים שצריך לקבל */}
+      {myReminders.toReceive.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-bold text-emerald-300 uppercase tracking-wider">
+            → אתה אמור לקבל ({myReminders.toReceive.length})
+          </div>
+          {myReminders.toReceive.map(r => {
+            const sessionDateObj = new Date(r.sessionDate);
+            const dateStr = sessionDateObj.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+            
+            return (
+              <div key={r.id} className={`rounded-xl border p-3 ${
+                r.type === 'hosting'
+                  ? 'border-purple-700/50 bg-purple-950/20'
+                  : 'border-emerald-700/50 bg-emerald-950/20'
+              }`}>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      {r.type === 'hosting' ? (
+                        <span className="rounded-md bg-purple-900/60 border border-purple-700/50 px-1.5 py-0.5 text-[10px] font-bold text-purple-200">
+                          🏠 אירוח
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-stone-800 border border-stone-700 px-1.5 py-0.5 text-[10px] font-bold text-stone-300">
+                          ערב {dateStr}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-sm text-stone-200">
+                      <span className="font-bold text-emerald-300">{r.from}</span>
+                      <span className="text-stone-400"> סימן שהעביר לך</span>
+                    </div>
+                  </div>
+                  <div className="text-2xl font-extrabold text-emerald-300 tabular-nums whitespace-nowrap">
+                    {r.amount} ₪
+                  </div>
+                </div>
+                
+                <button 
+                  onClick={() => onConfirmReceived(r.id)}
+                  className="w-full rounded-lg bg-emerald-700 hover:bg-emerald-600 px-3 py-2 text-xs font-bold text-white flex items-center justify-center gap-1.5 transition">
+                  <Check className="h-3.5 w-3.5" />
+                  <span>קיבלתי ✓</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 🔔 טוסט - הודעה קצרה אחרי לחיצה על "העתק ופתח" */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] pointer-events-none animate-fade-in-up">
+          <div className="rounded-xl bg-emerald-700 border-2 border-emerald-500 px-5 py-3 shadow-2xl shadow-emerald-900/50 flex items-center gap-2 max-w-[90vw]">
+            <span className="text-base font-bold text-white text-center">{toast.message}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
 // ===== דשבורד קומפקטי =====
-const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile }) => {
+const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onMarkPaymentSent, onConfirmPaymentReceived }) => {
   return (
     <div className="space-y-3">
+      <PaymentReminders 
+        playerName={currentUser}
+        reminders={paymentReminders}
+        phones={phones}
+        onMarkSent={onMarkPaymentSent}
+        onConfirmReceived={onConfirmPaymentReceived} />
       <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
       <NextHostsCarouselCompact hostingSchedule={hostingSchedule} onSeeAll={onGoToHosting} />
       <TopThreeCarousel stats={stats} />
@@ -4076,10 +4790,16 @@ const PhoneSetupModal = ({ isOpen, onClose, playerName, currentPhone, onSave, is
             <input
               type="tel"
               inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="tel"
               dir="ltr"
               placeholder="0501234567"
               value={phone}
-              onChange={(e) => { setPhone(formatPhone(e.target.value)); setError(''); }}
+              onChange={(e) => { 
+                const onlyDigits = (e.target.value || '').replace(/[^0-9]/g, '').slice(0, 10);
+                setPhone(onlyDigits); 
+                setError('');
+              }}
               disabled={isPhoneLocked}
               className={`w-full rounded-lg border px-4 py-3 text-lg tabular-nums focus:outline-none text-center transition ${
                 isPhoneLocked
@@ -4198,6 +4918,9 @@ export default function PokerApp() {
   const [backupsModalOpen, setBackupsModalOpen] = useState(false);
   const [backupsList, setBackupsList] = useState([]); // רשימת snapshots ב-Firebase
   
+  // 🆕 תזכורות תשלום - מערך של אובייקטים
+  const [paymentReminders, setPaymentReminders] = useState([]);
+  
   // האם יש ערב פעיל בניהול חי
   const [hasLiveSession, setHasLiveSession] = useState(false);
   
@@ -4270,6 +4993,25 @@ export default function PokerApp() {
           // אין תמונות-זרע - גלריה ריקה (זה בסדר)
           console.log('No seed gallery available');
         }
+      }
+      
+      // 🆕 טעינת תזכורות תשלום + ניקוי תזכורות שפגו (>7 ימים)
+      try {
+        const savedPayments = await loadState(PAYMENTS_STORAGE_KEY);
+        if (savedPayments?.reminders && Array.isArray(savedPayments.reminders)) {
+          // סינון תזכורות שפגו או שכבר אושרו (לא רוצים להציג לעולם)
+          const active = savedPayments.reminders.filter(r => {
+            if (r.status === 'confirmed') return false; // כבר אושר - מוחקים
+            return !isReminderExpired(r); // expired - מוחקים
+          });
+          setPaymentReminders(active);
+          // אם משהו נמחק - שומרים מחדש
+          if (active.length !== savedPayments.reminders.length) {
+            await saveState({ reminders: active }, PAYMENTS_STORAGE_KEY);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load payment reminders', e);
       }
       
       // טעינת המשתמש שנבחר בעבר
@@ -4363,6 +5105,129 @@ export default function PokerApp() {
     await persistPhones(newPhones);
   };
 
+  // 🆕 ===== מערכת תזכורות תשלום =====
+  
+  // שמירת תזכורות ל-Firebase
+  const persistPaymentReminders = async (reminders) => {
+    setSyncing(true);
+    await saveState({ reminders }, PAYMENTS_STORAGE_KEY);
+    setSyncing(false);
+  };
+
+  // הוספת תזכורות חדשות (אחרי סגירת ערב)
+  // 🔧 merge חכם: אם תזכורת זהה כבר קיימת (אותו ערב, from, to, type, amount) - שומר את הסטטוס שלה
+  const addPaymentReminders = async (newReminders) => {
+    if (!newReminders || newReminders.length === 0) return;
+    
+    // 🔧 רענון מ-Firebase לפני מיזוג - להפחתת race conditions
+    let baseReminders = paymentReminders;
+    try {
+      const fresh = await loadState(PAYMENTS_STORAGE_KEY);
+      if (fresh?.reminders && Array.isArray(fresh.reminders)) {
+        baseReminders = fresh.reminders.filter(r => r.status !== 'confirmed' && !isReminderExpired(r));
+      }
+    } catch (e) {
+      console.warn('Failed to refresh payment reminders before merge:', e);
+    }
+    
+    // אינדקס של תזכורות קיימות לפי "חתימה ייחודית" - sessionId + from + to + type + amount
+    const sigOf = (r) => `${r.sessionId}|${r.from}|${r.to}|${r.type}|${r.amount}`;
+    const existingMap = new Map();
+    baseReminders.forEach(r => existingMap.set(sigOf(r), r));
+    
+    // עבור כל תזכורת חדשה - אם קיימת זהה, שומרים את הסטטוס שלה (כולל marked_sent/markedSentAt)
+    const sessionIds = new Set(newReminders.map(r => r.sessionId));
+    const merged = newReminders.map(newR => {
+      const existing = existingMap.get(sigOf(newR));
+      if (existing) {
+        // משתמשים ב-id וסטטוס של הקיים
+        return {
+          ...newR,
+          id: existing.id,
+          status: existing.status,
+          createdAt: existing.createdAt, // שומרים את הזמן המקורי כדי שלא ייאפס לוח-7-הימים
+          markedSentAt: existing.markedSentAt,
+          confirmedAt: existing.confirmedAt,
+        };
+      }
+      return newR;
+    });
+    
+    // מסירים תזכורות ישנות מאותו ערב (כי הן הוחלפו ב-merged)
+    const otherSessions = baseReminders.filter(r => !sessionIds.has(r.sessionId));
+    
+    // התוצאה: תזכורות מערבים אחרים + התזכורות הממוזגות לערב הנוכחי
+    const updated = [...otherSessions, ...merged];
+    setPaymentReminders(updated);
+    await persistPaymentReminders(updated);
+  };
+
+  // סימון תשלום כ"הועבר" (השולח לחץ)
+  // 🔧 רענון מ-Firebase לפני שמירה - להפחתת race conditions בין משתמשים
+  const handleMarkPaymentSent = async (reminderId) => {
+    let baseReminders = paymentReminders;
+    try {
+      const fresh = await loadState(PAYMENTS_STORAGE_KEY);
+      if (fresh?.reminders && Array.isArray(fresh.reminders)) {
+        baseReminders = fresh.reminders;
+      }
+    } catch (e) {
+      console.warn('Failed to refresh before mark sent:', e);
+    }
+    const updated = baseReminders.map(r => 
+      r.id === reminderId 
+        ? { ...r, status: 'marked_sent', markedSentAt: new Date().toISOString() }
+        : r
+    );
+    // מסננים expired + confirmed כדי לא לשמור זבל
+    const cleaned = updated.filter(r => r.status !== 'confirmed' && !isReminderExpired(r));
+    setPaymentReminders(cleaned);
+    await persistPaymentReminders(cleaned);
+  };
+
+  // סימון תשלום כ"התקבל" (המקבל אישר) - מוחק את התזכורת
+  // 🔧 רענון מ-Firebase לפני שמירה
+  const handleConfirmPaymentReceived = async (reminderId) => {
+    let baseReminders = paymentReminders;
+    try {
+      const fresh = await loadState(PAYMENTS_STORAGE_KEY);
+      if (fresh?.reminders && Array.isArray(fresh.reminders)) {
+        baseReminders = fresh.reminders;
+      }
+    } catch (e) {
+      console.warn('Failed to refresh before confirm:', e);
+    }
+    // מסיר את התזכורת לחלוטין + מסנן expired
+    const updated = baseReminders
+      .filter(r => r.id !== reminderId)
+      .filter(r => r.status !== 'confirmed' && !isReminderExpired(r));
+    setPaymentReminders(updated);
+    await persistPaymentReminders(updated);
+  };
+
+  // ניקוי אוטומטי של תזכורות שפגו (>7 ימים) - רץ אחת לדקה
+  // 🔧 משתמש ב-useRef כדי למנוע stale closure
+  const paymentRemindersRef = useRef(paymentReminders);
+  useEffect(() => {
+    paymentRemindersRef.current = paymentReminders;
+  }, [paymentReminders]);
+  
+  useEffect(() => {
+    if (loading) return;
+    const cleanup = async () => {
+      const current = paymentRemindersRef.current;
+      const active = current.filter(r => !isReminderExpired(r));
+      if (active.length !== current.length) {
+        setPaymentReminders(active);
+        await persistPaymentReminders(active);
+      }
+    };
+    // קריאה ראשונה אחרי 30 שניות, ואז כל דקה
+    const timer = setTimeout(cleanup, 30000);
+    const interval = setInterval(cleanup, 60000);
+    return () => { clearTimeout(timer); clearInterval(interval); };
+  }, [loading]);
+
   // 🆕 ===== מערכת גיבויים =====
   
   // יוצר אובייקט גיבוי מלא של כל הנתונים
@@ -4385,6 +5250,9 @@ export default function PokerApp() {
         images: galleryImages,
         likes: galleryLikes,
       },
+      payments: {
+        reminders: paymentReminders,
+      },
       meta: {
         sessionsCount: allSessions.length,
         playersCount: players.length,
@@ -4392,6 +5260,7 @@ export default function PokerApp() {
         phonesCount: Object.keys(phones).length,
         quotesCount: 975 - deletedQuoteIds.length + userQuotes.length,
         galleryCount: galleryImages.length,
+        paymentRemindersCount: paymentReminders.length,
       }
     };
     return snapshot;
@@ -4530,6 +5399,14 @@ export default function PokerApp() {
         setGalleryLikes(snapshot.gallery.likes || {});
         await saveState(snapshot.gallery, GALLERY_STORAGE_KEY);
       }
+      // 🆕 שחזור תזכורות תשלום
+      if (snapshot.payments) {
+        const restoredReminders = snapshot.payments.reminders || [];
+        // מסננים תזכורות שכבר פגו
+        const active = restoredReminders.filter(r => r.status !== 'confirmed' && !isReminderExpired(r));
+        setPaymentReminders(active);
+        await saveState({ reminders: active }, PAYMENTS_STORAGE_KEY);
+      }
       
       alert(`✓ הנתונים שוחזרו בהצלחה מהגיבוי של ${new Date(backupItem.timestamp).toLocaleDateString('he-IL')}`);
       setBackupsModalOpen(false);
@@ -4576,6 +5453,13 @@ export default function PokerApp() {
         setGalleryImages(snapshot.gallery.images || []);
         setGalleryLikes(snapshot.gallery.likes || {});
         await saveState(snapshot.gallery, GALLERY_STORAGE_KEY);
+      }
+      // 🆕 שחזור תזכורות תשלום
+      if (snapshot.payments) {
+        const restoredReminders = snapshot.payments.reminders || [];
+        const active = restoredReminders.filter(r => r.status !== 'confirmed' && !isReminderExpired(r));
+        setPaymentReminders(active);
+        await saveState({ reminders: active }, PAYMENTS_STORAGE_KEY);
       }
       
       alert(`✓ הנתונים שוחזרו בהצלחה!`);
@@ -4703,6 +5587,16 @@ export default function PokerApp() {
     const updatedPlayers = newNames.length > 0 ? [...players, ...newNames] : players;
     if (newNames.length > 0) setPlayers(updatedPlayers);
     await persistSessions(updated, updatedPlayers);
+    
+    // 🆕 יצירת תזכורות תשלום אוטומטית - לערב לייב או הזנה ידנית
+    // ערבים שנשמרו דרך תמונה (OCR בלבד, ללא ביקור במסך הידני) - לא ייצרו תזכורות
+    // כי אין להם hostingPayment ו-participantNames מוגדרים מהמשתמש
+    if (newSession.results && (newSession.liveTracked || newSession.manualEntry)) {
+      const newReminders = buildRemindersFromSession(newSession);
+      if (newReminders.length > 0) {
+        await addPaymentReminders(newReminders);
+      }
+    }
   };
 
   const handleDeleteSession = async (date) => {
@@ -4930,6 +5824,10 @@ export default function PokerApp() {
             selectedChartPlayers={selectedChartPlayers}
             setSelectedChartPlayers={setSelectedChartPlayers}
             isMobile={isMobile}
+            paymentReminders={paymentReminders}
+            phones={phones}
+            onMarkPaymentSent={handleMarkPaymentSent}
+            onConfirmPaymentReceived={handleConfirmPaymentReceived}
           />
         )}
 
@@ -5182,6 +6080,12 @@ export default function PokerApp() {
           50% { opacity: 0.85; transform: translateY(-50%) translateX(-3px); }
         }
         .animate-pulse-subtle { animation: pulse-subtle 1.8s ease-in-out infinite; }
+        /* 🔔 אנימציה לטוסט הודעה */
+        @keyframes fade-in-up {
+          0% { opacity: 0; transform: translate(-50%, 20px); }
+          100% { opacity: 1; transform: translate(-50%, 0); }
+        }
+        .animate-fade-in-up { animation: fade-in-up 0.3s ease-out; }
       `}</style>
     </div>
   );
