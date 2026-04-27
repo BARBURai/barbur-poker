@@ -71,10 +71,10 @@ const calculateStats = (sessions, players) => {
       if (!stats[name]) return;
       const s = stats[name];
       s.total += amount; s.sessions++; s.values.push(amount);
-      // 🔥 רצף נוכחי = רק רצף ניצחונות. הפסד = איפוס ל-0. תיקו = לא משנה.
+      // 🔥 רצף = משחקים ללא הפסד. ניצחון/תיקו = +1, הפסד = איפוס ל-0
       if (amount > 0) { s.wins++; s.currentStreak++; }
       else if (amount < 0) { s.losses++; s.currentStreak = 0; }
-      else { s.ties++; } // תיקו לא שובר ולא מעלה את הרצף
+      else { s.ties++; s.currentStreak++; } // תיקו לא שובר ולא הפסד - מעלה את הרצף
       s.maxStreak = Math.max(s.maxStreak, s.currentStreak);
       if (amount > s.biggestWin) s.biggestWin = amount;
       if (amount < s.biggestLoss) s.biggestLoss = amount;
@@ -591,7 +591,7 @@ const MainLeaderboard = ({ stats, sessions }) => {
     { key: 'losses', label: 'הפסדים' },
     { key: 'ties', label: 'תיקו' },
     { key: 'winRate', label: '% ניצחון' },
-    { key: 'maxStreak', label: 'שיא רצף' },
+    { key: 'maxStreak', label: 'שיא רצף ללא הפסד' },
     { key: 'currentStreakDisplay', label: 'רצף נוכחי' },
     { key: 'biggestWin', label: 'שיא רווח' },
     { key: 'biggestLoss', label: 'שיא הפסד' },
@@ -2359,6 +2359,357 @@ const openPaymentApp = (phone, app) => {
   window.open(url, '_blank');
 };
 
+// 🎉 קומפוננטת Confetti - אפקט חגיגה עם 4 צינורות מים שיורים ברבורים
+// מופעלת בדשבורד כשמזהים שהמשתמש זכה בערב האחרון
+const Confetti = ({ active, onComplete, message }) => {
+  const SOURCES = useMemo(() => [
+    { side: 'left',  offsetPct: 12, angle: 60 },
+    { side: 'left',  offsetPct: 32, angle: 80 },
+    { side: 'right', offsetPct: 32, angle: 80 },
+    { side: 'right', offsetPct: 12, angle: 60 },
+  ], []);
+  
+  const swans = useMemo(() => {
+    const all = [];
+    SOURCES.forEach((src, srcIdx) => {
+      for (let i = 0; i < 18; i++) {
+        const directionMultiplier = src.side === 'left' ? 1 : -1;
+        const angle = src.angle + (Math.random() - 0.5) * 30;
+        const distance = 200 + Math.random() * 250;
+        const radians = (angle * Math.PI) / 180;
+        const peakX = Math.cos(radians) * distance * directionMultiplier;
+        const peakY = -Math.sin(radians) * distance;
+        const driftX = (Math.random() - 0.5) * 80;
+        all.push({
+          id: srcIdx * 100 + i,
+          side: src.side,
+          offsetPct: src.offsetPct,
+          peakX, peakY,
+          fallX: peakX + driftX,
+          fallY: -peakY * 1.3,
+          delay: Math.random() * 1.2,
+          duration: 4 + Math.random() * 2,
+          flipped: directionMultiplier < 0,
+          bobDelay: Math.random() * 1.5,
+          bobDuration: 1.2 + Math.random() * 0.8,
+          size: 44 + Math.random() * 16, // ברבורים גדולים: 44-60px (היו 28-40)
+        });
+      }
+    });
+    return all;
+  }, [active, SOURCES]);
+  
+  useEffect(() => {
+    if (!active) return;
+    const timer = setTimeout(() => {
+      if (onComplete) onComplete();
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [active, onComplete]);
+  
+  if (!active) return null;
+  
+  const renderPipe = (size, idSuffix) => {
+    const isLarge = size === 'large';
+    const w = isLarge ? 46 : 40;
+    const h = isLarge ? 150 : 125;
+    return (
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id={`waterPipe-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#1e3a5f"/>
+            <stop offset="15%" stopColor="#3b6996"/>
+            <stop offset="40%" stopColor="#7eb1d7"/>
+            <stop offset="55%" stopColor="#b8d4e8"/>
+            <stop offset="75%" stopColor="#5b8bb5"/>
+            <stop offset="100%" stopColor="#1e3a5f"/>
+          </linearGradient>
+          <linearGradient id={`coupling-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#0f172a"/>
+            <stop offset="20%" stopColor="#334155"/>
+            <stop offset="50%" stopColor="#94a3b8"/>
+            <stop offset="80%" stopColor="#334155"/>
+            <stop offset="100%" stopColor="#0f172a"/>
+          </linearGradient>
+          <radialGradient id={`water-${idSuffix}`} cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stopColor="#67e8f9"/>
+            <stop offset="60%" stopColor="#0891b2"/>
+            <stop offset="100%" stopColor="#0e7490"/>
+          </radialGradient>
+        </defs>
+        {isLarge ? (
+          <>
+            <rect x="11" y="35" width="24" height="100" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="16" y="35" width="2" height="100" fill="white" opacity="0.5"/>
+            <ellipse cx="23" cy="135" rx="14" ry="3" fill="#0f172a"/>
+            <rect x="9" y="128" width="28" height="9" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="7" y="78" width="32" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="11" cy="85" r="1.5" fill="#1e293b"/>
+            <circle cx="35" cy="85" r="1.5" fill="#1e293b"/>
+            <rect x="6" y="20" width="34" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="10" cy="27" r="1.5" fill="#1e293b"/>
+            <circle cx="36" cy="27" r="1.5" fill="#1e293b"/>
+            <ellipse cx="23" cy="20" rx="17" ry="5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <ellipse cx="20" cy="18.5" rx="5" ry="1" fill="white" opacity="0.7"/>
+          </>
+        ) : (
+          <>
+            <rect x="9" y="30" width="22" height="85" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="14" y="30" width="2" height="85" fill="white" opacity="0.5"/>
+            <ellipse cx="20" cy="115" rx="12" ry="3" fill="#0f172a"/>
+            <rect x="7" y="108" width="26" height="8" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="5" y="65" width="30" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="9" cy="71.5" r="1.3" fill="#1e293b"/>
+            <circle cx="31" cy="71.5" r="1.3" fill="#1e293b"/>
+            <rect x="4" y="17" width="32" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="8" cy="23.5" r="1.3" fill="#1e293b"/>
+            <circle cx="32" cy="23.5" r="1.3" fill="#1e293b"/>
+            <ellipse cx="20" cy="17" rx="16" ry="4.5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <ellipse cx="17" cy="15.5" rx="4" ry="0.8" fill="white" opacity="0.7"/>
+          </>
+        )}
+      </svg>
+    );
+  };
+  
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[200] overflow-hidden">
+      {message && (
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center animate-confetti-message">
+          <div className="rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 border-2 border-amber-400 px-6 py-4 shadow-2xl shadow-amber-900/50">
+            <div className="text-2xl md:text-3xl font-extrabold text-white whitespace-nowrap">
+              {message}
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="absolute" style={{ bottom: '8%', left: '6%', transform: 'rotate(-25deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('large', 'L')}
+      </div>
+      <div className="absolute" style={{ bottom: '8%', left: '30%', transform: 'rotate(-12deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('medium', 'LC')}
+      </div>
+      <div className="absolute" style={{ bottom: '8%', right: '30%', transform: 'rotate(12deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('medium', 'RC')}
+      </div>
+      <div className="absolute" style={{ bottom: '8%', right: '6%', transform: 'rotate(25deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('large', 'R')}
+      </div>
+      {swans.map(s => (
+        <div
+          key={s.id}
+          className="absolute"
+          style={{
+            bottom: 'calc(8% + 140px)',
+            [s.side]: `${s.offsetPct}%`,
+            width: `${s.size}px`,
+            height: `${s.size}px`,
+            '--peak-x': `${s.peakX}px`,
+            '--peak-y': `${s.peakY}px`,
+            '--fall-x': `${s.fallX}px`,
+            '--fall-y': `${s.fallY}px`,
+            animation: `swan-arc ${s.duration}s ${s.delay}s ease-out forwards`,
+            opacity: 0,
+            willChange: 'transform, opacity',
+          }}>
+          <div style={{
+            animation: `swan-bob ${s.bobDuration}s ${s.bobDelay}s ease-in-out infinite`,
+            transformOrigin: 'center',
+          }}>
+            <img 
+              src={SWAN_IMG}
+              alt="ברבור"
+              width={s.size}
+              height={s.size}
+              style={{ 
+                transform: s.flipped ? 'scaleX(-1)' : 'none', 
+                display: 'block',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// ============================================================
+// 💸 קומפוננטת תזכורות תשלום בדשבורד
+// ============================================================
+// playerName: שם המשתמש הנוכחי
+// reminders: כל התזכורות מ-localStorage
+// phones: { 'רון': { phone: '0501234567', app: 'bit' }, ... }
+// onUpdateReminders: פונקציה לעדכון התזכורות
+const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) => {
+  if (!playerName || !reminders || reminders.length === 0) return null;
+  
+  // סינון תזכורות שרלוונטיות למשתמש
+  // toSend = הוא צריך לשלוח (from = הוא)
+  // toReceive = הוא אמור לקבל (to = הוא)
+  const toSend = reminders.filter(r => 
+    r.from === playerName && r.status !== 'confirmed'
+  );
+  const toReceive = reminders.filter(r => 
+    r.to === playerName && r.status !== 'confirmed'
+  );
+  
+  if (toSend.length === 0 && toReceive.length === 0) return null;
+  
+  // עדכון סטטוס של תזכורת
+  const updateStatus = (id, newStatus) => {
+    const updated = reminders.map(r => 
+      r.id === id ? { ...r, status: newStatus } : r
+    );
+    // אם confirmed - מחק
+    const filtered = newStatus === 'confirmed' 
+      ? updated.filter(r => r.id !== id)
+      : updated;
+    onUpdateReminders(filtered);
+  };
+  
+  // מחיקה של תזכורת (כפתור "כבר העברתי")
+  const removeReminder = (id) => {
+    onUpdateReminders(reminders.filter(r => r.id !== id));
+  };
+  
+  // לחיצה על כפתור Bit/PayBox
+  const handlePaymentApp = (reminder, app) => {
+    const recipientPhone = phones && phones[reminder.to];
+    const phoneNum = recipientPhone ? recipientPhone.phone : '';
+    openPaymentApp(phoneNum, app);
+    // סימון אוטומטי כ"שולח"
+    updateStatus(reminder.id, 'marked_sent');
+  };
+  
+  // סיכומים כספיים
+  const totalToSend = toSend.reduce((s, r) => s + r.amount, 0);
+  const totalToReceive = toReceive.reduce((s, r) => s + r.amount, 0);
+  
+  return (
+    <div className="rounded-2xl border border-amber-800/50 bg-gradient-to-br from-amber-950/30 to-stone-950/40 backdrop-blur p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="font-bold text-amber-200 flex items-center gap-2">
+          💸 תזכורות תשלום
+        </div>
+        <div className="text-xs text-stone-500">
+          {toSend.length + toReceive.length} פעילות
+        </div>
+      </div>
+      
+      {/* בלוק "אני צריך לשלם" */}
+      {toSend.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-rose-300 font-bold">🔴 צריך להעביר</span>
+            <span className="text-rose-400 font-extrabold tabular-nums">{totalToSend} ₪</span>
+          </div>
+          {toSend.map(r => {
+            const recipientPhone = phones && phones[r.to];
+            const phoneNum = recipientPhone ? recipientPhone.phone : null;
+            const isHosting = r.type === 'hosting';
+            const isMarkedSent = r.status === 'marked_sent';
+            
+            return (
+              <div key={r.id} className={`rounded-lg border p-2.5 ${
+                isHosting 
+                  ? 'border-purple-800/50 bg-purple-950/20' 
+                  : 'border-stone-800 bg-stone-900/50'
+              } ${isMarkedSent ? 'opacity-60' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm">
+                    <span className="text-stone-100 font-bold">{r.amount} ₪</span>
+                    <span className="text-stone-400"> ל-</span>
+                    <span className="text-stone-100 font-bold">{r.to}</span>
+                    {isHosting && <span className="text-purple-300 text-xs"> (אירוח)</span>}
+                  </div>
+                  {isMarkedSent && (
+                    <span className="text-xs text-emerald-400">✓ סימנת כשולם</span>
+                  )}
+                </div>
+                {!isMarkedSent && (
+                  <div className="flex gap-1.5">
+                    {phoneNum && (
+                      <>
+                        <button 
+                          onClick={() => handlePaymentApp(r, 'bit')}
+                          className="flex-1 rounded bg-blue-600 hover:bg-blue-500 px-2 py-1.5 text-xs font-bold text-white">
+                          💙 Bit
+                        </button>
+                        <button 
+                          onClick={() => handlePaymentApp(r, 'paybox')}
+                          className="flex-1 rounded bg-purple-600 hover:bg-purple-500 px-2 py-1.5 text-xs font-bold text-white">
+                          💜 PayBox
+                        </button>
+                      </>
+                    )}
+                    <button 
+                      onClick={() => removeReminder(r.id)}
+                      title="כבר העברתי - הסר תזכורת"
+                      className="rounded bg-stone-800 hover:bg-stone-700 border border-stone-700 px-2 py-1.5 text-xs font-bold text-stone-300 whitespace-nowrap">
+                      ✓ כבר העברתי
+                    </button>
+                  </div>
+                )}
+                {!phoneNum && !isMarkedSent && (
+                  <div className="text-xs text-amber-400/80 mt-1">
+                    ⚠ אין טלפון של {r.to} - העבר ידנית ולחץ "כבר העברתי"
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      
+      {/* בלוק "אני אמור לקבל" */}
+      {toReceive.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-emerald-300 font-bold">🟢 לקבל</span>
+            <span className="text-emerald-400 font-extrabold tabular-nums">{totalToReceive} ₪</span>
+          </div>
+          {toReceive.map(r => {
+            const isHosting = r.type === 'hosting';
+            const isMarkedSent = r.status === 'marked_sent';
+            
+            return (
+              <div key={r.id} className={`rounded-lg border p-2.5 ${
+                isHosting 
+                  ? 'border-purple-800/50 bg-purple-950/20' 
+                  : 'border-stone-800 bg-stone-900/50'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm">
+                    <span className="text-stone-100 font-bold">{r.amount} ₪</span>
+                    <span className="text-stone-400"> מ-</span>
+                    <span className="text-stone-100 font-bold">{r.from}</span>
+                    {isHosting && <span className="text-purple-300 text-xs"> (אירוח)</span>}
+                  </div>
+                  {isMarkedSent ? (
+                    <span className="text-xs text-amber-400">✓ סימן ששלח</span>
+                  ) : (
+                    <span className="text-xs text-stone-500">⏳ ממתין</span>
+                  )}
+                </div>
+                <button 
+                  onClick={() => updateStatus(r.id, 'confirmed')}
+                  className={`w-full rounded px-3 py-1.5 text-xs font-bold transition ${
+                    isMarkedSent 
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                      : 'bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300'
+                  }`}>
+                  ✓ קיבלתי
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adminName }) => {
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [host, setHost] = useState('');
@@ -3366,357 +3717,6 @@ const PeriodicTables = ({ allSessions, players }) => {
   );
 };
 
-
-// 🎉 קומפוננטת Confetti - אפקט חגיגה עם 4 צינורות מים שיורים ברבורים
-// מופעלת בדשבורד כשמזהים שהמשתמש זכה בערב האחרון
-const Confetti = ({ active, onComplete, message }) => {
-  const SOURCES = useMemo(() => [
-    { side: 'left',  offsetPct: 12, angle: 60 },
-    { side: 'left',  offsetPct: 32, angle: 80 },
-    { side: 'right', offsetPct: 32, angle: 80 },
-    { side: 'right', offsetPct: 12, angle: 60 },
-  ], []);
-  
-  const swans = useMemo(() => {
-    const all = [];
-    SOURCES.forEach((src, srcIdx) => {
-      for (let i = 0; i < 18; i++) {
-        const directionMultiplier = src.side === 'left' ? 1 : -1;
-        const angle = src.angle + (Math.random() - 0.5) * 30;
-        const distance = 200 + Math.random() * 250;
-        const radians = (angle * Math.PI) / 180;
-        const peakX = Math.cos(radians) * distance * directionMultiplier;
-        const peakY = -Math.sin(radians) * distance;
-        const driftX = (Math.random() - 0.5) * 80;
-        all.push({
-          id: srcIdx * 100 + i,
-          side: src.side,
-          offsetPct: src.offsetPct,
-          peakX, peakY,
-          fallX: peakX + driftX,
-          fallY: -peakY * 1.3,
-          delay: Math.random() * 1.2,
-          duration: 4 + Math.random() * 2,
-          flipped: directionMultiplier < 0,
-          bobDelay: Math.random() * 1.5,
-          bobDuration: 1.2 + Math.random() * 0.8,
-          size: 44 + Math.random() * 16, // ברבורים גדולים: 44-60px (היו 28-40)
-        });
-      }
-    });
-    return all;
-  }, [active, SOURCES]);
-  
-  useEffect(() => {
-    if (!active) return;
-    const timer = setTimeout(() => {
-      if (onComplete) onComplete();
-    }, 7000);
-    return () => clearTimeout(timer);
-  }, [active, onComplete]);
-  
-  if (!active) return null;
-  
-  const renderPipe = (size, idSuffix) => {
-    const isLarge = size === 'large';
-    const w = isLarge ? 46 : 40;
-    const h = isLarge ? 150 : 125;
-    return (
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id={`waterPipe-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#1e3a5f"/>
-            <stop offset="15%" stopColor="#3b6996"/>
-            <stop offset="40%" stopColor="#7eb1d7"/>
-            <stop offset="55%" stopColor="#b8d4e8"/>
-            <stop offset="75%" stopColor="#5b8bb5"/>
-            <stop offset="100%" stopColor="#1e3a5f"/>
-          </linearGradient>
-          <linearGradient id={`coupling-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#0f172a"/>
-            <stop offset="20%" stopColor="#334155"/>
-            <stop offset="50%" stopColor="#94a3b8"/>
-            <stop offset="80%" stopColor="#334155"/>
-            <stop offset="100%" stopColor="#0f172a"/>
-          </linearGradient>
-          <radialGradient id={`water-${idSuffix}`} cx="50%" cy="50%" r="60%">
-            <stop offset="0%" stopColor="#67e8f9"/>
-            <stop offset="60%" stopColor="#0891b2"/>
-            <stop offset="100%" stopColor="#0e7490"/>
-          </radialGradient>
-        </defs>
-        {isLarge ? (
-          <>
-            <rect x="11" y="35" width="24" height="100" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <rect x="16" y="35" width="2" height="100" fill="white" opacity="0.5"/>
-            <ellipse cx="23" cy="135" rx="14" ry="3" fill="#0f172a"/>
-            <rect x="9" y="128" width="28" height="9" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <rect x="7" y="78" width="32" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <circle cx="11" cy="85" r="1.5" fill="#1e293b"/>
-            <circle cx="35" cy="85" r="1.5" fill="#1e293b"/>
-            <rect x="6" y="20" width="34" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <circle cx="10" cy="27" r="1.5" fill="#1e293b"/>
-            <circle cx="36" cy="27" r="1.5" fill="#1e293b"/>
-            <ellipse cx="23" cy="20" rx="17" ry="5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <ellipse cx="20" cy="18.5" rx="5" ry="1" fill="white" opacity="0.7"/>
-          </>
-        ) : (
-          <>
-            <rect x="9" y="30" width="22" height="85" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <rect x="14" y="30" width="2" height="85" fill="white" opacity="0.5"/>
-            <ellipse cx="20" cy="115" rx="12" ry="3" fill="#0f172a"/>
-            <rect x="7" y="108" width="26" height="8" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <rect x="5" y="65" width="30" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <circle cx="9" cy="71.5" r="1.3" fill="#1e293b"/>
-            <circle cx="31" cy="71.5" r="1.3" fill="#1e293b"/>
-            <rect x="4" y="17" width="32" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <circle cx="8" cy="23.5" r="1.3" fill="#1e293b"/>
-            <circle cx="32" cy="23.5" r="1.3" fill="#1e293b"/>
-            <ellipse cx="20" cy="17" rx="16" ry="4.5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <ellipse cx="17" cy="15.5" rx="4" ry="0.8" fill="white" opacity="0.7"/>
-          </>
-        )}
-      </svg>
-    );
-  };
-  
-  return (
-    <div className="fixed inset-0 pointer-events-none z-[200] overflow-hidden">
-      {message && (
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center animate-confetti-message">
-          <div className="rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 border-2 border-amber-400 px-6 py-4 shadow-2xl shadow-amber-900/50">
-            <div className="text-2xl md:text-3xl font-extrabold text-white whitespace-nowrap">
-              {message}
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="absolute" style={{ bottom: '8%', left: '6%', transform: 'rotate(-25deg)', transformOrigin: 'bottom center' }}>
-        {renderPipe('large', 'L')}
-      </div>
-      <div className="absolute" style={{ bottom: '8%', left: '30%', transform: 'rotate(-12deg)', transformOrigin: 'bottom center' }}>
-        {renderPipe('medium', 'LC')}
-      </div>
-      <div className="absolute" style={{ bottom: '8%', right: '30%', transform: 'rotate(12deg)', transformOrigin: 'bottom center' }}>
-        {renderPipe('medium', 'RC')}
-      </div>
-      <div className="absolute" style={{ bottom: '8%', right: '6%', transform: 'rotate(25deg)', transformOrigin: 'bottom center' }}>
-        {renderPipe('large', 'R')}
-      </div>
-      {swans.map(s => (
-        <div
-          key={s.id}
-          className="absolute"
-          style={{
-            bottom: 'calc(8% + 140px)',
-            [s.side]: `${s.offsetPct}%`,
-            width: `${s.size}px`,
-            height: `${s.size}px`,
-            '--peak-x': `${s.peakX}px`,
-            '--peak-y': `${s.peakY}px`,
-            '--fall-x': `${s.fallX}px`,
-            '--fall-y': `${s.fallY}px`,
-            animation: `swan-arc ${s.duration}s ${s.delay}s ease-out forwards`,
-            opacity: 0,
-            willChange: 'transform, opacity',
-          }}>
-          <div style={{
-            animation: `swan-bob ${s.bobDuration}s ${s.bobDelay}s ease-in-out infinite`,
-            transformOrigin: 'center',
-          }}>
-            <img 
-              src={SWAN_IMG}
-              alt="ברבור"
-              width={s.size}
-              height={s.size}
-              style={{ 
-                transform: s.flipped ? 'scaleX(-1)' : 'none', 
-                display: 'block',
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
-              }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
-// ============================================================
-// 💸 קומפוננטת תזכורות תשלום בדשבורד
-// ============================================================
-// playerName: שם המשתמש הנוכחי
-// reminders: כל התזכורות מ-localStorage
-// phones: { 'רון': { phone: '0501234567', app: 'bit' }, ... }
-// onUpdateReminders: פונקציה לעדכון התזכורות
-const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) => {
-  if (!playerName || !reminders || reminders.length === 0) return null;
-  
-  // סינון תזכורות שרלוונטיות למשתמש
-  // toSend = הוא צריך לשלוח (from = הוא)
-  // toReceive = הוא אמור לקבל (to = הוא)
-  const toSend = reminders.filter(r => 
-    r.from === playerName && r.status !== 'confirmed'
-  );
-  const toReceive = reminders.filter(r => 
-    r.to === playerName && r.status !== 'confirmed'
-  );
-  
-  if (toSend.length === 0 && toReceive.length === 0) return null;
-  
-  // עדכון סטטוס של תזכורת
-  const updateStatus = (id, newStatus) => {
-    const updated = reminders.map(r => 
-      r.id === id ? { ...r, status: newStatus } : r
-    );
-    // אם confirmed - מחק
-    const filtered = newStatus === 'confirmed' 
-      ? updated.filter(r => r.id !== id)
-      : updated;
-    onUpdateReminders(filtered);
-  };
-  
-  // מחיקה של תזכורת (כפתור "כבר העברתי")
-  const removeReminder = (id) => {
-    onUpdateReminders(reminders.filter(r => r.id !== id));
-  };
-  
-  // לחיצה על כפתור Bit/PayBox
-  const handlePaymentApp = (reminder, app) => {
-    const recipientPhone = phones && phones[reminder.to];
-    const phoneNum = recipientPhone ? recipientPhone.phone : '';
-    openPaymentApp(phoneNum, app);
-    // סימון אוטומטי כ"שולח"
-    updateStatus(reminder.id, 'marked_sent');
-  };
-  
-  // סיכומים כספיים
-  const totalToSend = toSend.reduce((s, r) => s + r.amount, 0);
-  const totalToReceive = toReceive.reduce((s, r) => s + r.amount, 0);
-  
-  return (
-    <div className="rounded-2xl border border-amber-800/50 bg-gradient-to-br from-amber-950/30 to-stone-950/40 backdrop-blur p-3 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="font-bold text-amber-200 flex items-center gap-2">
-          💸 תזכורות תשלום
-        </div>
-        <div className="text-xs text-stone-500">
-          {toSend.length + toReceive.length} פעילות
-        </div>
-      </div>
-      
-      {/* בלוק "אני צריך לשלם" */}
-      {toSend.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-rose-300 font-bold">🔴 צריך להעביר</span>
-            <span className="text-rose-400 font-extrabold tabular-nums">{totalToSend} ₪</span>
-          </div>
-          {toSend.map(r => {
-            const recipientPhone = phones && phones[r.to];
-            const phoneNum = recipientPhone ? recipientPhone.phone : null;
-            const isHosting = r.type === 'hosting';
-            const isMarkedSent = r.status === 'marked_sent';
-            
-            return (
-              <div key={r.id} className={`rounded-lg border p-2.5 ${
-                isHosting 
-                  ? 'border-purple-800/50 bg-purple-950/20' 
-                  : 'border-stone-800 bg-stone-900/50'
-              } ${isMarkedSent ? 'opacity-60' : ''}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm">
-                    <span className="text-stone-100 font-bold">{r.amount} ₪</span>
-                    <span className="text-stone-400"> ל-</span>
-                    <span className="text-stone-100 font-bold">{r.to}</span>
-                    {isHosting && <span className="text-purple-300 text-xs"> (אירוח)</span>}
-                  </div>
-                  {isMarkedSent && (
-                    <span className="text-xs text-emerald-400">✓ סימנת כשולם</span>
-                  )}
-                </div>
-                {!isMarkedSent && (
-                  <div className="flex gap-1.5">
-                    {phoneNum && (
-                      <>
-                        <button 
-                          onClick={() => handlePaymentApp(r, 'bit')}
-                          className="flex-1 rounded bg-blue-600 hover:bg-blue-500 px-2 py-1.5 text-xs font-bold text-white">
-                          💙 Bit
-                        </button>
-                        <button 
-                          onClick={() => handlePaymentApp(r, 'paybox')}
-                          className="flex-1 rounded bg-purple-600 hover:bg-purple-500 px-2 py-1.5 text-xs font-bold text-white">
-                          💜 PayBox
-                        </button>
-                      </>
-                    )}
-                    <button 
-                      onClick={() => removeReminder(r.id)}
-                      title="כבר העברתי - הסר תזכורת"
-                      className="rounded bg-stone-800 hover:bg-stone-700 border border-stone-700 px-2 py-1.5 text-xs font-bold text-stone-300 whitespace-nowrap">
-                      ✓ כבר העברתי
-                    </button>
-                  </div>
-                )}
-                {!phoneNum && !isMarkedSent && (
-                  <div className="text-xs text-amber-400/80 mt-1">
-                    ⚠ אין טלפון של {r.to} - העבר ידנית ולחץ "כבר העברתי"
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-      
-      {/* בלוק "אני אמור לקבל" */}
-      {toReceive.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-emerald-300 font-bold">🟢 לקבל</span>
-            <span className="text-emerald-400 font-extrabold tabular-nums">{totalToReceive} ₪</span>
-          </div>
-          {toReceive.map(r => {
-            const isHosting = r.type === 'hosting';
-            const isMarkedSent = r.status === 'marked_sent';
-            
-            return (
-              <div key={r.id} className={`rounded-lg border p-2.5 ${
-                isHosting 
-                  ? 'border-purple-800/50 bg-purple-950/20' 
-                  : 'border-stone-800 bg-stone-900/50'
-              }`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm">
-                    <span className="text-stone-100 font-bold">{r.amount} ₪</span>
-                    <span className="text-stone-400"> מ-</span>
-                    <span className="text-stone-100 font-bold">{r.from}</span>
-                    {isHosting && <span className="text-purple-300 text-xs"> (אירוח)</span>}
-                  </div>
-                  {isMarkedSent ? (
-                    <span className="text-xs text-amber-400">✓ סימן ששלח</span>
-                  ) : (
-                    <span className="text-xs text-stone-500">⏳ ממתין</span>
-                  )}
-                </div>
-                <button 
-                  onClick={() => updateStatus(r.id, 'confirmed')}
-                  className={`w-full rounded px-3 py-1.5 text-xs font-bold transition ${
-                    isMarkedSent 
-                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                      : 'bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300'
-                  }`}>
-                  ✓ קיבלתי
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
 
 // ===== דשבורד קומפקטי =====
 const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders }) => {
