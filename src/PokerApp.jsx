@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.3.0';
-const APP_BUILD_TIME = '27/04/2026 10:13';
-const APP_NOTES = 'מסנן שחקנים פעילים + ±20 + יומית + 0 בתיקו';
+const APP_VERSION = 'v2.5.0';
+const APP_BUILD_TIME = '27/04/2026 10:39';
+const APP_NOTES = 'סנכרון תזכורות בין מכשירים';
 
 
 // ===== הרשאות מנהל =====
@@ -3098,17 +3098,23 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                   const profit = chips - p.buyIns * 20;
                   const currentChips = Number(finalChips[p.name]) || 0;
                   return (
-                    <div key={p.name} className="rounded-xl border border-stone-800 bg-stone-900/50 p-3">
+                    <div key={p.name} className="rounded-xl border border-stone-800 bg-stone-900/50 p-3 space-y-2">
+                      {/* שורה 1: שם + השקעה + רווח */}
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <div className="font-bold text-stone-100 truncate">{p.name}</div>
+                          <div className="font-bold text-stone-100 text-base">{p.name}</div>
                           <div className="text-xs text-stone-500">השקעה: {p.buyIns * 20} ₪</div>
                         </div>
-                        {/* כפתור הורדה של 20 */}
+                        <div className={`text-lg font-extrabold tabular-nums whitespace-nowrap ${profit > 0 ? 'text-emerald-400' : profit < 0 ? 'text-rose-400' : 'text-stone-500'}`}>
+                          {profit > 0 ? '+' : ''}{profit}
+                        </div>
+                      </div>
+                      {/* שורה 2: כפתורים + שדה */}
+                      <div className="flex items-center justify-center gap-2">
                         <button 
                           type="button"
                           onClick={() => setFinalChips({...finalChips, [p.name]: Math.max(0, currentChips - 20)})}
-                          className="w-9 h-9 flex-shrink-0 rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 font-bold text-lg active:scale-95 transition"
+                          className="w-11 h-10 flex-shrink-0 rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 font-bold text-xl active:scale-95 transition"
                           title="הפחת 20">
                           −
                         </button>
@@ -3117,18 +3123,14 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                           value={finalChips[p.name]} 
                           onChange={e => setFinalChips({...finalChips, [p.name]: e.target.value})}
                           placeholder="0"
-                          className="w-20 rounded-lg border border-stone-700 bg-stone-800 px-2 py-2 text-white text-center text-sm tabular-nums font-bold" />
-                        {/* כפתור הוספה של 20 */}
+                          className="flex-1 max-w-[120px] rounded-lg border border-stone-700 bg-stone-800 px-2 py-2 text-white text-center text-base tabular-nums font-bold" />
                         <button 
                           type="button"
                           onClick={() => setFinalChips({...finalChips, [p.name]: currentChips + 20})}
-                          className="w-9 h-9 flex-shrink-0 rounded-lg bg-amber-700 hover:bg-amber-600 border border-amber-600 text-white font-bold text-lg active:scale-95 transition"
+                          className="w-11 h-10 flex-shrink-0 rounded-lg bg-amber-700 hover:bg-amber-600 border border-amber-600 text-white font-bold text-xl active:scale-95 transition"
                           title="הוסף 20">
                           +
                         </button>
-                        <div className={`w-16 text-left text-base font-extrabold tabular-nums flex-shrink-0 ${profit > 0 ? 'text-emerald-400' : profit < 0 ? 'text-rose-400' : 'text-stone-500'}`}>
-                          {profit > 0 ? '+' : ''}{profit}
-                        </div>
                       </div>
                     </div>
                   );
@@ -4961,6 +4963,48 @@ export default function PokerApp() {
     return () => clearInterval(interval);
   }, []);
   
+  // 💸 סנכרון אוטומטי - כל מכשיר יוצר תזכורות לעצמו על ערבים מ-7 ימים אחרונים
+  // רץ כשהערבים מתעדכנים (טעינה ראשונה / סנכרון מ-Firebase)
+  useEffect(() => {
+    if (!allSessions || allSessions.length === 0) return;
+    try {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      
+      // ערבים מ-7 ימים אחרונים שיש להם תוצאות
+      const recentSessions = allSessions.filter(s => {
+        if (!s.results || !s.date) return false;
+        return new Date(s.date) >= sevenDaysAgo;
+      });
+      
+      if (recentSessions.length === 0) return;
+      
+      // טוען תזכורות קיימות ובודק לפי signature מה כבר קיים
+      const existing = loadPaymentReminders();
+      const existingSigs = new Set(existing.map(reminderSignature));
+      
+      // לכל ערב - יוצר תזכורות שעדיין לא קיימות
+      const allNewReminders = [];
+      recentSessions.forEach(session => {
+        const reminders = buildRemindersFromSession(session);
+        reminders.forEach(r => {
+          if (!existingSigs.has(reminderSignature(r))) {
+            allNewReminders.push(r);
+            existingSigs.add(reminderSignature(r));
+          }
+        });
+      });
+      
+      if (allNewReminders.length > 0) {
+        const updated = [...existing, ...allNewReminders];
+        savePaymentReminders(updated);
+        setPaymentReminders(updated);
+      }
+    } catch (e) {
+      console.warn('Failed to auto-sync reminders:', e);
+    }
+  }, [allSessions]);
+  
   const handleUpdateReminders = (newReminders) => {
     setPaymentReminders(newReminders);
     savePaymentReminders(newReminders);
@@ -5596,7 +5640,8 @@ export default function PokerApp() {
     { id: 'charts', label: 'גרפים', icon: BarChart3 },
     { id: 'hosting', label: 'אירוחים', icon: Calendar },
     { id: 'gallery', label: 'גלריה', icon: ImageIcon },
-    { id: 'history', label: 'היסטוריה', icon: History },
+    // 🔒 היסטוריה - רק למנהלים
+    ...(isAdmin ? [{ id: 'history', label: 'היסטוריה', icon: History }] : []),
     { id: 'quotes', label: 'ציטוטים', icon: Quote },
   ];
 
@@ -5739,7 +5784,7 @@ export default function PokerApp() {
             onUpdate={handleHostingUpdate} adminName={adminName} />
         )}
 
-        {tab === 'history' && <SessionHistory sessions={sessions} onDelete={handleDeleteSession} isAdmin={isAdmin} />}
+        {tab === 'history' && isAdmin && <SessionHistory sessions={sessions} onDelete={handleDeleteSession} isAdmin={isAdmin} />}
 
         {tab === 'gallery' && (
           <GalleryTab 
