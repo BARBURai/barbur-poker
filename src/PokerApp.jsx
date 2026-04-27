@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.16.3';
-const APP_BUILD_TIME = '27/04/2026 21:29';
-const APP_NOTES = 'הבחנה בין רווח מצטבר השנה (דשבורד) לאורך זמן (תובנות)';
+const APP_VERSION = 'v2.16.4';
+const APP_BUILD_TIME = '27/04/2026 21:31';
+const APP_NOTES = 'תיקון - דיפולט שחקן מחובר בגרף הדשבורד';
 
 
 // ===== הרשאות מנהל =====
@@ -7014,13 +7014,25 @@ export default function PokerApp() {
   }, [allSessions]);
 
   useEffect(() => {
-    if (stats.length > 0 && selectedChartPlayers.length === 0) {
-      // ברירת מחדל: רק השחקן המחובר. אם הוא לא קיים בסטטיסטיקה - מציג טופ 1
-      if (currentUser && stats.find(p => p.name === currentUser)) {
+    if (stats.length === 0) return;
+    
+    // אם currentUser זמין וקיים ב-stats - וודא שהוא בבחירה
+    if (currentUser && stats.find(p => p.name === currentUser)) {
+      // אם אף אחד לא נבחר עדיין, או שהבחירה היא רק שחקן אחד שאינו המשתמש המחובר
+      // (כלומר ברירת המחדל שלנו לפני שcurrentUser נטען) - תחליף לcurrentUser
+      if (selectedChartPlayers.length === 0) {
         setSelectedChartPlayers([currentUser]);
-      } else if (stats[0]) {
-        setSelectedChartPlayers([stats[0].name]);
+      } else if (selectedChartPlayers.length === 1 && selectedChartPlayers[0] !== currentUser) {
+        // אם הוטל בחירה אוטומטית של שחקן אחר (למשל סטטס[0]=רם), נחליף לcurrentUser
+        // נבדוק אם זה ככל הנראה ברירת מחדל אוטומטית - הבחירה היא הטופ
+        const isAutoChosenTop = selectedChartPlayers[0] === stats[0]?.name;
+        if (isAutoChosenTop) {
+          setSelectedChartPlayers([currentUser]);
+        }
       }
+    } else if (selectedChartPlayers.length === 0 && stats[0]) {
+      // אין currentUser זמין - מציג את הטופ
+      setSelectedChartPlayers([stats[0].name]);
     }
   }, [stats.length, currentUser]);
 
