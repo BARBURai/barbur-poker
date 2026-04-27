@@ -5,13 +5,13 @@ import QUOTES_DATA from './data/quotes.json';
 import BARBUR_LOGO from './assets/barbur-logo.webp';
 import SWAN_IMG from './assets/swan.png';
 import { loadState as fbLoadState, saveState as fbSaveState } from './firebase';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.10.0';
-const APP_BUILD_TIME = '27/04/2026 12:39';
-const APP_NOTES = 'גרף בראש הדשבורד + ברבור גדול וצבעוני + אנימציה איטית';
+const APP_VERSION = 'v2.11.0';
+const APP_BUILD_TIME = '27/04/2026 16:39';
+const APP_NOTES = '3 גרפים אישיים: חודשי, דירוג, התפלגות תוצאות';
 
 
 // ===== הרשאות מנהל =====
@@ -2293,6 +2293,235 @@ const calculateStreakHelper = (playerName, sessions) => {
     else break;
   }
   return streak;
+};
+
+// ============================================================
+// 📊 גרפים אישיים - 3 גרפים לכל שחקן
+// ============================================================
+// 1. ביצועים לאורך החודשים (bar chart)
+// 2. דירוג השחקן לאורך זמן (line chart)
+// 3. התפלגות תוצאות - ניצחונות/הפסדים/תיקו (pie chart)
+const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
+  const players = useMemo(() => 
+    stats.filter(s => s.sessions > 0).map(s => s.name)
+  , [stats]);
+  
+  const [selectedPlayer, setSelectedPlayer] = useState(currentUser || (players[0] || ''));
+  
+  // 1️⃣ נתונים לגרף ביצועים לאורך החודשים
+  const monthlyData = useMemo(() => {
+    if (!selectedPlayer) return [];
+    const HEBREW_MONTHS_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יונ', 'יול', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
+    const byMonth = {};
+    sessions.forEach(s => {
+      if (!s.results || s.results[selectedPlayer] === undefined) return;
+      const d = new Date(s.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const label = HEBREW_MONTHS_SHORT[d.getMonth()];
+      if (!byMonth[key]) byMonth[key] = { key, label, profit: 0, count: 0 };
+      byMonth[key].profit += Number(s.results[selectedPlayer]) || 0;
+      byMonth[key].count++;
+    });
+    return Object.values(byMonth).sort((a, b) => a.key.localeCompare(b.key));
+  }, [sessions, selectedPlayer]);
+  
+  // 2️⃣ נתונים לגרף דירוג לאורך זמן
+  const rankData = useMemo(() => {
+    if (!selectedPlayer) return [];
+    const sortedSessions = [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // צובר רווח מצטבר לכל שחקן בכל ערב
+    const cumulativeByPlayer = {};
+    const rankings = [];
+    
+    sortedSessions.forEach((session, idx) => {
+      if (!session.results) return;
+      // עדכון רווח מצטבר לכל שחקן שהשתתף
+      Object.entries(session.results).forEach(([name, amount]) => {
+        cumulativeByPlayer[name] = (cumulativeByPlayer[name] || 0) + Number(amount);
+      });
+      
+      // השחקן שלנו השתתף בערב הזה?
+      if (session.results[selectedPlayer] === undefined) return;
+      
+      // מחשב את הדירוג של השחקן הנבחר מבין כל מי שהשתתף בערב כלשהו עד עכשיו
+      const sortedPlayers = Object.entries(cumulativeByPlayer)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name]) => name);
+      const rank = sortedPlayers.indexOf(selectedPlayer) + 1;
+      
+      const d = new Date(session.date);
+      rankings.push({
+        date: session.date,
+        label: `${d.getDate()}/${d.getMonth() + 1}`,
+        rank,
+        profit: cumulativeByPlayer[selectedPlayer],
+      });
+    });
+    
+    return rankings;
+  }, [sessions, selectedPlayer]);
+  
+  // 3️⃣ נתונים לגרף התפלגות תוצאות
+  const distributionData = useMemo(() => {
+    if (!selectedPlayer) return [];
+    const playerStats = stats.find(s => s.name === selectedPlayer);
+    if (!playerStats) return [];
+    return [
+      { name: 'ניצחונות', value: playerStats.wins, color: '#10b981' },
+      { name: 'הפסדים', value: playerStats.losses, color: '#ef4444' },
+      { name: 'תיקו', value: playerStats.ties, color: '#94a3b8' },
+    ].filter(d => d.value > 0);
+  }, [stats, selectedPlayer]);
+  
+  if (players.length === 0) {
+    return (
+      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 p-6 text-center text-stone-500">
+        אין נתונים להצגה
+      </div>
+    );
+  }
+  
+  const playerStats = stats.find(s => s.name === selectedPlayer);
+  const maxRank = Math.max(...rankData.map(r => r.rank), 1);
+  
+  return (
+    <div className="space-y-3">
+      {/* בוחר שחקן */}
+      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-3 flex items-center gap-3 flex-wrap">
+        <div className="font-bold text-amber-200 flex items-center gap-2">
+          <BarChart3 className="h-5 w-5" />
+          גרפים אישיים
+        </div>
+        <select 
+          value={selectedPlayer} 
+          onChange={e => setSelectedPlayer(e.target.value)}
+          className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-1.5 text-sm text-white font-bold flex-1 min-w-[150px]">
+          {players.map(p => (
+            <option key={p} value={p}>{p}</option>
+          ))}
+        </select>
+        {playerStats && (
+          <div className="text-xs text-stone-400 flex items-center gap-3 flex-wrap">
+            <span>סה״כ: <span className={`font-bold ${playerStats.total > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {playerStats.total > 0 ? '+' : ''}{playerStats.total}₪
+            </span></span>
+            <span>מפגשים: <span className="text-stone-200 font-bold">{playerStats.sessions}</span></span>
+          </div>
+        )}
+      </div>
+      
+      {/* 1️⃣ גרף ביצועים לאורך החודשים */}
+      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-4">
+        <h3 className="text-base md:text-lg font-bold text-amber-200 flex items-center gap-2 mb-3">
+          📊 ביצועים חודשיים
+          <span className="text-xs text-stone-500 font-normal">רווח/הפסד בכל חודש</span>
+        </h3>
+        {monthlyData.length === 0 ? (
+          <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
+        ) : (
+          <div style={{ width: '100%', height: isMobile ? 220 : 280 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
+                <XAxis dataKey="label" stroke="#78716c" tick={{ fontSize: 12, fill: '#a8a29e' }} />
+                <YAxis stroke="#78716c" tick={{ fontSize: 12, fill: '#a8a29e' }} />
+                <Tooltip 
+                  contentStyle={{ background: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', color: '#fff' }}
+                  formatter={(v) => [`${v > 0 ? '+' : ''}${v} ₪`, 'רווח']}
+                />
+                <Bar dataKey="profit" radius={[4, 4, 0, 0]}>
+                  {monthlyData.map((d, i) => (
+                    <Cell key={i} fill={d.profit > 0 ? '#10b981' : d.profit < 0 ? '#ef4444' : '#78716c'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+      
+      {/* 2️⃣ גרף דירוג לאורך זמן */}
+      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-4">
+        <h3 className="text-base md:text-lg font-bold text-amber-200 flex items-center gap-2 mb-3">
+          📈 דירוג לאורך הזמן
+          <span className="text-xs text-stone-500 font-normal">מקום בטבלה הראשית בכל מפגש</span>
+        </h3>
+        {rankData.length === 0 ? (
+          <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
+        ) : (
+          <div style={{ width: '100%', height: isMobile ? 220 : 280 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={rankData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
+                <XAxis dataKey="label" stroke="#78716c" tick={{ fontSize: 11, fill: '#a8a29e' }} />
+                <YAxis 
+                  stroke="#78716c" 
+                  tick={{ fontSize: 12, fill: '#a8a29e' }}
+                  reversed 
+                  domain={[1, maxRank]} 
+                  allowDecimals={false}
+                  tickFormatter={(v) => `#${v}`}
+                />
+                <Tooltip 
+                  contentStyle={{ background: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', color: '#fff' }}
+                  formatter={(v, name) => name === 'rank' ? [`מקום #${v}`, 'דירוג'] : [v, name]}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="rank" 
+                  stroke="#fbbf24" 
+                  strokeWidth={3}
+                  dot={{ r: 4, fill: '#fbbf24' }}
+                  activeDot={{ r: 6 }}
+                  animationDuration={2000}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <div className="text-[10px] text-stone-500 text-center mt-1">
+          ככל שהקו גבוה יותר ⬆ הדירוג טוב יותר (מספר נמוך = מקום ראשון)
+        </div>
+      </div>
+      
+      {/* 3️⃣ גרף התפלגות תוצאות */}
+      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-4">
+        <h3 className="text-base md:text-lg font-bold text-amber-200 flex items-center gap-2 mb-3">
+          🥧 התפלגות תוצאות
+          <span className="text-xs text-stone-500 font-normal">סה״כ ב-{playerStats?.sessions || 0} מפגשים</span>
+        </h3>
+        {distributionData.length === 0 ? (
+          <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
+        ) : (
+          <div style={{ width: '100%', height: isMobile ? 240 : 300 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie 
+                  data={distributionData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={isMobile ? 75 : 100}
+                  label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                  labelLine={{ stroke: '#78716c' }}
+                  animationDuration={2000}
+                >
+                  {distributionData.map((d, i) => (
+                    <Cell key={i} fill={d.color} stroke="#0c0a09" strokeWidth={2} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  contentStyle={{ background: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', color: '#fff' }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 // ============================================================
@@ -6080,11 +6309,18 @@ export default function PokerApp() {
         {tab === 'periodic' && <PeriodicTables allSessions={allSessions} players={players} />}
 
         {tab === 'charts' && (
-          <CumulativeChart sessions={sessions} stats={stats} fullscreen={false}
-            onFullscreenToggle={() => setChartFullscreen(true)}
-            selectedPlayers={selectedChartPlayers}
-            onPlayersChange={setSelectedChartPlayers}
-            isMobile={isMobile} />
+          <div className="space-y-3">
+            <CumulativeChart sessions={sessions} stats={stats} fullscreen={false}
+              onFullscreenToggle={() => setChartFullscreen(true)}
+              selectedPlayers={selectedChartPlayers}
+              onPlayersChange={setSelectedChartPlayers}
+              isMobile={isMobile} />
+            <PersonalCharts 
+              sessions={sessions} 
+              stats={stats} 
+              currentUser={currentUser}
+              isMobile={isMobile} />
+          </div>
         )}
 
         {tab === 'hosting' && (
