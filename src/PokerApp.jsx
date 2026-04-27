@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.8.0';
-const APP_BUILD_TIME = '27/04/2026 11:02';
-const APP_NOTES = 'ערב ניסיון + ניקוי תזכורות + סאונד מים';
+const APP_VERSION = 'v2.9.0';
+const APP_BUILD_TIME = '27/04/2026 12:33';
+const APP_NOTES = '🦢 ברבור בקצה הקו בגרף המצטבר';
 
 
 // ===== הרשאות מנהל =====
@@ -454,8 +454,36 @@ const PlayerPicker = ({ allPlayers, selected, onChange }) => {
 
 // ===== גרף רווח מצטבר =====
 const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, selectedPlayers, onPlayersChange, isMobile }) => {
-  const data = useMemo(() => calculateCumulative(sessions, selectedPlayers), [sessions, selectedPlayers]);
+  const data = useMemo(() => {
+    const points = calculateCumulative(sessions, selectedPlayers);
+    if (points.length > 0) {
+      // 🦢 מסמן את הנקודה האחרונה - שם יוצג הברבור
+      points[points.length - 1] = { ...points[points.length - 1], _isLast: true };
+    }
+    return points;
+  }, [sessions, selectedPlayers]);
   const colors = ['#fbbf24', '#34d399', '#60a5fa', '#f472b6', '#a78bfa', '#fb923c', '#2dd4bf', '#f87171', '#c084fc', '#facc15', '#4ade80', '#38bdf8', '#fb7185', '#818cf8', '#f59e0b'];
+  
+  // 🦢 Dot מותאם - מציג ברבור רק בנקודה האחרונה של כל קו
+  const SwanDot = (props) => {
+    const { cx, cy, payload, dataKey, stroke, value } = props;
+    if (cx === undefined || cy === undefined || cx === null || cy === null) return null;
+    if (value === undefined || value === null) return null;
+    // הנקודה האחרונה מסומנת ב-_isLast: true
+    if (!payload || !payload._isLast) return null;
+    
+    const size = 28;
+    return (
+      <g transform={`translate(${cx - size/2}, ${cy - size/2})`}>
+        <image 
+          href={SWAN_IMG}
+          width={size}
+          height={size}
+          style={{ filter: `drop-shadow(0 1px 2px ${stroke})` }}
+        />
+      </g>
+    );
+  };
   
   // במובייל - פחות שחקנים כברירת מחדל אם יותר מדי
   const chartHeight = fullscreen ? 'calc(100vh - 180px)' : (isMobile ? 280 : 400);
@@ -488,7 +516,7 @@ const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, sele
             <Tooltip contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '12px' }} labelStyle={{ color: '#fbbf24' }} />
             {!isMobile && <Legend wrapperStyle={{ fontSize: '12px', fontFamily: 'Assistant' }} />}
             {selectedPlayers.map((name, i) => (
-              <Line key={name} type="monotone" dataKey={name} stroke={colors[i % colors.length]} strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
+              <Line key={name} type="monotone" dataKey={name} stroke={colors[i % colors.length]} strokeWidth={2} dot={<SwanDot />} activeDot={{ r: 5 }} />
             ))}
           </LineChart>
         </ResponsiveContainer>
