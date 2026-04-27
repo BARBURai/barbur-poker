@@ -71,10 +71,9 @@ const calculateStats = (sessions, players) => {
       if (!stats[name]) return;
       const s = stats[name];
       s.total += amount; s.sessions++; s.values.push(amount);
-      // 🔥 רצף = משחקים ללא הפסד. ניצחון/תיקו = +1, הפסד = איפוס ל-0
       if (amount > 0) { s.wins++; s.currentStreak++; }
       else if (amount < 0) { s.losses++; s.currentStreak = 0; }
-      else { s.ties++; s.currentStreak++; } // תיקו לא שובר ולא הפסד - מעלה את הרצף
+      else { s.ties++; s.currentStreak++; } // תיקו לא שובר את הרצף
       s.maxStreak = Math.max(s.maxStreak, s.currentStreak);
       if (amount > s.biggestWin) s.biggestWin = amount;
       if (amount < s.biggestLoss) s.biggestLoss = amount;
@@ -88,7 +87,6 @@ const calculateStats = (sessions, players) => {
       s.winRate = (s.wins / s.sessions) * 100;
       s.lossRate = (s.losses / s.sessions) * 100;
       s.tieRate = (s.ties / s.sessions) * 100;
-      // 🔥 רצף נוכחי לתצוגה - אותו ערך כמו currentStreak (חיובי=ניצחונות, שלילי=הפסדים)
       s.currentStreakDisplay = s.currentStreak;
     } else {
       s.avg = 0; s.stdDev = 0; s.winRate = 0; s.lossRate = 0; s.tieRate = 0;
@@ -318,7 +316,7 @@ const PodiumCard = ({ rank, player }) => {
           <div className="font-bold text-emerald-400">{player.winRate.toFixed(0)}%</div>
         </div>
         <div className="rounded-lg bg-stone-900/80 border border-stone-800 p-2 text-center">
-          <div className="text-stone-500">שיא רצף</div>
+          <div className="text-stone-500">רצף מנצח</div>
           <div className="font-bold text-amber-400">{player.maxStreak}</div>
         </div>
       </div>
@@ -508,78 +506,6 @@ const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, sele
   );
 };
 
-// 🔥 חישוב רצף ניצחונות עבור שחקן
-// מחזיר את מספר הערבים ברציפות שהשחקן ניצח (רק ערבים שהוא השתתף בהם)
-// ערבים שדילג עליהם לא שוברים את הרצף
-const calculateStreak = (playerName, sessions) => {
-  if (!playerName || !sessions || sessions.length === 0) return 0;
-  const playerSessions = sessions
-    .filter(s => s.results && typeof s.results[playerName] === 'number')
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-  if (playerSessions.length === 0) return 0;
-  let streak = 0;
-  for (const s of playerSessions) {
-    if (Number(s.results[playerName]) > 0) {
-      streak++;
-    } else {
-      break;
-    }
-  }
-  return streak;
-};
-
-// 🔥 קומפוננטת להבה - SVG מצויר עם אנימציה
-// streak: מספר הניצחונות ברצף - קובע גודל וצבע הלהבה
-// מינימום 3 לסטריק (פחות מזה לא נחשב)
-const FlameIcon = ({ streak }) => {
-  if (streak < 3) return null;
-  let size, intensity;
-  if (streak >= 7) { size = 24; intensity = 'mega'; }
-  else if (streak >= 5) { size = 20; intensity = 'high'; }
-  else { size = 17; intensity = 'medium'; } // 3-4
-  
-  const colors = {
-    medium: { outer: '#ea580c', mid: '#fb923c', inner: '#fbbf24' },
-    high:   { outer: '#dc2626', mid: '#f97316', inner: '#fde047' },
-    mega:   { outer: '#7f1d1d', mid: '#dc2626', inner: '#fbbf24' },
-  };
-  const c = colors[intensity];
-  const id = `flame-${intensity}-${streak}`;
-  
-  return (
-    <span 
-      className={`inline-flex items-center gap-0.5 align-middle ml-1 streak-flame streak-${intensity}`}
-      title={`${streak} ניצחונות ברציפות 🔥`}>
-      <svg width={size} height={size * 1.3} viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg"
-        style={{ display: 'inline-block', verticalAlign: 'middle' }}>
-        <defs>
-          <radialGradient id={`${id}-grad`} cx="50%" cy="70%" r="60%">
-            <stop offset="0%" stopColor={c.inner}/>
-            <stop offset="50%" stopColor={c.mid}/>
-            <stop offset="100%" stopColor={c.outer}/>
-          </radialGradient>
-        </defs>
-        <path 
-          d="M12 2 C 14 6, 18 9, 18 15 C 18 22, 15 26, 12 30 C 9 26, 6 22, 6 15 C 6 11, 8 9, 12 2 Z"
-          fill={`url(#${id}-grad)`} stroke={c.outer} strokeWidth="0.5"/>
-        <path 
-          d="M12 10 C 13 13, 14.5 15, 14.5 19 C 14.5 23, 13 26, 12 28 C 11 26, 9.5 23, 9.5 19 C 9.5 16, 10.5 14, 12 10 Z"
-          fill={c.inner} opacity="0.85"/>
-        {streak >= 5 && <circle cx="12" cy="22" r="1.5" fill="white" opacity="0.7"/>}
-      </svg>
-      {streak >= 3 && (
-        <span className={`text-[10px] font-extrabold tabular-nums ${
-          intensity === 'mega' ? 'text-red-400' :
-          intensity === 'high' ? 'text-orange-400' :
-          'text-amber-400'
-        }`}>
-          {streak}
-        </span>
-      )}
-    </span>
-  );
-};
-
 // ===== טבלה ראשית =====
 const MainLeaderboard = ({ stats, sessions }) => {
   const latestDate = getLatestSessionDate(sessions);
@@ -606,7 +532,7 @@ const MainLeaderboard = ({ stats, sessions }) => {
     if (key === 'stdDev') return v.toFixed(0);
     if (key === 'currentStreakDisplay') {
       if (v === 0) return '—';
-      return `${v}`; // רק חיובי - 1, 2, 3 וכו'
+      return `${v}`;
     }
     return v;
   };
@@ -617,7 +543,7 @@ const MainLeaderboard = ({ stats, sessions }) => {
     if (key === 'maxStreak') return 'text-amber-400';
     if (key === 'currentStreakDisplay') {
       if (v === 0) return 'text-stone-500';
-      if (v >= 3) return 'text-orange-400 font-bold'; // סטריק חם
+      if (v >= 3) return 'text-orange-400 font-bold';
       return 'text-amber-400 font-bold';
     }
     if (key === 'stdDev') return 'text-stone-500';
@@ -653,8 +579,6 @@ const MainLeaderboard = ({ stats, sessions }) => {
           <tbody>
             {stats.map((p, i) => {
               const rowBg = i % 2 === 0 ? 'bg-stone-950' : 'bg-stone-900/50';
-              // 🔥 רצף ניצחונות נוכחי - מהסטטיסטיקה. שלילי = ברצף הפסדים, אז מתעלמים
-              const streak = (p.currentStreak && p.currentStreak > 0) ? p.currentStreak : 0;
               return (
                 <tr key={p.name} className="group hover:bg-amber-950/10">
                   <td className={`sticky right-0 z-20 ${rowBg} group-hover:bg-amber-950/20 border-b border-l border-stone-800 px-3 py-3 font-bold text-stone-500 tabular-nums whitespace-nowrap shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]`}>
@@ -662,7 +586,7 @@ const MainLeaderboard = ({ stats, sessions }) => {
                   </td>
                   <td className={`sticky z-20 ${rowBg} group-hover:bg-amber-950/20 border-b border-l border-stone-800 px-3 py-3 font-bold text-stone-100 whitespace-nowrap shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]`} style={{ right: '55px' }}>
                     {p.name}
-                    <FlameIcon streak={streak} />
+                    <FlameIcon streak={(p.currentStreak && p.currentStreak > 0) ? p.currentStreak : 0} />
                   </td>
                   {columns.map(c => (
                     <td key={c.key} className={`border-b border-stone-900 px-3 py-3 tabular-nums whitespace-nowrap ${color(p[c.key], c.key)}`}>
@@ -2248,21 +2172,87 @@ const calculateSettlements = (results) => {
   return transfers;
 };
 
+
+// ============================================================
+// 🔥 חישוב רצף ניצחונות נוכחי לשחקן
+// ============================================================
+const calculateStreakHelper = (playerName, sessions) => {
+  if (!playerName || !sessions || sessions.length === 0) return 0;
+  const playerSessions = sessions
+    .filter(s => s.results && typeof s.results[playerName] === 'number')
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (playerSessions.length === 0) return 0;
+  let streak = 0;
+  for (const s of playerSessions) {
+    const r = Number(s.results[playerName]);
+    if (r >= 0) streak++; // תיקו לא שובר
+    else break;
+  }
+  return streak;
+};
+
+// ============================================================
+// 🔥 קומפוננטת להבה - SVG מצויר עם אנימציה
+// ============================================================
+const FlameIcon = ({ streak }) => {
+  if (!streak || streak < 3) return null;
+  let size, intensity;
+  if (streak >= 7) { size = 24; intensity = 'mega'; }
+  else if (streak >= 5) { size = 20; intensity = 'high'; }
+  else { size = 17; intensity = 'medium'; }
+  
+  const colors = {
+    medium: { outer: '#ea580c', mid: '#fb923c', inner: '#fbbf24' },
+    high:   { outer: '#dc2626', mid: '#f97316', inner: '#fde047' },
+    mega:   { outer: '#7f1d1d', mid: '#dc2626', inner: '#fbbf24' },
+  };
+  const c = colors[intensity];
+  const id = `flame-${intensity}-${streak}`;
+  
+  return (
+    <span 
+      className={`inline-flex items-center gap-0.5 align-middle ml-1 streak-flame streak-${intensity}`}
+      title={`${streak} ניצחונות ברציפות 🔥`}>
+      <svg width={size} height={size * 1.3} viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg"
+        style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+        <defs>
+          <radialGradient id={`${id}-grad`} cx="50%" cy="70%" r="60%">
+            <stop offset="0%" stopColor={c.inner}/>
+            <stop offset="50%" stopColor={c.mid}/>
+            <stop offset="100%" stopColor={c.outer}/>
+          </radialGradient>
+        </defs>
+        <path 
+          d="M12 2 C 14 6, 18 9, 18 15 C 18 22, 15 26, 12 30 C 9 26, 6 22, 6 15 C 6 11, 8 9, 12 2 Z"
+          fill={`url(#${id}-grad)`} stroke={c.outer} strokeWidth="0.5"/>
+        <path 
+          d="M12 10 C 13 13, 14.5 15, 14.5 19 C 14.5 23, 13 26, 12 28 C 11 26, 9.5 23, 9.5 19 C 9.5 16, 10.5 14, 12 10 Z"
+          fill={c.inner} opacity="0.85"/>
+        {streak >= 5 && <circle cx="12" cy="22" r="1.5" fill="white" opacity="0.7"/>}
+      </svg>
+      <span className={`text-[10px] font-extrabold tabular-nums ${
+        intensity === 'mega' ? 'text-red-400' :
+        intensity === 'high' ? 'text-orange-400' :
+        'text-amber-400'
+      }`}>
+        {streak}
+      </span>
+    </span>
+  );
+};
+
 // ============================================================
 // 💸 מערכת תזכורות תשלום
 // ============================================================
-
 const PAYMENTS_STORAGE_KEY = 'poker_payment_reminders_v1';
-const PAYMENT_EXPIRY_DAYS = 7; // תזכורות פגות אוטומטית אחרי 7 ימים
+const PAYMENT_EXPIRY_DAYS = 7;
 
-// טעינת תזכורות תשלום מ-localStorage
 const loadPaymentReminders = () => {
   try {
     const data = window.localStorage.getItem(PAYMENTS_STORAGE_KEY);
     if (!data) return [];
     const reminders = JSON.parse(data);
     if (!Array.isArray(reminders)) return [];
-    // סינון תזכורות שפגו
     const now = Date.now();
     const expiryMs = PAYMENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
     return reminders.filter(r => {
@@ -2274,51 +2264,41 @@ const loadPaymentReminders = () => {
   }
 };
 
-// שמירת תזכורות תשלום ל-localStorage
 const savePaymentReminders = (reminders) => {
   try {
     window.localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(reminders));
-  } catch (e) {
-    // localStorage לא זמין
-  }
+  } catch (e) {}
 };
 
-// יצירת חתימה ייחודית לתזכורת (לזיהוי כפילויות)
-// signature = sessionDate + from + to + amount + type
 const reminderSignature = (r) => 
   `${r.sessionDate}|${r.from}|${r.to}|${r.amount}|${r.type}`;
 
-// בניית תזכורות מערב שנשמר
-// session: {date, host, results, hostingPayment: {amount, recipient}}
-// מחזיר מערך של תזכורות חדשות
 const buildRemindersFromSession = (session) => {
   const reminders = [];
   const now = new Date().toISOString();
   
   if (!session || !session.results) return reminders;
   
-  // 1. תזכורות settlement - מי חייב למי לפי חלוקת הצ׳יפים
   const transfers = calculateSettlements(session.results);
   transfers.forEach(t => {
     reminders.push({
       id: `settle_${session.date}_${t.from}_${t.to}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       sessionDate: session.date,
-      type: 'settlement', // settlement | hosting
+      type: 'settlement',
       from: t.from,
       to: t.to,
       amount: t.amount,
-      status: 'pending', // pending | marked_sent | confirmed
+      status: 'pending',
       createdAt: now,
     });
   });
   
-  // 2. תזכורות אירוח - כל משתתף משלם למארח
   if (session.hostingPayment && session.hostingPayment.amount > 0 && session.hostingPayment.recipient) {
     const participants = Object.keys(session.results);
     const hostRecipient = session.hostingPayment.recipient;
     const amount = session.hostingPayment.amount;
     participants.forEach(name => {
-      if (name === hostRecipient) return; // המארח לא משלם לעצמו
+      if (name === hostRecipient) return;
       reminders.push({
         id: `host_${session.date}_${name}_${hostRecipient}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         sessionDate: session.date,
@@ -2335,15 +2315,11 @@ const buildRemindersFromSession = (session) => {
   return reminders;
 };
 
-// פותח אפליקציית תשלום (Bit/PayBox) - העתקת מספר ופתיחת אפליקציה
-// app: 'bit' | 'paybox'
 const openPaymentApp = (phone, app) => {
-  // העתקה לקליפבורד - SYNC כדי לשמר user gesture
   if (phone && navigator.clipboard) {
     try {
       navigator.clipboard.writeText(phone);
     } catch (e) {
-      // fallback - input זמני
       try {
         const input = document.createElement('input');
         input.value = phone;
@@ -2354,13 +2330,13 @@ const openPaymentApp = (phone, app) => {
       } catch {}
     }
   }
-  // פתיחת האפליקציה - Universal Links
   const url = app === 'bit' ? 'https://www.bitpay.co.il/app' : 'https://links.payboxapp.com/';
   window.open(url, '_blank');
 };
 
-// 🎉 קומפוננטת Confetti - אפקט חגיגה עם 4 צינורות מים שיורים ברבורים
-// מופעלת בדשבורד כשמזהים שהמשתמש זכה בערב האחרון
+// ============================================================
+// 🎉 קומפוננטת Confetti
+// ============================================================
 const Confetti = ({ active, onComplete, message }) => {
   const SOURCES = useMemo(() => [
     { side: 'left',  offsetPct: 12, angle: 60 },
@@ -2392,7 +2368,7 @@ const Confetti = ({ active, onComplete, message }) => {
           flipped: directionMultiplier < 0,
           bobDelay: Math.random() * 1.5,
           bobDuration: 1.2 + Math.random() * 0.8,
-          size: 44 + Math.random() * 16, // ברבורים גדולים: 44-60px (היו 28-40)
+          size: 44 + Math.random() * 16,
         });
       }
     });
@@ -2537,52 +2513,46 @@ const Confetti = ({ active, onComplete, message }) => {
 // ============================================================
 // 💸 קומפוננטת תזכורות תשלום בדשבורד
 // ============================================================
-// playerName: שם המשתמש הנוכחי
-// reminders: כל התזכורות מ-localStorage
-// phones: { 'רון': { phone: '0501234567', app: 'bit' }, ... }
-// onUpdateReminders: פונקציה לעדכון התזכורות
 const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) => {
-  if (!playerName || !reminders || reminders.length === 0) return null;
+  // Hooks first - לפני early return!
+  const filtered = useMemo(() => {
+    if (!playerName || !reminders || reminders.length === 0) {
+      return { toSend: [], toReceive: [] };
+    }
+    const toSend = reminders.filter(r => 
+      r.from === playerName && r.status !== 'confirmed'
+    );
+    const toReceive = reminders.filter(r => 
+      r.to === playerName && r.status !== 'confirmed'
+    );
+    return { toSend, toReceive };
+  }, [playerName, reminders]);
   
-  // סינון תזכורות שרלוונטיות למשתמש
-  // toSend = הוא צריך לשלוח (from = הוא)
-  // toReceive = הוא אמור לקבל (to = הוא)
-  const toSend = reminders.filter(r => 
-    r.from === playerName && r.status !== 'confirmed'
-  );
-  const toReceive = reminders.filter(r => 
-    r.to === playerName && r.status !== 'confirmed'
-  );
+  const { toSend, toReceive } = filtered;
   
   if (toSend.length === 0 && toReceive.length === 0) return null;
   
-  // עדכון סטטוס של תזכורת
   const updateStatus = (id, newStatus) => {
     const updated = reminders.map(r => 
       r.id === id ? { ...r, status: newStatus } : r
     );
-    // אם confirmed - מחק
-    const filtered = newStatus === 'confirmed' 
+    const filteredOut = newStatus === 'confirmed' 
       ? updated.filter(r => r.id !== id)
       : updated;
-    onUpdateReminders(filtered);
+    onUpdateReminders(filteredOut);
   };
   
-  // מחיקה של תזכורת (כפתור "כבר העברתי")
   const removeReminder = (id) => {
     onUpdateReminders(reminders.filter(r => r.id !== id));
   };
   
-  // לחיצה על כפתור Bit/PayBox
   const handlePaymentApp = (reminder, app) => {
     const recipientPhone = phones && phones[reminder.to];
     const phoneNum = recipientPhone ? recipientPhone.phone : '';
     openPaymentApp(phoneNum, app);
-    // סימון אוטומטי כ"שולח"
     updateStatus(reminder.id, 'marked_sent');
   };
   
-  // סיכומים כספיים
   const totalToSend = toSend.reduce((s, r) => s + r.amount, 0);
   const totalToReceive = toReceive.reduce((s, r) => s + r.amount, 0);
   
@@ -2597,7 +2567,6 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
         </div>
       </div>
       
-      {/* בלוק "אני צריך לשלם" */}
       {toSend.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs">
@@ -2662,7 +2631,6 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
         </div>
       )}
       
-      {/* בלוק "אני אמור לקבל" */}
       {toReceive.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs">
@@ -2710,6 +2678,7 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
   );
 };
 
+
 const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adminName }) => {
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [host, setHost] = useState('');
@@ -2722,12 +2691,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false); // מודל אישור איפוס
   const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
   const [savedEvening, setSavedEvening] = useState(false); // האם הערב כבר נשמר
-  // 🎉 אנימציית Confetti לרווח של המשתמש הנוכחי
-  const [confettiActive, setConfettiActive] = useState(false);
-  const [confettiShown, setConfettiShown] = useState(false);
-  // 💸 העברת אירוח - בחירת מקבל וסכום
-  const [hostingRecipient, setHostingRecipient] = useState(''); // שם המארח שמקבל את התשלום (ריק = לא לשלם)
-  const [hostingAmount, setHostingAmount] = useState(50); // 50 / 80 / 0 (אין אירוח)
+  // 💸 העברת אירוח
+  const [hostingRecipient, setHostingRecipient] = useState('');
+  const [hostingAmount, setHostingAmount] = useState(50);
 
   // שמירה אוטומטית של מצב הערב לאחסון מקומי בדפדפן
   useEffect(() => {
@@ -2756,6 +2722,13 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     } catch {}
     setHasLoadedSaved(true);
   }, [isOpen, hasLoadedSaved]);
+
+  // 💸 סנכרון אוטומטי - אם נבחר מארח, hostingRecipient נטען איתו
+  useEffect(() => {
+    if (host && !hostingRecipient) {
+      setHostingRecipient(host);
+    }
+  }, [host, hostingRecipient]);
 
   const reset = () => {
     setParticipants([]); setHost(''); setClosing(false); setFinalChips({});
@@ -2822,34 +2795,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const balance = totalChipsOut - totalPot;
   const isBalanced = Math.abs(balance) < 0.01;
 
-  // 💸 סנכרון: כשמשנים את המארח (host), אם hostingRecipient ריק - מעדכן אוטומטית
-  useEffect(() => {
-    if (host && !hostingRecipient) {
-      setHostingRecipient(host);
-    }
-  }, [host, hostingRecipient]);
-
-  // 🎉 הפעלת Confetti כשהאיזון תקין והמשתמש הנוכחי ברווח
-  useEffect(() => {
-    if (!closing || !isBalanced || confettiShown) return;
-    const myParticipation = participants.find(p => p.name === adminName);
-    if (!myParticipation) return;
-    const myChips = Number(finalChips[adminName]) || 0;
-    const myProfit = myChips - myParticipation.buyIns * 20;
-    if (myProfit > 0) {
-      setConfettiActive(true);
-      setConfettiShown(true);
-    }
-  }, [closing, isBalanced, confettiShown, adminName, participants, finalChips]);
-
-  // איפוס דגלים כשהמודל נסגר
-  useEffect(() => {
-    if (!isOpen) {
-      setConfettiShown(false);
-      setConfettiActive(false);
-    }
-  }, [isOpen]);
-
   const handleStartClosing = () => {
     if (participants.length < 2) return alert('צריך לפחות 2 שחקנים');
     setClosing(true);
@@ -2871,7 +2816,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       results[p.name] = chips - buyIn;
     });
     
-    // 💸 בניית אובייקט hostingPayment - אם יש מארח ויש סכום
     const hostingPayment = (hostingRecipient && hostingAmount > 0) 
       ? { recipient: hostingRecipient, amount: hostingAmount }
       : null;
@@ -2879,24 +2823,20 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     const sessionData = {
       date: sessionDate, season: currentSeason, pot: totalPot, results,
       host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true,
-      hostingPayment, // 💸
+      hostingPayment,
     };
     
     onSave(sessionData);
     
-    // 💸 יצירת תזכורות תשלום אוטומטית
     try {
       const newReminders = buildRemindersFromSession(sessionData);
       if (newReminders.length > 0) {
         const existing = loadPaymentReminders();
-        // מניעת כפילויות לפי signature
         const existingSigs = new Set(existing.map(reminderSignature));
         const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
         savePaymentReminders([...existing, ...toAdd]);
       }
-    } catch (e) {
-      console.warn('Failed to create payment reminders:', e);
-    }
+    } catch (e) {}
     
     setSavedEvening(true);
     reset();
@@ -2907,7 +2847,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   // שמירה ממסך החלוקה - שומר בלי לסגור את המודל
   const handleSaveFromSettlement = () => {
     if (!isBalanced) return alert(`הסכומים לא מאוזנים! יש פער של ${balance > 0 ? '+' : ''}${balance} ₪`);
-    if (savedEvening) return; // כבר נשמר
+    if (savedEvening) return;
     
     const results = {};
     participants.forEach(p => {
@@ -2923,12 +2863,11 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     const sessionData = {
       date: sessionDate, season: currentSeason, pot: totalPot, results,
       host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true,
-      hostingPayment, // 💸
+      hostingPayment,
     };
     
     onSave(sessionData);
     
-    // 💸 יצירת תזכורות תשלום
     try {
       const newReminders = buildRemindersFromSession(sessionData);
       if (newReminders.length > 0) {
@@ -2937,9 +2876,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
         const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
         savePaymentReminders([...existing, ...toAdd]);
       }
-    } catch (e) {
-      console.warn('Failed to create payment reminders:', e);
-    }
+    } catch (e) {}
     
     setSavedEvening(true);
   };
@@ -3135,7 +3072,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                 <div className="font-bold text-purple-200 flex items-center gap-2">
                   🏠 העברת אירוח
                 </div>
-                {/* שורה 1: בחירת מקבל */}
                 <div>
                   <label className="block text-xs text-purple-300/80 mb-1.5">למי משלמים?</label>
                   <select 
@@ -3150,7 +3086,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                     ))}
                   </select>
                 </div>
-                {/* שורה 2: סכום למשתתף - רק אם נבחר מקבל */}
                 {hostingRecipient && (
                   <div>
                     <label className="block text-xs text-purple-300/80 mb-1.5">סכום למשתתף:</label>
@@ -3182,7 +3117,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                         placeholder="אחר"
                         className="rounded-lg border border-stone-700 bg-stone-800 px-2 py-2 text-white text-center text-sm tabular-nums" />
                     </div>
-                    {/* סיכום */}
                     {hostingAmount > 0 && participants.length > 1 && (
                       <div className="mt-2 text-xs text-purple-300/80 text-center">
                         סה״כ: {hostingAmount} × {participants.length - 1} משתתפים = 
@@ -3503,11 +3437,6 @@ const SettlementModal = ({ isOpen, onClose, participants, finalChips, host, sess
 
 
 // ===== טאב טבלאות תקופתיות =====
-const getDayKey = (dateStr) => {
-  // YYYY-MM-DD - שומר תאריך מלא
-  return dateStr;
-};
-
 const getMonthKey = (dateStr) => {
   const d = new Date(dateStr);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -3526,13 +3455,6 @@ const getHalfKey = (dateStr) => {
 };
 
 const HEBREW_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
-const HEBREW_MONTHS_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יונ', 'יול', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
-
-const getDayLabel = (key) => {
-  // מ-YYYY-MM-DD → DD/MMM (לדוגמה: 23/אפר)
-  const [y, m, d] = key.split('-');
-  return `${parseInt(d)}/${HEBREW_MONTHS_SHORT[parseInt(m) - 1]}`;
-};
 
 const getMonthLabel = (key) => {
   const [y, m] = key.split('-');
@@ -3551,29 +3473,24 @@ const getHalfLabel = (key) => {
 
 const aggregateByPeriod = (sessions, players, keyFn) => {
   // מקבץ תוצאות לפי תקופה
-  // byPeriod[periodKey][playerName] = sum (יכול להיות 0 אם השתתף וסיים בתיקו)
-  // participated[periodKey][playerName] = true (אם השתתף לפחות פעם אחת בתקופה)
-  const byPeriod = {}; 
-  const participated = {};
+  const byPeriod = {}; // {periodKey: {playerName: sum}}
   const allKeys = new Set();
   
   sessions.forEach(s => {
     const key = keyFn(s.date);
     allKeys.add(key);
     if (!byPeriod[key]) byPeriod[key] = {};
-    if (!participated[key]) participated[key] = {};
     Object.entries(s.results || {}).forEach(([name, amount]) => {
       byPeriod[key][name] = (byPeriod[key][name] || 0) + amount;
-      participated[key][name] = true; // השתתף - גם אם התוצאה 0
     });
   });
   
   const sortedKeys = Array.from(allKeys).sort();
-  return { sortedKeys, byPeriod, participated };
+  return { sortedKeys, byPeriod };
 };
 
 const PeriodicTables = ({ allSessions, players }) => {
-  const [viewMode, setViewMode] = useState('month'); // day | month | quarter | half
+  const [viewMode, setViewMode] = useState('month'); // month | quarter | half
   
   // זיהוי כל השנים הזמינות
   const availableYears = useMemo(() => {
@@ -3590,13 +3507,12 @@ const PeriodicTables = ({ allSessions, players }) => {
   );
   
   const { keyFn, getLabel, viewLabel } = useMemo(() => {
-    if (viewMode === 'day') return { keyFn: getDayKey, getLabel: getDayLabel, viewLabel: 'יומית' };
     if (viewMode === 'month') return { keyFn: getMonthKey, getLabel: getMonthLabel, viewLabel: 'חודשית' };
     if (viewMode === 'quarter') return { keyFn: getQuarterKey, getLabel: getQuarterLabel, viewLabel: 'רבעונית' };
     return { keyFn: getHalfKey, getLabel: getHalfLabel, viewLabel: 'חצי שנתית' };
   }, [viewMode]);
   
-  const { sortedKeys, byPeriod, participated } = useMemo(() => 
+  const { sortedKeys, byPeriod } = useMemo(() => 
     aggregateByPeriod(sessions, players, keyFn), [sessions, players, keyFn]);
   
   // רק שחקנים שיש להם נתונים בתקופה כלשהי
@@ -3613,16 +3529,13 @@ const PeriodicTables = ({ allSessions, players }) => {
     });
   }, [sortedKeys, byPeriod]);
 
-  // מעצב תא: מבחין בין "השתתף ב-0" (מציג 0) לבין "לא השתתף" (מציג —)
-  const formatCell = (val, didParticipate) => {
-    if (!didParticipate) return '—';
+  const formatCell = (val) => {
     if (!val || val === 0) return '0';
     return val > 0 ? `+${val}` : `${val}`;
   };
   
-  const cellColor = (val, didParticipate) => {
-    if (!didParticipate) return 'text-stone-700'; // לא השתתף - כהה
-    if (!val || val === 0) return 'text-stone-400'; // השתתף וסיים ב-0
+  const cellColor = (val) => {
+    if (!val || val === 0) return 'text-stone-500';
     if (val > 0) return 'bg-emerald-900/40 text-emerald-300 font-bold';
     return 'bg-rose-900/40 text-rose-300 font-bold';
   };
@@ -3639,10 +3552,6 @@ const PeriodicTables = ({ allSessions, players }) => {
             {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <div className="flex rounded-lg border border-stone-700 bg-stone-900 p-1">
-            <button onClick={() => setViewMode('day')}
-              className={`px-3 py-1.5 text-xs rounded-md font-bold transition ${viewMode === 'day' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
-              יומית
-            </button>
             <button onClick={() => setViewMode('month')}
               className={`px-3 py-1.5 text-xs rounded-md font-bold transition ${viewMode === 'month' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
               חודשית
@@ -3680,8 +3589,6 @@ const PeriodicTables = ({ allSessions, players }) => {
             {activePlayers.map((name, i) => {
               const rowBg = i % 2 === 0 ? 'bg-stone-950' : 'bg-stone-900/50';
               const total = sortedKeys.reduce((s, k) => s + (byPeriod[k]?.[name] || 0), 0);
-              // האם השתתף לפחות פעם אחת בכל השנה?
-              const totalParticipated = sortedKeys.some(k => participated[k]?.[name]);
               return (
                 <tr key={name} className="group hover:bg-amber-950/10">
                   <td className={`sticky right-0 z-10 ${rowBg} group-hover:bg-amber-950/20 border-b border-l border-stone-800 px-3 py-2.5 font-bold text-stone-100 whitespace-nowrap shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]`}>
@@ -3689,17 +3596,16 @@ const PeriodicTables = ({ allSessions, players }) => {
                   </td>
                   {sortedKeys.map(k => {
                     const val = byPeriod[k]?.[name];
-                    const didParticipate = !!participated[k]?.[name];
                     return (
-                      <td key={k} className={`border-b border-stone-900 px-3 py-2.5 tabular-nums text-center whitespace-nowrap ${cellColor(val, didParticipate)}`}>
-                        {formatCell(val, didParticipate)}
+                      <td key={k} className={`border-b border-stone-900 px-3 py-2.5 tabular-nums text-center whitespace-nowrap ${cellColor(val)}`}>
+                        {formatCell(val)}
                       </td>
                     );
                   })}
                   <td className={`sticky left-0 z-10 border-b border-r border-amber-800/50 px-3 py-2.5 tabular-nums text-center font-extrabold whitespace-nowrap ${
                     total > 0 ? 'bg-emerald-950/60 text-emerald-300' : total < 0 ? 'bg-rose-950/60 text-rose-300' : 'bg-stone-900/80 text-stone-400'
                   }`}>
-                    {formatCell(total, totalParticipated)}
+                    {formatCell(total)}
                   </td>
                 </tr>
               );
@@ -3742,19 +3648,16 @@ const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGo
         window.localStorage.setItem(seenKey, '1');
       }, 600);
       return () => clearTimeout(timer);
-    } catch (e) {
-      // localStorage לא זמין - דלג
-    }
+    } catch (e) {}
   }, [currentUser, sessions]);
   
   return (
     <div className="space-y-3">
-      {/* 💸 תזכורות תשלום - בראש הדשבורד */}
       <PaymentReminders 
         playerName={currentUser}
         reminders={paymentReminders || []}
         phones={phones || {}}
-        onUpdateReminders={onUpdateReminders}
+        onUpdateReminders={onUpdateReminders || (() => {})}
       />
       <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
       <NextHostsCarouselCompact hostingSchedule={hostingSchedule} onSeeAll={onGoToHosting} />
@@ -3767,7 +3670,6 @@ const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGo
           onPlayersChange={setSelectedChartPlayers}
           isMobile={isMobile} />
       </div>
-      {/* 🎉 אנימציית Confetti - לאחר ערב מנצח */}
       <Confetti 
         active={confettiActive} 
         onComplete={() => setConfettiActive(false)}
@@ -4951,20 +4853,17 @@ export default function PokerApp() {
   // 🆕 פרטי תשלום של שחקנים: { 'רון': { phone: '0501234567', app: 'bit' }, ... }
   const [phones, setPhones] = useState({});
   
-  // 💸 תזכורות תשלום (נטען מ-localStorage)
+  // 💸 תזכורות תשלום
   const [paymentReminders, setPaymentReminders] = useState([]);
   
-  // טעינת תזכורות מ-localStorage בעת טעינת האפליקציה
   useEffect(() => {
     setPaymentReminders(loadPaymentReminders());
-    // טעינה מחדש כל 30 שניות (במקרה שמכשיר אחר עדכן)
     const interval = setInterval(() => {
       setPaymentReminders(loadPaymentReminders());
     }, 30000);
     return () => clearInterval(interval);
   }, []);
   
-  // 💸 פונקציה לעדכון תזכורות (מועברת ל-PaymentReminders)
   const handleUpdateReminders = (newReminders) => {
     setPaymentReminders(newReminders);
     savePaymentReminders(newReminders);
@@ -5490,7 +5389,7 @@ export default function PokerApp() {
     const updatedPlayers = newNames.length > 0 ? [...players, ...newNames] : players;
     if (newNames.length > 0) setPlayers(updatedPlayers);
     await persistSessions(updated, updatedPlayers);
-    // 💸 רענון תזכורות תשלום (LiveSessionModal יצר תזכורות חדשות ב-localStorage)
+    // רענון תזכורות תשלום (LiveSessionModal יצר תזכורות חדשות)
     setPaymentReminders(loadPaymentReminders());
   };
 
@@ -5974,7 +5873,6 @@ export default function PokerApp() {
           50% { opacity: 0.85; transform: translateY(-50%) translateX(-3px); }
         }
         .animate-pulse-subtle { animation: pulse-subtle 1.8s ease-in-out infinite; }
-        /* 🦢 אנימציית ברבור - תעופה בקשת */
         @keyframes swan-arc {
           0% { opacity: 0; transform: translate(0, 0); }
           5% { opacity: 1; }
@@ -5994,24 +5892,11 @@ export default function PokerApp() {
           100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
         }
         .animate-confetti-message { animation: confetti-message 5s ease-out forwards; }
-        /* 🔥 אנימציית להבת Hot Streak - הבהוב ותנועה קלה */
         @keyframes flame-flicker {
-          0%, 100% { 
-            transform: scale(1) rotate(-1deg);
-            filter: brightness(1) drop-shadow(0 0 3px rgba(251, 146, 60, 0.6));
-          }
-          25% { 
-            transform: scale(1.08) rotate(1.5deg);
-            filter: brightness(1.15) drop-shadow(0 0 5px rgba(251, 146, 60, 0.8));
-          }
-          50% { 
-            transform: scale(0.95) rotate(-0.5deg);
-            filter: brightness(0.95) drop-shadow(0 0 2px rgba(251, 146, 60, 0.5));
-          }
-          75% { 
-            transform: scale(1.05) rotate(1deg);
-            filter: brightness(1.1) drop-shadow(0 0 4px rgba(251, 146, 60, 0.7));
-          }
+          0%, 100% { transform: scale(1) rotate(-1deg); filter: brightness(1) drop-shadow(0 0 3px rgba(251, 146, 60, 0.6)); }
+          25% { transform: scale(1.08) rotate(1.5deg); filter: brightness(1.15) drop-shadow(0 0 5px rgba(251, 146, 60, 0.8)); }
+          50% { transform: scale(0.95) rotate(-0.5deg); filter: brightness(0.95) drop-shadow(0 0 2px rgba(251, 146, 60, 0.5)); }
+          75% { transform: scale(1.05) rotate(1deg); filter: brightness(1.1) drop-shadow(0 0 4px rgba(251, 146, 60, 0.7)); }
         }
         .streak-flame svg {
           animation: flame-flicker 1.4s ease-in-out infinite;
