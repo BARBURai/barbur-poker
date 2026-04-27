@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.16.1';
-const APP_BUILD_TIME = '27/04/2026 21:19';
-const APP_NOTES = 'גרפים שנתיים תמיד מוצגים';
+const APP_VERSION = 'v2.16.3';
+const APP_BUILD_TIME = '27/04/2026 21:29';
+const APP_NOTES = 'הבחנה בין רווח מצטבר השנה (דשבורד) לאורך זמן (תובנות)';
 
 
 // ===== הרשאות מנהל =====
@@ -493,6 +493,44 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
     return points;
   }, [filteredSessions, selectedPlayers]);
   
+  // 🆕 שחקנים מסודרים לפי רווח על השנים הנבחרות (לכפתורי טופ X)
+  // כשמסוננות שנים - הטופ נחשב לפי השנים האלה בלבד
+  const playersForPicker = useMemo(() => {
+    // אם אין סינון שנים פעיל, השתמש ב-stats כרגיל
+    if (!allSessions || selectedYears.length === 0 || selectedYears.length === allYears.length) {
+      // אם הכל נבחר - חישוב טופ על כל ההיסטוריה
+      if (selectedYears.length > 1 || (selectedYears.length === allYears.length && allYears.length > 1)) {
+        const totals = {};
+        const sessions_count = {};
+        filteredSessions.forEach(s => {
+          if (!s.results) return;
+          Object.entries(s.results).forEach(([name, amount]) => {
+            totals[name] = (totals[name] || 0) + Number(amount);
+            sessions_count[name] = (sessions_count[name] || 0) + 1;
+          });
+        });
+        return Object.entries(totals)
+          .map(([name, total]) => ({ name, total, sessions: sessions_count[name] || 0 }))
+          .sort((a, b) => b.total - a.total);
+      }
+      return stats;
+    }
+    
+    // יש סינון שנים - מחשב טוטאל על השנים הנבחרות
+    const totals = {};
+    const sessions_count = {};
+    filteredSessions.forEach(s => {
+      if (!s.results) return;
+      Object.entries(s.results).forEach(([name, amount]) => {
+        totals[name] = (totals[name] || 0) + Number(amount);
+        sessions_count[name] = (sessions_count[name] || 0) + 1;
+      });
+    });
+    return Object.entries(totals)
+      .map(([name, total]) => ({ name, total, sessions: sessions_count[name] || 0 }))
+      .sort((a, b) => b.total - a.total);
+  }, [filteredSessions, selectedYears, allYears, allSessions, stats]);
+  
   // toggle של שנה בבורר
   const toggleYear = (year) => {
     setSelectedYears(prev => {
@@ -553,12 +591,12 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
         <div className="flex items-center gap-2">
           <h3 className="text-lg md:text-xl font-bold text-amber-200 flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
-            רווח מצטבר לאורך זמן
+            {allSessions ? 'רווח מצטבר לאורך זמן' : 'רווח מצטבר השנה'}
           </h3>
           <InfoTooltip text="הציר האופקי: תאריכי המפגשים. הציר האנכי: הרווח המצטבר של השחקן. קו עולה = צובר רווחים. קו יורד = צובר הפסדים." />
         </div>
         <div className="flex items-center gap-2">
-          <PlayerPicker allPlayers={stats} selected={selectedPlayers} onChange={onPlayersChange} />
+          <PlayerPicker allPlayers={playersForPicker} selected={selectedPlayers} onChange={onPlayersChange} />
           <button onClick={onFullscreenToggle}
             className="rounded-lg border border-stone-700 bg-stone-900 p-2 text-stone-300 hover:bg-stone-800 transition" title={fullscreen ? 'חזור' : 'מסך מלא'}>
             {fullscreen ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
