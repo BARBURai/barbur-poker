@@ -71,9 +71,10 @@ const calculateStats = (sessions, players) => {
       if (!stats[name]) return;
       const s = stats[name];
       s.total += amount; s.sessions++; s.values.push(amount);
-      if (amount > 0) { s.wins++; s.currentStreak = Math.max(0, s.currentStreak) + 1; }
-      else if (amount < 0) { s.losses++; s.currentStreak = Math.min(0, s.currentStreak) - 1; }
-      else { s.ties++; }
+      // 🔥 רצף נוכחי = רק רצף ניצחונות. הפסד = איפוס ל-0. תיקו = לא משנה.
+      if (amount > 0) { s.wins++; s.currentStreak++; }
+      else if (amount < 0) { s.losses++; s.currentStreak = 0; }
+      else { s.ties++; } // תיקו לא שובר ולא מעלה את הרצף
       s.maxStreak = Math.max(s.maxStreak, s.currentStreak);
       if (amount > s.biggestWin) s.biggestWin = amount;
       if (amount < s.biggestLoss) s.biggestLoss = amount;
@@ -605,7 +606,7 @@ const MainLeaderboard = ({ stats, sessions }) => {
     if (key === 'stdDev') return v.toFixed(0);
     if (key === 'currentStreakDisplay') {
       if (v === 0) return '—';
-      return v > 0 ? `+${v}` : `${v}`; // +3 או -2
+      return `${v}`; // רק חיובי - 1, 2, 3 וכו'
     }
     return v;
   };
@@ -616,7 +617,8 @@ const MainLeaderboard = ({ stats, sessions }) => {
     if (key === 'maxStreak') return 'text-amber-400';
     if (key === 'currentStreakDisplay') {
       if (v === 0) return 'text-stone-500';
-      return v > 0 ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold';
+      if (v >= 3) return 'text-orange-400 font-bold'; // סטריק חם
+      return 'text-amber-400 font-bold';
     }
     if (key === 'stdDev') return 'text-stone-500';
     return 'text-stone-300';
