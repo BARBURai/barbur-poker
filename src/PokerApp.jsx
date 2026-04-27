@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.5.0';
-const APP_BUILD_TIME = '27/04/2026 10:39';
-const APP_NOTES = 'סנכרון תזכורות בין מכשירים';
+const APP_VERSION = 'v2.8.0';
+const APP_BUILD_TIME = '27/04/2026 11:02';
+const APP_NOTES = 'ערב ניסיון + ניקוי תזכורות + סאונד מים';
 
 
 // ===== הרשאות מנהל =====
@@ -2293,6 +2293,7 @@ const FlameIcon = ({ streak }) => {
 // 💸 מערכת תזכורות תשלום
 // ============================================================
 const PAYMENTS_STORAGE_KEY = 'poker_payment_reminders_v1';
+const PAYMENTS_HANDLED_KEY = 'poker_payment_handled_v1'; // 🆕 רשימת signatures שטופלו (כבר העברתי / קיבלתי)
 const PAYMENT_EXPIRY_DAYS = 7;
 
 const loadPaymentReminders = () => {
@@ -2316,6 +2317,43 @@ const savePaymentReminders = (reminders) => {
   try {
     window.localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(reminders));
   } catch (e) {}
+};
+
+// 🆕 רשימה של signatures שמשתמש סימן ידנית כ"טופלו"
+// מבנה: { 'sig1': timestamp, 'sig2': timestamp }
+// שומרים timestamp כדי לאפשר ניקוי אוטומטי אחרי 7 ימים
+const loadHandledSignatures = () => {
+  try {
+    const data = window.localStorage.getItem(PAYMENTS_HANDLED_KEY);
+    if (!data) return {};
+    const handled = JSON.parse(data);
+    if (typeof handled !== 'object' || handled === null) return {};
+    // ניקוי signatures ישנות (אחרי 7 ימים)
+    const now = Date.now();
+    const expiryMs = PAYMENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+    const cleaned = {};
+    Object.entries(handled).forEach(([sig, ts]) => {
+      if (typeof ts === 'number' && (now - ts) < expiryMs) {
+        cleaned[sig] = ts;
+      }
+    });
+    return cleaned;
+  } catch (e) {
+    return {};
+  }
+};
+
+const saveHandledSignatures = (handled) => {
+  try {
+    window.localStorage.setItem(PAYMENTS_HANDLED_KEY, JSON.stringify(handled));
+  } catch (e) {}
+};
+
+// מסמן signature כ"טופל" - נמנע מסנכרון מחדש
+const markSignatureHandled = (sig) => {
+  const handled = loadHandledSignatures();
+  handled[sig] = Date.now();
+  saveHandledSignatures(handled);
 };
 
 const reminderSignature = (r) => 
@@ -2425,10 +2463,58 @@ const Confetti = ({ active, onComplete, message }) => {
   
   useEffect(() => {
     if (!active) return;
+    
+    // 🔊 סאונד מים נופלים - 4 צינורות שיורים
+    let audioCtx = null;
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (AudioContext) {
+        audioCtx = new AudioContext();
+        // צליל "whoosh" של מים - white noise עם filter שמשתנה לאורך הזמן
+        const duration = 1.4; // משך הסאונד
+        const sampleRate = audioCtx.sampleRate;
+        const bufferSize = sampleRate * duration;
+        const buffer = audioCtx.createBuffer(1, bufferSize, sampleRate);
+        const data = buffer.getChannelData(0);
+        // יוצר white noise
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * 0.4;
+        }
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        // filter דינמי - מתחיל גבוה ויורד (אפקט splash)
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(2500, audioCtx.currentTime);
+        filter.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + duration);
+        // gain - fade in מהיר ו-fade out איטי
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
+        gainNode.gain.linearRampToValueAtTime(0.35, audioCtx.currentTime + 0.1);
+        gainNode.gain.linearRampToValueAtTime(0.25, audioCtx.currentTime + 0.4);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        // חיבור: source → filter → gain → speakers
+        source.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        source.start(audioCtx.currentTime);
+      }
+    } catch (e) {
+      // iOS Safari דורש user gesture - אם לא מצליח, פשוט מתעלם
+    }
+    
     const timer = setTimeout(() => {
       if (onComplete) onComplete();
+      if (audioCtx) {
+        try { audioCtx.close(); } catch {}
+      }
     }, 7000);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (audioCtx) {
+        try { audioCtx.close(); } catch {}
+      }
+    };
   }, [active, onComplete]);
   
   if (!active) return null;
@@ -2567,11 +2653,12 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
     if (!playerName || !reminders || reminders.length === 0) {
       return { toSend: [], toReceive: [] };
     }
+    // מציג רק תזכורות פעילות (לא ארכיון)
     const toSend = reminders.filter(r => 
-      r.from === playerName && r.status !== 'confirmed'
+      r.from === playerName && r.status !== 'confirmed' && r.status !== 'archived'
     );
     const toReceive = reminders.filter(r => 
-      r.to === playerName && r.status !== 'confirmed'
+      r.to === playerName && r.status !== 'confirmed' && r.status !== 'archived'
     );
     return { toSend, toReceive };
   }, [playerName, reminders]);
@@ -2580,18 +2667,40 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
   
   if (toSend.length === 0 && toReceive.length === 0) return null;
   
+  // עדכון סטטוס + העברה לארכיון אחרי "קיבלתי"
   const updateStatus = (id, newStatus) => {
-    const updated = reminders.map(r => 
-      r.id === id ? { ...r, status: newStatus } : r
-    );
-    const filteredOut = newStatus === 'confirmed' 
-      ? updated.filter(r => r.id !== id)
-      : updated;
-    onUpdateReminders(filteredOut);
+    const target = reminders.find(r => r.id === id);
+    const archivedAt = (newStatus === 'confirmed' || newStatus === 'archived') 
+      ? new Date().toISOString() 
+      : undefined;
+    const updated = reminders.map(r => {
+      if (r.id !== id) return r;
+      // 🆕 אם confirmed - מעבירים לארכיון במקום למחוק
+      if (newStatus === 'confirmed') {
+        return { ...r, status: 'archived', archivedAt, archivedAction: 'received' };
+      }
+      return { ...r, status: newStatus };
+    });
+    onUpdateReminders(updated);
+    // מסמן signature כטופל כדי שלא ייווצר מחדש בסנכרון
+    if (newStatus === 'confirmed' && target) {
+      markSignatureHandled(reminderSignature(target));
+    }
   };
   
-  const removeReminder = (id) => {
-    onUpdateReminders(reminders.filter(r => r.id !== id));
+  // 🆕 "כבר העברתי" - מעביר לארכיון במקום למחוק
+  const archiveReminder = (id) => {
+    const target = reminders.find(r => r.id === id);
+    const archivedAt = new Date().toISOString();
+    const updated = reminders.map(r => 
+      r.id === id 
+        ? { ...r, status: 'archived', archivedAt, archivedAction: 'sent' }
+        : r
+    );
+    onUpdateReminders(updated);
+    if (target) {
+      markSignatureHandled(reminderSignature(target));
+    }
   };
   
   const handlePaymentApp = (reminder, app) => {
@@ -2661,7 +2770,7 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
                       </>
                     )}
                     <button 
-                      onClick={() => removeReminder(r.id)}
+                      onClick={() => archiveReminder(r.id)}
                       title="כבר העברתי - הסר תזכורת"
                       className="rounded bg-stone-800 hover:bg-stone-700 border border-stone-700 px-2 py-1.5 text-xs font-bold text-stone-300 whitespace-nowrap">
                       ✓ כבר העברתי
@@ -2742,6 +2851,8 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   // 💸 העברת אירוח
   const [hostingRecipient, setHostingRecipient] = useState('');
   const [hostingAmount, setHostingAmount] = useState(50);
+  // 🧪 ערב ניסיון - לא יוצר תזכורות תשלום
+  const [isTestEvening, setIsTestEvening] = useState(false);
 
   // שמירה אוטומטית של מצב הערב לאחסון מקומי בדפדפן
   useEffect(() => {
@@ -2872,19 +2983,23 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       date: sessionDate, season: currentSeason, pot: totalPot, results,
       host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true,
       hostingPayment,
+      isTestEvening: isTestEvening || undefined, // 🧪 דגל ערב ניסיון
     };
     
     onSave(sessionData);
     
-    try {
-      const newReminders = buildRemindersFromSession(sessionData);
-      if (newReminders.length > 0) {
-        const existing = loadPaymentReminders();
-        const existingSigs = new Set(existing.map(reminderSignature));
-        const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
-        savePaymentReminders([...existing, ...toAdd]);
-      }
-    } catch (e) {}
+    // 🧪 לא יוצרים תזכורות לערב ניסיון
+    if (!isTestEvening) {
+      try {
+        const newReminders = buildRemindersFromSession(sessionData);
+        if (newReminders.length > 0) {
+          const existing = loadPaymentReminders();
+          const existingSigs = new Set(existing.map(reminderSignature));
+          const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
+          savePaymentReminders([...existing, ...toAdd]);
+        }
+      } catch (e) {}
+    }
     
     setSavedEvening(true);
     reset();
@@ -2912,19 +3027,23 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       date: sessionDate, season: currentSeason, pot: totalPot, results,
       host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true,
       hostingPayment,
+      isTestEvening: isTestEvening || undefined, // 🧪 דגל ערב ניסיון
     };
     
     onSave(sessionData);
     
-    try {
-      const newReminders = buildRemindersFromSession(sessionData);
-      if (newReminders.length > 0) {
-        const existing = loadPaymentReminders();
-        const existingSigs = new Set(existing.map(reminderSignature));
-        const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
-        savePaymentReminders([...existing, ...toAdd]);
-      }
-    } catch (e) {}
+    // 🧪 לא יוצרים תזכורות לערב ניסיון
+    if (!isTestEvening) {
+      try {
+        const newReminders = buildRemindersFromSession(sessionData);
+        if (newReminders.length > 0) {
+          const existing = loadPaymentReminders();
+          const existingSigs = new Set(existing.map(reminderSignature));
+          const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
+          savePaymentReminders([...existing, ...toAdd]);
+        }
+      } catch (e) {}
+    }
     
     setSavedEvening(true);
   };
@@ -3135,6 +3254,26 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                     </div>
                   );
                 })}
+              </div>
+
+              {/* 🧪 ערב ניסיון - לא יוצר תזכורות */}
+              <div className={`rounded-xl border p-3 transition ${isTestEvening ? 'border-yellow-700/70 bg-yellow-950/30' : 'border-stone-800 bg-stone-900/30'}`}>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input 
+                    type="checkbox"
+                    checked={isTestEvening}
+                    onChange={e => setIsTestEvening(e.target.checked)}
+                    className="w-5 h-5 rounded border-stone-600 bg-stone-800 cursor-pointer accent-yellow-500" />
+                  <div className="flex-1">
+                    <div className="font-bold text-stone-100 flex items-center gap-2">
+                      🧪 ערב ניסיון
+                      {isTestEvening && <span className="text-xs text-yellow-400 font-normal">(לא יוצר תזכורות תשלום)</span>}
+                    </div>
+                    <div className="text-xs text-stone-500 mt-0.5">
+                      סמן כאשר אתה בודק את האפליקציה ולא רוצה להפעיל תזכורות בדשבורד של השחקנים
+                    </div>
+                  </div>
+                </label>
               </div>
 
               {/* 💸 בלוק העברת אירוח */}
@@ -3722,6 +3861,110 @@ const PeriodicTables = ({ allSessions, players }) => {
   );
 };
 
+// ============================================================
+// 💸 ארכיון תשלומים - תזכורות שטופלו (כבר העברתי / קיבלתי)
+// ============================================================
+// מוצג בתחתית הדשבורד, מציג רק תזכורות מ-7 ימים אחרונים שמסומנות כ-archived
+const PaymentArchive = ({ playerName, reminders, onUpdateReminders }) => {
+  const archived = useMemo(() => {
+    if (!playerName || !reminders) return [];
+    return reminders
+      .filter(r => 
+        r.status === 'archived' && 
+        (r.from === playerName || r.to === playerName)
+      )
+      .sort((a, b) => {
+        // מיון לפי archivedAt - חדשים למעלה
+        const aTime = a.archivedAt ? new Date(a.archivedAt).getTime() : 0;
+        const bTime = b.archivedAt ? new Date(b.archivedAt).getTime() : 0;
+        return bTime - aTime;
+      });
+  }, [playerName, reminders]);
+  
+  if (archived.length === 0) return null;
+  
+  const restoreReminder = (id) => {
+    const updated = reminders.map(r => 
+      r.id === id 
+        ? { ...r, status: 'pending', archivedAt: undefined, archivedAction: undefined }
+        : r
+    );
+    onUpdateReminders(updated);
+  };
+  
+  const formatTime = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const isToday = d.toDateString() === today.toDateString();
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+    
+    const time = `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    if (isToday) return `היום ${time}`;
+    if (isYesterday) return `אתמול ${time}`;
+    return d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit' });
+  };
+  
+  return (
+    <div className="rounded-2xl border border-stone-800 bg-stone-950/40 backdrop-blur p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="font-bold text-stone-400 flex items-center gap-2 text-sm">
+          📋 ארכיון תשלומים
+          <span className="text-[10px] text-stone-600 font-normal">(7 ימים אחרונים)</span>
+        </div>
+        <div className="text-xs text-stone-600">
+          {archived.length} פעולות
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {archived.map(r => {
+          const isHosting = r.type === 'hosting';
+          const userIsSender = r.from === playerName;
+          const action = r.archivedAction || (userIsSender ? 'sent' : 'received');
+          
+          return (
+            <div key={r.id} className="rounded-lg border border-stone-800/50 bg-stone-900/30 px-2.5 py-2 flex items-center justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-xs flex items-center gap-1.5 flex-wrap">
+                  {action === 'sent' ? (
+                    <>
+                      <span className="text-emerald-500">✓</span>
+                      <span className="text-stone-300">העברת</span>
+                      <span className="text-stone-100 font-bold">{r.amount} ₪</span>
+                      <span className="text-stone-400">ל-</span>
+                      <span className="text-stone-200 font-bold">{r.to}</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-emerald-500">✓</span>
+                      <span className="text-stone-300">קיבלת</span>
+                      <span className="text-stone-100 font-bold">{r.amount} ₪</span>
+                      <span className="text-stone-400">מ-</span>
+                      <span className="text-stone-200 font-bold">{r.from}</span>
+                    </>
+                  )}
+                  {isHosting && <span className="text-purple-400/60 text-[10px]">(אירוח)</span>}
+                </div>
+                <div className="text-[10px] text-stone-600 mt-0.5">
+                  {formatTime(r.archivedAt)}
+                </div>
+              </div>
+              <button 
+                onClick={() => restoreReminder(r.id)}
+                title="החזר לתזכורות פעילות"
+                className="rounded bg-stone-800 hover:bg-stone-700 border border-stone-700 px-2 py-1 text-[10px] font-bold text-stone-400 hover:text-stone-200 whitespace-nowrap transition">
+                ↩ החזר
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 // ===== דשבורד קומפקטי =====
 const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders }) => {
@@ -3769,6 +4012,12 @@ const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGo
           onPlayersChange={setSelectedChartPlayers}
           isMobile={isMobile} />
       </div>
+      {/* 📋 ארכיון תשלומים - בתחתית הדשבורד */}
+      <PaymentArchive 
+        playerName={currentUser}
+        reminders={paymentReminders || []}
+        onUpdateReminders={onUpdateReminders || (() => {})}
+      />
       <Confetti 
         active={confettiActive} 
         onComplete={() => setConfettiActive(false)}
@@ -4965,33 +5214,36 @@ export default function PokerApp() {
   
   // 💸 סנכרון אוטומטי - כל מכשיר יוצר תזכורות לעצמו על ערבים מ-7 ימים אחרונים
   // רץ כשהערבים מתעדכנים (טעינה ראשונה / סנכרון מ-Firebase)
+  // ⚠️ מדלג על תזכורות שמסומנות כטופלות (כבר העברתי / קיבלתי)
   useEffect(() => {
     if (!allSessions || allSessions.length === 0) return;
     try {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
-      // ערבים מ-7 ימים אחרונים שיש להם תוצאות
       const recentSessions = allSessions.filter(s => {
         if (!s.results || !s.date) return false;
+        if (s.isTestEvening) return false; // 🧪 ערבי ניסיון - לא יוצרים תזכורות
         return new Date(s.date) >= sevenDaysAgo;
       });
       
       if (recentSessions.length === 0) return;
       
-      // טוען תזכורות קיימות ובודק לפי signature מה כבר קיים
       const existing = loadPaymentReminders();
       const existingSigs = new Set(existing.map(reminderSignature));
+      // 🆕 רשימת signatures שכבר טופלו (אסור ליצור מחדש)
+      const handledSigs = loadHandledSignatures();
       
-      // לכל ערב - יוצר תזכורות שעדיין לא קיימות
       const allNewReminders = [];
       recentSessions.forEach(session => {
         const reminders = buildRemindersFromSession(session);
         reminders.forEach(r => {
-          if (!existingSigs.has(reminderSignature(r))) {
-            allNewReminders.push(r);
-            existingSigs.add(reminderSignature(r));
-          }
+          const sig = reminderSignature(r);
+          // דלג אם כבר קיים או שטופל ידנית
+          if (existingSigs.has(sig)) return;
+          if (handledSigs[sig]) return; // 🆕 כבר טופל - לא ליצור מחדש
+          allNewReminders.push(r);
+          existingSigs.add(sig);
         });
       });
       
@@ -5873,6 +6125,26 @@ export default function PokerApp() {
                 ) : (
                   <span className="text-xs text-amber-400">⚠️ חסר</span>
                 )}
+              </button>
+              {/* 🆕 כפתור ניקוי תזכורות תשלום במכשיר זה */}
+              <button onClick={() => {
+                if (!confirm('לנקות את כל תזכורות התשלום והארכיון מהמכשיר הזה?\n\n⚠️ זה לא ישפיע על מכשירים אחרים. הפעולה מועילה אם נוצרו תזכורות מערבי ניסיון.')) return;
+                try {
+                  window.localStorage.removeItem(PAYMENTS_STORAGE_KEY);
+                  window.localStorage.removeItem(PAYMENTS_HANDLED_KEY);
+                  setPaymentReminders([]);
+                  setMenuOpen(false);
+                  alert('✓ כל התזכורות נוקו מהמכשיר הזה');
+                } catch (e) {
+                  alert('שגיאה בניקוי התזכורות');
+                }
+              }}
+                className="mt-2 w-full flex items-center justify-between rounded-lg bg-stone-800/60 border border-stone-700/50 px-3 py-2 text-stone-300 hover:bg-stone-800 transition text-sm">
+                <span className="flex items-center gap-2">
+                  <span>🗑️</span>
+                  <span>נקה תזכורות תשלום</span>
+                </span>
+                <span className="text-xs text-stone-500">{paymentReminders.length}</span>
               </button>
             </div>
 
