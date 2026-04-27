@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.11.0';
-const APP_BUILD_TIME = '27/04/2026 16:39';
-const APP_NOTES = '3 גרפים אישיים: חודשי, דירוג, התפלגות תוצאות';
+const APP_VERSION = 'v2.12.0';
+const APP_BUILD_TIME = '27/04/2026 20:50';
+const APP_NOTES = '🦢 תובנות אישיות + עיצוב מחודש לגרפים';
 
 
 // ===== הרשאות מנהל =====
@@ -2301,6 +2301,374 @@ const calculateStreakHelper = (playerName, sessions) => {
 // 1. ביצועים לאורך החודשים (bar chart)
 // 2. דירוג השחקן לאורך זמן (line chart)
 // 3. התפלגות תוצאות - ניצחונות/הפסדים/תיקו (pie chart)
+// ============================================================
+// 🦢 תובנות אישיות - על המשתמש המחובר בלבד
+// ============================================================
+// תובנות מעולם המשחק, מגמה, והשוואה לקבוצה
+const PersonalInsightsBox = ({ sessions, stats, currentUser }) => {
+  const insights = useMemo(() => {
+    if (!currentUser || !sessions || sessions.length === 0 || !stats) return [];
+    
+    const myStats = stats.find(s => s.name === currentUser);
+    if (!myStats || myStats.sessions === 0) return [];
+    
+    const result = [];
+    
+    // ========================================================
+    // קטגוריה 1: משחק (Game performance)
+    // ========================================================
+    
+    // אחוז ניצחונות
+    const winRate = (myStats.wins / myStats.sessions) * 100;
+    if (winRate >= 60) {
+      result.push({
+        icon: '🏆',
+        category: 'משחק',
+        title: 'מנצח כרוני',
+        text: `${winRate.toFixed(0)}% מהמשחקים שלך נגמרים ברווח — מצוין!`,
+        color: 'emerald',
+      });
+    } else if (winRate >= 50) {
+      result.push({
+        icon: '✨',
+        category: 'משחק',
+        title: 'יותר מאוזן',
+        text: `${winRate.toFixed(0)}% מהמשחקים שלך נגמרים ברווח — מעל הממוצע`,
+        color: 'amber',
+      });
+    } else if (winRate < 40) {
+      result.push({
+        icon: '💪',
+        category: 'משחק',
+        title: 'יש מקום לשיפור',
+        text: `${winRate.toFixed(0)}% ניצחונות — תמשיך לעבוד על זה`,
+        color: 'rose',
+      });
+    }
+    
+    // ביצועים בקופות גדולות מול קטנות
+    const mySessions = sessions.filter(s => s.results && s.results[currentUser] !== undefined);
+    if (mySessions.length >= 5) {
+      const pots = mySessions.map(s => s.pot || 0);
+      const medianPot = [...pots].sort((a, b) => a - b)[Math.floor(pots.length / 2)];
+      
+      let bigPotProfit = 0, bigPotCount = 0;
+      let smallPotProfit = 0, smallPotCount = 0;
+      
+      mySessions.forEach(s => {
+        const pot = s.pot || 0;
+        const profit = Number(s.results[currentUser]) || 0;
+        if (pot >= medianPot) {
+          bigPotProfit += profit;
+          bigPotCount++;
+        } else {
+          smallPotProfit += profit;
+          smallPotCount++;
+        }
+      });
+      
+      if (bigPotCount > 0 && smallPotCount > 0) {
+        const bigAvg = bigPotProfit / bigPotCount;
+        const smallAvg = smallPotProfit / smallPotCount;
+        if (bigAvg > smallAvg + 10) {
+          result.push({
+            icon: '💰',
+            category: 'משחק',
+            title: 'שורד בקופה גדולה',
+            text: `אתה זוכה יותר בקופות גדולות (₪${medianPot}+) — ממוצע ${bigAvg > 0 ? '+' : ''}${bigAvg.toFixed(0)}₪`,
+            color: 'purple',
+          });
+        } else if (smallAvg > bigAvg + 10) {
+          result.push({
+            icon: '🎯',
+            category: 'משחק',
+            title: 'מצליח בערבים שקטים',
+            text: `אתה מנצח יותר בערבים עם קופות קטנות — ממוצע ${smallAvg > 0 ? '+' : ''}${smallAvg.toFixed(0)}₪`,
+            color: 'blue',
+          });
+        }
+      }
+    }
+    
+    // הקופה הגדולה ביותר שזכית בה
+    if (mySessions.length > 0) {
+      const winningSessions = mySessions.filter(s => Number(s.results[currentUser]) > 0);
+      if (winningSessions.length > 0) {
+        const biggestWinSession = winningSessions.reduce((a, b) => 
+          (a.pot || 0) > (b.pot || 0) ? a : b);
+        const biggestPot = biggestWinSession.pot || 0;
+        if (biggestPot >= 200) {
+          result.push({
+            icon: '🎰',
+            category: 'משחק',
+            title: 'גדול בגדולים',
+            text: `הקופה הכי גדולה שזכית בה: ₪${biggestPot} (+${biggestWinSession.results[currentUser]}₪)`,
+            color: 'purple',
+          });
+        }
+      }
+    }
+    
+    // ========================================================
+    // קטגוריה 2: מגמה (Trends)
+    // ========================================================
+    
+    const sortedMySessions = [...mySessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    // 5 ערבים אחרונים
+    if (sortedMySessions.length >= 3) {
+      const lastN = Math.min(5, sortedMySessions.length);
+      const recent = sortedMySessions.slice(0, lastN);
+      const recentTotal = recent.reduce((sum, s) => sum + (Number(s.results[currentUser]) || 0), 0);
+      const recentAvg = recentTotal / lastN;
+      
+      if (recentAvg >= 30) {
+        result.push({
+          icon: '🔥',
+          category: 'מגמה',
+          title: 'אתה בעלייה',
+          text: `${lastN} הערבים האחרונים: ממוצע +${recentAvg.toFixed(0)}₪ — בלהט!`,
+          color: 'orange',
+        });
+      } else if (recentAvg <= -30) {
+        result.push({
+          icon: '🌧️',
+          category: 'מגמה',
+          title: 'תקופה קשה',
+          text: `${lastN} הערבים האחרונים: ממוצע ${recentAvg.toFixed(0)}₪ — תיזהר`,
+          color: 'rose',
+        });
+      } else if (Math.abs(recentAvg) < 15) {
+        result.push({
+          icon: '⚖️',
+          category: 'מגמה',
+          title: 'יציב',
+          text: `${lastN} הערבים האחרונים מאוזנים סביב ${recentAvg > 0 ? '+' : ''}${recentAvg.toFixed(0)}₪`,
+          color: 'stone',
+        });
+      }
+    }
+    
+    // רצף ניצחונות נוכחי
+    if (myStats.currentStreak >= 3) {
+      result.push({
+        icon: '⚡',
+        category: 'מגמה',
+        title: 'רצף בוער!',
+        text: `אתה ב-${myStats.currentStreak} ערבים רצופים בלי הפסד — אש 🔥`,
+        color: 'orange',
+      });
+    }
+    
+    // החודש הכי טוב
+    const byMonth = {};
+    mySessions.forEach(s => {
+      const d = new Date(s.date);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const HEBREW_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+      if (!byMonth[key]) byMonth[key] = { profit: 0, label: HEBREW_MONTHS[d.getMonth()] };
+      byMonth[key].profit += Number(s.results[currentUser]) || 0;
+    });
+    
+    const monthEntries = Object.values(byMonth);
+    if (monthEntries.length >= 2) {
+      const bestMonth = monthEntries.reduce((a, b) => a.profit > b.profit ? a : b);
+      if (bestMonth.profit > 100) {
+        result.push({
+          icon: '🌟',
+          category: 'מגמה',
+          title: 'החודש המוצלח שלך',
+          text: `${bestMonth.label} היה החודש הכי טוב: +${bestMonth.profit}₪`,
+          color: 'amber',
+        });
+      }
+    }
+    
+    // ========================================================
+    // קטגוריה 3: השוואה (Comparison)
+    // ========================================================
+    
+    // המקום שלך בדירוג
+    const sortedStats = [...stats].sort((a, b) => b.total - a.total);
+    const myRank = sortedStats.findIndex(s => s.name === currentUser) + 1;
+    const totalActive = sortedStats.length;
+    
+    if (myRank > 0) {
+      if (myRank === 1) {
+        result.push({
+          icon: '👑',
+          category: 'השוואה',
+          title: 'מלך הברבורים',
+          text: `אתה במקום הראשון מתוך ${totalActive} שחקנים פעילים`,
+          color: 'amber',
+        });
+      } else if (myRank <= 3) {
+        result.push({
+          icon: ['🥈', '🥉'][myRank - 2],
+          category: 'השוואה',
+          title: `מקום ${myRank} מבריק`,
+          text: `אתה ב-${myRank === 2 ? 'שני' : 'שלישי'} מתוך ${totalActive} שחקנים פעילים`,
+          color: 'amber',
+        });
+      } else if (myRank <= Math.ceil(totalActive / 3)) {
+        result.push({
+          icon: '⭐',
+          category: 'השוואה',
+          title: 'בשליש העליון',
+          text: `מקום #${myRank} מתוך ${totalActive} — מעל המוביל הממוצע`,
+          color: 'emerald',
+        });
+      } else if (myRank > totalActive * 2 / 3) {
+        result.push({
+          icon: '🎯',
+          category: 'השוואה',
+          title: 'יש לאן להתפתח',
+          text: `מקום #${myRank} מתוך ${totalActive} — תפיל את הבכירים`,
+          color: 'blue',
+        });
+      } else {
+        result.push({
+          icon: '📊',
+          category: 'השוואה',
+          title: 'באמצע הטבלה',
+          text: `מקום #${myRank} מתוך ${totalActive} שחקנים פעילים`,
+          color: 'stone',
+        });
+      }
+    }
+    
+    // יריבות ראש בראש - מי שאיתו שיחקת הכי הרבה
+    const sharedSessionsCount = {};
+    const sharedWinsAgainst = {};
+    
+    mySessions.forEach(s => {
+      const myProfit = Number(s.results[currentUser]) || 0;
+      Object.entries(s.results).forEach(([name, profit]) => {
+        if (name === currentUser) return;
+        sharedSessionsCount[name] = (sharedSessionsCount[name] || 0) + 1;
+        // "מנצח אותו" = הרווח שלי גדול יותר מהרווח שלו
+        if (myProfit > Number(profit)) {
+          sharedWinsAgainst[name] = (sharedWinsAgainst[name] || 0) + 1;
+        }
+      });
+    });
+    
+    // מצא את היריב שאיתו שיחקת הכי הרבה
+    const rivals = Object.entries(sharedSessionsCount)
+      .filter(([_, count]) => count >= 3)
+      .map(([name, count]) => ({
+        name,
+        total: count,
+        wins: sharedWinsAgainst[name] || 0,
+        winRate: ((sharedWinsAgainst[name] || 0) / count) * 100,
+      }))
+      .sort((a, b) => b.total - a.total);
+    
+    if (rivals.length > 0) {
+      // יריב הכי קרוב (הרבה משחקים)
+      const topRival = rivals[0];
+      if (topRival.winRate >= 60) {
+        result.push({
+          icon: '⚔️',
+          category: 'השוואה',
+          title: `נמסיס - ${topRival.name}`,
+          text: `אתה מנצח את ${topRival.name} ב-${topRival.winRate.toFixed(0)}% מהמשחקים שלכם (${topRival.total} משחקים)`,
+          color: 'purple',
+        });
+      } else if (topRival.winRate <= 40) {
+        result.push({
+          icon: '😬',
+          category: 'השוואה',
+          title: `${topRival.name} מציק לך`,
+          text: `${topRival.name} מנצח אותך ב-${(100 - topRival.winRate).toFixed(0)}% מהמשחקים שלכם`,
+          color: 'rose',
+        });
+      }
+    }
+    
+    return result;
+  }, [sessions, stats, currentUser]);
+  
+  if (insights.length === 0) {
+    return null;
+  }
+  
+  // צבעים לכרטיסיות
+  const colorClasses = {
+    emerald: 'border-emerald-700/50 bg-emerald-950/30',
+    amber: 'border-amber-700/50 bg-amber-950/30',
+    rose: 'border-rose-700/50 bg-rose-950/30',
+    purple: 'border-purple-700/50 bg-purple-950/30',
+    blue: 'border-blue-700/50 bg-blue-950/30',
+    orange: 'border-orange-700/50 bg-orange-950/30',
+    stone: 'border-stone-700/50 bg-stone-900/50',
+  };
+  
+  const textClasses = {
+    emerald: 'text-emerald-300',
+    amber: 'text-amber-300',
+    rose: 'text-rose-300',
+    purple: 'text-purple-300',
+    blue: 'text-blue-300',
+    orange: 'text-orange-300',
+    stone: 'text-stone-300',
+  };
+  
+  // קיבוץ לפי קטגוריה
+  const grouped = insights.reduce((acc, ins) => {
+    if (!acc[ins.category]) acc[ins.category] = [];
+    acc[ins.category].push(ins);
+    return acc;
+  }, {});
+  
+  const categoryIcons = {
+    'משחק': '🎲',
+    'מגמה': '📈',
+    'השוואה': '⚖️',
+  };
+  
+  return (
+    <div className="rounded-2xl border-2 border-amber-700/50 bg-gradient-to-br from-amber-950/40 via-stone-950/60 to-stone-950/40 backdrop-blur p-4 md:p-6">
+      <div className="flex items-center gap-2 mb-4">
+        <h3 className="text-lg md:text-xl font-bold text-amber-200 flex items-center gap-2">
+          🦢 התובנות שלך
+        </h3>
+        <span className="text-xs text-stone-500">— אישי לך, {currentUser}</span>
+      </div>
+      
+      <div className="space-y-4">
+        {Object.entries(grouped).map(([cat, items]) => (
+          <div key={cat}>
+            <div className="text-xs text-stone-500 mb-2 flex items-center gap-1.5 font-bold uppercase tracking-wider">
+              <span>{categoryIcons[cat]}</span>
+              <span>{cat}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {items.map((ins, i) => (
+                <div 
+                  key={i} 
+                  className={`rounded-xl border p-3 ${colorClasses[ins.color] || colorClasses.stone}`}>
+                  <div className="flex items-start gap-2">
+                    <div className="text-2xl flex-shrink-0">{ins.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className={`font-bold text-sm ${textClasses[ins.color] || textClasses.stone}`}>
+                        {ins.title}
+                      </div>
+                      <div className="text-xs text-stone-300 mt-0.5">
+                        {ins.text}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
   const players = useMemo(() => 
     stats.filter(s => s.sessions > 0).map(s => s.name)
@@ -2412,27 +2780,64 @@ const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
       </div>
       
       {/* 1️⃣ גרף ביצועים לאורך החודשים */}
-      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-4">
-        <h3 className="text-base md:text-lg font-bold text-amber-200 flex items-center gap-2 mb-3">
-          📊 ביצועים חודשיים
-          <span className="text-xs text-stone-500 font-normal">רווח/הפסד בכל חודש</span>
-        </h3>
+      <div className="rounded-2xl border border-emerald-800/40 bg-gradient-to-br from-emerald-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
+        <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
+          <h3 className="text-base md:text-lg font-bold text-emerald-200 flex items-center gap-2">
+            📊 ביצועים חודשיים
+          </h3>
+          {monthlyData.length > 0 && (() => {
+            const best = monthlyData.reduce((a, b) => a.profit > b.profit ? a : b);
+            const worst = monthlyData.reduce((a, b) => a.profit < b.profit ? a : b);
+            return (
+              <div className="flex gap-2 text-xs">
+                <span className="rounded-full bg-emerald-900/40 border border-emerald-700/40 px-2 py-0.5 text-emerald-300 font-bold">
+                  🏆 {best.label}: {best.profit > 0 ? '+' : ''}{best.profit}₪
+                </span>
+                {worst.profit < 0 && (
+                  <span className="rounded-full bg-rose-900/40 border border-rose-700/40 px-2 py-0.5 text-rose-300 font-bold">
+                    💀 {worst.label}: {worst.profit}₪
+                  </span>
+                )}
+              </div>
+            );
+          })()}
+        </div>
         {monthlyData.length === 0 ? (
           <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
         ) : (
-          <div style={{ width: '100%', height: isMobile ? 220 : 280 }}>
+          <div style={{ width: '100%', height: isMobile ? 240 : 300 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+              <BarChart data={monthlyData} margin={{ top: 20, right: 10, left: 0, bottom: 10 }}>
+                <defs>
+                  <linearGradient id="barGreen" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#34d399" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.6}/>
+                  </linearGradient>
+                  <linearGradient id="barRed" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f87171" stopOpacity={0.6}/>
+                    <stop offset="100%" stopColor="#dc2626" stopOpacity={1}/>
+                  </linearGradient>
+                  <linearGradient id="barGrey" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#a8a29e" stopOpacity={0.6}/>
+                    <stop offset="100%" stopColor="#57534e" stopOpacity={0.4}/>
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
-                <XAxis dataKey="label" stroke="#78716c" tick={{ fontSize: 12, fill: '#a8a29e' }} />
-                <YAxis stroke="#78716c" tick={{ fontSize: 12, fill: '#a8a29e' }} />
+                <XAxis dataKey="label" stroke="#78716c" tick={{ fontSize: 12, fill: '#a8a29e', fontWeight: 'bold' }} />
+                <YAxis stroke="#78716c" tick={{ fontSize: 12, fill: '#a8a29e' }} tickFormatter={(v) => v > 0 ? `+${v}` : v} />
                 <Tooltip 
                   contentStyle={{ background: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', color: '#fff' }}
                   formatter={(v) => [`${v > 0 ? '+' : ''}${v} ₪`, 'רווח']}
+                  cursor={{ fill: '#44403c33' }}
                 />
-                <Bar dataKey="profit" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="profit" radius={[6, 6, 0, 0]} animationDuration={1500}>
                   {monthlyData.map((d, i) => (
-                    <Cell key={i} fill={d.profit > 0 ? '#10b981' : d.profit < 0 ? '#ef4444' : '#78716c'} />
+                    <Cell 
+                      key={i} 
+                      fill={d.profit > 0 ? 'url(#barGreen)' : d.profit < 0 ? 'url(#barRed)' : 'url(#barGrey)'}
+                      stroke={d.profit > 0 ? '#10b981' : d.profit < 0 ? '#dc2626' : '#57534e'}
+                      strokeWidth={1}
+                    />
                   ))}
                 </Bar>
               </BarChart>
@@ -2442,22 +2847,43 @@ const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
       </div>
       
       {/* 2️⃣ גרף דירוג לאורך זמן */}
-      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-4">
-        <h3 className="text-base md:text-lg font-bold text-amber-200 flex items-center gap-2 mb-3">
-          📈 דירוג לאורך הזמן
-          <span className="text-xs text-stone-500 font-normal">מקום בטבלה הראשית בכל מפגש</span>
-        </h3>
+      <div className="rounded-2xl border border-blue-800/40 bg-gradient-to-br from-blue-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
+        <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
+          <h3 className="text-base md:text-lg font-bold text-blue-200 flex items-center gap-2">
+            📈 דירוג לאורך הזמן
+          </h3>
+          {rankData.length > 0 && (() => {
+            const bestRank = Math.min(...rankData.map(r => r.rank));
+            const currentRank = rankData[rankData.length - 1]?.rank;
+            return (
+              <div className="flex gap-2 text-xs">
+                <span className="rounded-full bg-amber-900/40 border border-amber-700/40 px-2 py-0.5 text-amber-300 font-bold">
+                  🏆 שיא: #{bestRank}
+                </span>
+                <span className="rounded-full bg-blue-900/40 border border-blue-700/40 px-2 py-0.5 text-blue-300 font-bold">
+                  📍 כעת: #{currentRank}
+                </span>
+              </div>
+            );
+          })()}
+        </div>
         {rankData.length === 0 ? (
           <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
         ) : (
-          <div style={{ width: '100%', height: isMobile ? 220 : 280 }}>
+          <div style={{ width: '100%', height: isMobile ? 240 : 300 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={rankData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
+              <LineChart data={rankData} margin={{ top: 15, right: 15, left: 0, bottom: 10 }}>
+                <defs>
+                  <linearGradient id="rankGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.4}/>
+                    <stop offset="100%" stopColor="#60a5fa" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
                 <XAxis dataKey="label" stroke="#78716c" tick={{ fontSize: 11, fill: '#a8a29e' }} />
                 <YAxis 
                   stroke="#78716c" 
-                  tick={{ fontSize: 12, fill: '#a8a29e' }}
+                  tick={{ fontSize: 12, fill: '#a8a29e', fontWeight: 'bold' }}
                   reversed 
                   domain={[1, maxRank]} 
                   allowDecimals={false}
@@ -2466,14 +2892,34 @@ const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
                 <Tooltip 
                   contentStyle={{ background: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', color: '#fff' }}
                   formatter={(v, name) => name === 'rank' ? [`מקום #${v}`, 'דירוג'] : [v, name]}
+                  cursor={{ stroke: '#60a5fa', strokeWidth: 1, strokeDasharray: '3 3' }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="rank" 
-                  stroke="#fbbf24" 
+                  stroke="#60a5fa" 
                   strokeWidth={3}
-                  dot={{ r: 4, fill: '#fbbf24' }}
-                  activeDot={{ r: 6 }}
+                  dot={(props) => {
+                    const { cx, cy, payload } = props;
+                    if (cx === undefined || cy === undefined) return null;
+                    // אייקון שונה למקום ראשון/שני/שלישי
+                    let icon = null;
+                    if (payload.rank === 1) icon = '👑';
+                    else if (payload.rank === 2) icon = '🥈';
+                    else if (payload.rank === 3) icon = '🥉';
+                    
+                    return (
+                      <g>
+                        <circle cx={cx} cy={cy} r={5} fill="#60a5fa" stroke="#1e3a8a" strokeWidth={2} />
+                        {icon && (
+                          <text x={cx} y={cy - 12} textAnchor="middle" fontSize={14}>
+                            {icon}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  }}
+                  activeDot={{ r: 7, fill: '#fbbf24', stroke: '#fff', strokeWidth: 2 }}
                   animationDuration={2000}
                 />
               </LineChart>
@@ -2481,20 +2927,24 @@ const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
           </div>
         )}
         <div className="text-[10px] text-stone-500 text-center mt-1">
-          ככל שהקו גבוה יותר ⬆ הדירוג טוב יותר (מספר נמוך = מקום ראשון)
+          ככל שהקו גבוה יותר ⬆ הדירוג טוב יותר (1 = ראשון)
         </div>
       </div>
       
       {/* 3️⃣ גרף התפלגות תוצאות */}
-      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-4">
-        <h3 className="text-base md:text-lg font-bold text-amber-200 flex items-center gap-2 mb-3">
-          🥧 התפלגות תוצאות
-          <span className="text-xs text-stone-500 font-normal">סה״כ ב-{playerStats?.sessions || 0} מפגשים</span>
-        </h3>
+      <div className="rounded-2xl border border-purple-800/40 bg-gradient-to-br from-purple-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
+        <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
+          <h3 className="text-base md:text-lg font-bold text-purple-200 flex items-center gap-2">
+            🥧 התפלגות תוצאות
+          </h3>
+          <span className="text-xs text-purple-300/80 font-bold rounded-full bg-purple-900/40 border border-purple-700/40 px-2 py-0.5">
+            {playerStats?.sessions || 0} מפגשים
+          </span>
+        </div>
         {distributionData.length === 0 ? (
           <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
         ) : (
-          <div style={{ width: '100%', height: isMobile ? 240 : 300 }}>
+          <div style={{ width: '100%', height: isMobile ? 280 : 340 }} className="relative">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie 
@@ -2503,20 +2953,37 @@ const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
                   nameKey="name"
                   cx="50%"
                   cy="50%"
-                  outerRadius={isMobile ? 75 : 100}
-                  label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
-                  labelLine={{ stroke: '#78716c' }}
-                  animationDuration={2000}
+                  innerRadius={isMobile ? 50 : 65}
+                  outerRadius={isMobile ? 90 : 115}
+                  paddingAngle={3}
+                  label={({ name, value, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                  labelLine={{ stroke: '#78716c', strokeWidth: 1 }}
+                  animationDuration={1500}
                 >
                   {distributionData.map((d, i) => (
-                    <Cell key={i} fill={d.color} stroke="#0c0a09" strokeWidth={2} />
+                    <Cell 
+                      key={i} 
+                      fill={d.color} 
+                      stroke="#0c0a09" 
+                      strokeWidth={3}
+                    />
                   ))}
                 </Pie>
                 <Tooltip 
                   contentStyle={{ background: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', color: '#fff' }}
+                  formatter={(v) => [`${v} מפגשים`, '']}
                 />
               </PieChart>
             </ResponsiveContainer>
+            {/* טקסט במרכז ה-donut */}
+            {playerStats && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <div className="text-3xl md:text-4xl font-extrabold text-amber-300 tabular-nums">
+                  {((playerStats.wins / playerStats.sessions) * 100).toFixed(0)}%
+                </div>
+                <div className="text-xs text-stone-400 mt-1">אחוז ניצחונות</div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -6310,6 +6777,11 @@ export default function PokerApp() {
 
         {tab === 'charts' && (
           <div className="space-y-3">
+            {/* 🦢 תובנות אישיות - בראש הלשונית */}
+            <PersonalInsightsBox 
+              sessions={sessions} 
+              stats={stats} 
+              currentUser={currentUser} />
             <CumulativeChart sessions={sessions} stats={stats} fullscreen={false}
               onFullscreenToggle={() => setChartFullscreen(true)}
               selectedPlayers={selectedChartPlayers}
