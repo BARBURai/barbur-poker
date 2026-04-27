@@ -87,8 +87,11 @@ const calculateStats = (sessions, players) => {
       s.winRate = (s.wins / s.sessions) * 100;
       s.lossRate = (s.losses / s.sessions) * 100;
       s.tieRate = (s.ties / s.sessions) * 100;
+      // 🔥 רצף נוכחי לתצוגה - אותו ערך כמו currentStreak (חיובי=ניצחונות, שלילי=הפסדים)
+      s.currentStreakDisplay = s.currentStreak;
     } else {
       s.avg = 0; s.stdDev = 0; s.winRate = 0; s.lossRate = 0; s.tieRate = 0;
+      s.currentStreakDisplay = 0;
     }
   });
   return Object.values(stats).filter(s => s.sessions > 0).sort((a, b) => b.total - a.total);
@@ -314,7 +317,7 @@ const PodiumCard = ({ rank, player }) => {
           <div className="font-bold text-emerald-400">{player.winRate.toFixed(0)}%</div>
         </div>
         <div className="rounded-lg bg-stone-900/80 border border-stone-800 p-2 text-center">
-          <div className="text-stone-500">רצף מנצח</div>
+          <div className="text-stone-500">שיא רצף</div>
           <div className="font-bold text-amber-400">{player.maxStreak}</div>
         </div>
       </div>
@@ -526,16 +529,15 @@ const calculateStreak = (playerName, sessions) => {
 
 // 🔥 קומפוננטת להבה - SVG מצויר עם אנימציה
 // streak: מספר הניצחונות ברצף - קובע גודל וצבע הלהבה
+// מינימום 3 לסטריק (פחות מזה לא נחשב)
 const FlameIcon = ({ streak }) => {
-  if (streak < 2) return null;
+  if (streak < 3) return null;
   let size, intensity;
-  if (streak >= 7) { size = 22; intensity = 'mega'; }
-  else if (streak >= 5) { size = 19; intensity = 'high'; }
-  else if (streak >= 3) { size = 16; intensity = 'medium'; }
-  else { size = 14; intensity = 'low'; }
+  if (streak >= 7) { size = 24; intensity = 'mega'; }
+  else if (streak >= 5) { size = 20; intensity = 'high'; }
+  else { size = 17; intensity = 'medium'; } // 3-4
   
   const colors = {
-    low:    { outer: '#fbbf24', mid: '#f59e0b', inner: '#fde047' },
     medium: { outer: '#ea580c', mid: '#fb923c', inner: '#fbbf24' },
     high:   { outer: '#dc2626', mid: '#f97316', inner: '#fde047' },
     mega:   { outer: '#7f1d1d', mid: '#dc2626', inner: '#fbbf24' },
@@ -588,7 +590,8 @@ const MainLeaderboard = ({ stats, sessions }) => {
     { key: 'losses', label: 'הפסדים' },
     { key: 'ties', label: 'תיקו' },
     { key: 'winRate', label: '% ניצחון' },
-    { key: 'maxStreak', label: 'רצף מנצח' },
+    { key: 'maxStreak', label: 'שיא רצף' },
+    { key: 'currentStreakDisplay', label: 'רצף נוכחי' },
     { key: 'biggestWin', label: 'שיא רווח' },
     { key: 'biggestLoss', label: 'שיא הפסד' },
     { key: 'stdDev', label: 'סטיית תקן', tooltip: 'מדד לתנודתיות. נמוך=יציב, גבוה=תוצאות קיצוניות.' },
@@ -600,6 +603,10 @@ const MainLeaderboard = ({ stats, sessions }) => {
     if (key === 'winRate') return `${v.toFixed(0)}%`;
     if (key === 'biggestWin') return `+${v}`;
     if (key === 'stdDev') return v.toFixed(0);
+    if (key === 'currentStreakDisplay') {
+      if (v === 0) return '—';
+      return v > 0 ? `+${v}` : `${v}`; // +3 או -2
+    }
     return v;
   };
   const color = (v, key) => {
@@ -607,6 +614,10 @@ const MainLeaderboard = ({ stats, sessions }) => {
     if (key === 'wins' || key === 'biggestWin' || key === 'winRate') return 'text-emerald-400';
     if (key === 'losses' || key === 'biggestLoss') return 'text-rose-400';
     if (key === 'maxStreak') return 'text-amber-400';
+    if (key === 'currentStreakDisplay') {
+      if (v === 0) return 'text-stone-500';
+      return v > 0 ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold';
+    }
     if (key === 'stdDev') return 'text-stone-500';
     return 'text-stone-300';
   };
@@ -640,7 +651,8 @@ const MainLeaderboard = ({ stats, sessions }) => {
           <tbody>
             {stats.map((p, i) => {
               const rowBg = i % 2 === 0 ? 'bg-stone-950' : 'bg-stone-900/50';
-              const streak = calculateStreak(p.name, sessions); // 🔥 חישוב רצף נוכחי
+              // 🔥 רצף ניצחונות נוכחי - מהסטטיסטיקה. שלילי = ברצף הפסדים, אז מתעלמים
+              const streak = (p.currentStreak && p.currentStreak > 0) ? p.currentStreak : 0;
               return (
                 <tr key={p.name} className="group hover:bg-amber-950/10">
                   <td className={`sticky right-0 z-20 ${rowBg} group-hover:bg-amber-950/20 border-b border-l border-stone-800 px-3 py-3 font-bold text-stone-500 tabular-nums whitespace-nowrap shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]`}>
@@ -2234,6 +2246,117 @@ const calculateSettlements = (results) => {
   return transfers;
 };
 
+// ============================================================
+// 💸 מערכת תזכורות תשלום
+// ============================================================
+
+const PAYMENTS_STORAGE_KEY = 'poker_payment_reminders_v1';
+const PAYMENT_EXPIRY_DAYS = 7; // תזכורות פגות אוטומטית אחרי 7 ימים
+
+// טעינת תזכורות תשלום מ-localStorage
+const loadPaymentReminders = () => {
+  try {
+    const data = window.localStorage.getItem(PAYMENTS_STORAGE_KEY);
+    if (!data) return [];
+    const reminders = JSON.parse(data);
+    if (!Array.isArray(reminders)) return [];
+    // סינון תזכורות שפגו
+    const now = Date.now();
+    const expiryMs = PAYMENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+    return reminders.filter(r => {
+      const created = new Date(r.createdAt).getTime();
+      return (now - created) < expiryMs;
+    });
+  } catch (e) {
+    return [];
+  }
+};
+
+// שמירת תזכורות תשלום ל-localStorage
+const savePaymentReminders = (reminders) => {
+  try {
+    window.localStorage.setItem(PAYMENTS_STORAGE_KEY, JSON.stringify(reminders));
+  } catch (e) {
+    // localStorage לא זמין
+  }
+};
+
+// יצירת חתימה ייחודית לתזכורת (לזיהוי כפילויות)
+// signature = sessionDate + from + to + amount + type
+const reminderSignature = (r) => 
+  `${r.sessionDate}|${r.from}|${r.to}|${r.amount}|${r.type}`;
+
+// בניית תזכורות מערב שנשמר
+// session: {date, host, results, hostingPayment: {amount, recipient}}
+// מחזיר מערך של תזכורות חדשות
+const buildRemindersFromSession = (session) => {
+  const reminders = [];
+  const now = new Date().toISOString();
+  
+  if (!session || !session.results) return reminders;
+  
+  // 1. תזכורות settlement - מי חייב למי לפי חלוקת הצ׳יפים
+  const transfers = calculateSettlements(session.results);
+  transfers.forEach(t => {
+    reminders.push({
+      id: `settle_${session.date}_${t.from}_${t.to}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      sessionDate: session.date,
+      type: 'settlement', // settlement | hosting
+      from: t.from,
+      to: t.to,
+      amount: t.amount,
+      status: 'pending', // pending | marked_sent | confirmed
+      createdAt: now,
+    });
+  });
+  
+  // 2. תזכורות אירוח - כל משתתף משלם למארח
+  if (session.hostingPayment && session.hostingPayment.amount > 0 && session.hostingPayment.recipient) {
+    const participants = Object.keys(session.results);
+    const hostRecipient = session.hostingPayment.recipient;
+    const amount = session.hostingPayment.amount;
+    participants.forEach(name => {
+      if (name === hostRecipient) return; // המארח לא משלם לעצמו
+      reminders.push({
+        id: `host_${session.date}_${name}_${hostRecipient}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        sessionDate: session.date,
+        type: 'hosting',
+        from: name,
+        to: hostRecipient,
+        amount: amount,
+        status: 'pending',
+        createdAt: now,
+      });
+    });
+  }
+  
+  return reminders;
+};
+
+// פותח אפליקציית תשלום (Bit/PayBox) - העתקת מספר ופתיחת אפליקציה
+// app: 'bit' | 'paybox'
+const openPaymentApp = (phone, app) => {
+  // העתקה לקליפבורד - SYNC כדי לשמר user gesture
+  if (phone && navigator.clipboard) {
+    try {
+      navigator.clipboard.writeText(phone);
+    } catch (e) {
+      // fallback - input זמני
+      try {
+        const input = document.createElement('input');
+        input.value = phone;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+      } catch {}
+    }
+  }
+  // פתיחת האפליקציה - Universal Links
+  const url = app === 'bit' ? 'https://www.bitpay.co.il/app' : 'https://links.payboxapp.com/';
+  window.open(url, '_blank');
+};
+
 const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adminName }) => {
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [host, setHost] = useState('');
@@ -2246,6 +2369,12 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false); // מודל אישור איפוס
   const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
   const [savedEvening, setSavedEvening] = useState(false); // האם הערב כבר נשמר
+  // 🎉 אנימציית Confetti לרווח של המשתמש הנוכחי
+  const [confettiActive, setConfettiActive] = useState(false);
+  const [confettiShown, setConfettiShown] = useState(false);
+  // 💸 העברת אירוח - בחירת מקבל וסכום
+  const [hostingRecipient, setHostingRecipient] = useState(''); // שם המארח שמקבל את התשלום (ריק = לא לשלם)
+  const [hostingAmount, setHostingAmount] = useState(50); // 50 / 80 / 0 (אין אירוח)
 
   // שמירה אוטומטית של מצב הערב לאחסון מקומי בדפדפן
   useEffect(() => {
@@ -2340,6 +2469,34 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const balance = totalChipsOut - totalPot;
   const isBalanced = Math.abs(balance) < 0.01;
 
+  // 💸 סנכרון: כשמשנים את המארח (host), אם hostingRecipient ריק - מעדכן אוטומטית
+  useEffect(() => {
+    if (host && !hostingRecipient) {
+      setHostingRecipient(host);
+    }
+  }, [host, hostingRecipient]);
+
+  // 🎉 הפעלת Confetti כשהאיזון תקין והמשתמש הנוכחי ברווח
+  useEffect(() => {
+    if (!closing || !isBalanced || confettiShown) return;
+    const myParticipation = participants.find(p => p.name === adminName);
+    if (!myParticipation) return;
+    const myChips = Number(finalChips[adminName]) || 0;
+    const myProfit = myChips - myParticipation.buyIns * 20;
+    if (myProfit > 0) {
+      setConfettiActive(true);
+      setConfettiShown(true);
+    }
+  }, [closing, isBalanced, confettiShown, adminName, participants, finalChips]);
+
+  // איפוס דגלים כשהמודל נסגר
+  useEffect(() => {
+    if (!isOpen) {
+      setConfettiShown(false);
+      setConfettiActive(false);
+    }
+  }, [isOpen]);
+
   const handleStartClosing = () => {
     if (participants.length < 2) return alert('צריך לפחות 2 שחקנים');
     setClosing(true);
@@ -2361,10 +2518,33 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       results[p.name] = chips - buyIn;
     });
     
-    onSave({
+    // 💸 בניית אובייקט hostingPayment - אם יש מארח ויש סכום
+    const hostingPayment = (hostingRecipient && hostingAmount > 0) 
+      ? { recipient: hostingRecipient, amount: hostingAmount }
+      : null;
+    
+    const sessionData = {
       date: sessionDate, season: currentSeason, pot: totalPot, results,
-      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true
-    });
+      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true,
+      hostingPayment, // 💸
+    };
+    
+    onSave(sessionData);
+    
+    // 💸 יצירת תזכורות תשלום אוטומטית
+    try {
+      const newReminders = buildRemindersFromSession(sessionData);
+      if (newReminders.length > 0) {
+        const existing = loadPaymentReminders();
+        // מניעת כפילויות לפי signature
+        const existingSigs = new Set(existing.map(reminderSignature));
+        const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
+        savePaymentReminders([...existing, ...toAdd]);
+      }
+    } catch (e) {
+      console.warn('Failed to create payment reminders:', e);
+    }
+    
     setSavedEvening(true);
     reset();
     setHasLoadedSaved(false);
@@ -2383,10 +2563,31 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       results[p.name] = chips - buyIn;
     });
     
-    onSave({
+    const hostingPayment = (hostingRecipient && hostingAmount > 0) 
+      ? { recipient: hostingRecipient, amount: hostingAmount }
+      : null;
+    
+    const sessionData = {
       date: sessionDate, season: currentSeason, pot: totalPot, results,
-      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true
-    });
+      host: host || undefined, addedBy: adminName, addedAt: new Date().toISOString(), liveTracked: true,
+      hostingPayment, // 💸
+    };
+    
+    onSave(sessionData);
+    
+    // 💸 יצירת תזכורות תשלום
+    try {
+      const newReminders = buildRemindersFromSession(sessionData);
+      if (newReminders.length > 0) {
+        const existing = loadPaymentReminders();
+        const existingSigs = new Set(existing.map(reminderSignature));
+        const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
+        savePaymentReminders([...existing, ...toAdd]);
+      }
+    } catch (e) {
+      console.warn('Failed to create payment reminders:', e);
+    }
+    
     setSavedEvening(true);
   };
 
@@ -2574,6 +2775,71 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                     </div>
                   );
                 })}
+              </div>
+
+              {/* 💸 בלוק העברת אירוח */}
+              <div className="rounded-xl border border-purple-800/50 bg-purple-950/20 p-3 space-y-3">
+                <div className="font-bold text-purple-200 flex items-center gap-2">
+                  🏠 העברת אירוח
+                </div>
+                {/* שורה 1: בחירת מקבל */}
+                <div>
+                  <label className="block text-xs text-purple-300/80 mb-1.5">למי משלמים?</label>
+                  <select 
+                    value={hostingRecipient} 
+                    onChange={e => setHostingRecipient(e.target.value)}
+                    className="w-full rounded-lg border border-purple-700/50 bg-stone-900 px-3 py-2 text-white text-sm">
+                    <option value="">❌ ללא תשלום אירוח</option>
+                    {participants.map(p => (
+                      <option key={p.name} value={p.name}>
+                        {p.name === host ? `🏠 ${p.name} (מארח)` : `🍿 ${p.name}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {/* שורה 2: סכום למשתתף - רק אם נבחר מקבל */}
+                {hostingRecipient && (
+                  <div>
+                    <label className="block text-xs text-purple-300/80 mb-1.5">סכום למשתתף:</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button 
+                        type="button"
+                        onClick={() => setHostingAmount(50)}
+                        className={`rounded-lg px-3 py-2 text-sm font-bold border transition ${
+                          hostingAmount === 50 
+                            ? 'bg-purple-600 text-white border-purple-500' 
+                            : 'bg-stone-800 text-stone-400 border-stone-700 hover:bg-stone-700'
+                        }`}>
+                        50 ₪
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setHostingAmount(80)}
+                        className={`rounded-lg px-3 py-2 text-sm font-bold border transition ${
+                          hostingAmount === 80 
+                            ? 'bg-purple-600 text-white border-purple-500' 
+                            : 'bg-stone-800 text-stone-400 border-stone-700 hover:bg-stone-700'
+                        }`}>
+                        80 ₪ ⭐
+                      </button>
+                      <input 
+                        type="number"
+                        value={hostingAmount === 50 || hostingAmount === 80 ? '' : hostingAmount}
+                        onChange={e => setHostingAmount(Number(e.target.value) || 0)}
+                        placeholder="אחר"
+                        className="rounded-lg border border-stone-700 bg-stone-800 px-2 py-2 text-white text-center text-sm tabular-nums" />
+                    </div>
+                    {/* סיכום */}
+                    {hostingAmount > 0 && participants.length > 1 && (
+                      <div className="mt-2 text-xs text-purple-300/80 text-center">
+                        סה״כ: {hostingAmount} × {participants.length - 1} משתתפים = 
+                        <span className="font-bold text-purple-200"> {hostingAmount * (participants.length - 1)} ₪</span>
+                        {' → '}
+                        <span className="font-bold text-purple-100">{hostingRecipient}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className={`rounded-xl border-2 p-3 ${isBalanced ? 'border-emerald-600 bg-emerald-950/30' : 'border-rose-700 bg-rose-950/30'}`}>
@@ -3246,8 +3512,184 @@ const Confetti = ({ active, onComplete, message }) => {
   );
 };
 
+// ============================================================
+// 💸 קומפוננטת תזכורות תשלום בדשבורד
+// ============================================================
+// playerName: שם המשתמש הנוכחי
+// reminders: כל התזכורות מ-localStorage
+// phones: { 'רון': { phone: '0501234567', app: 'bit' }, ... }
+// onUpdateReminders: פונקציה לעדכון התזכורות
+const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) => {
+  if (!playerName || !reminders || reminders.length === 0) return null;
+  
+  // סינון תזכורות שרלוונטיות למשתמש
+  // toSend = הוא צריך לשלוח (from = הוא)
+  // toReceive = הוא אמור לקבל (to = הוא)
+  const toSend = reminders.filter(r => 
+    r.from === playerName && r.status !== 'confirmed'
+  );
+  const toReceive = reminders.filter(r => 
+    r.to === playerName && r.status !== 'confirmed'
+  );
+  
+  if (toSend.length === 0 && toReceive.length === 0) return null;
+  
+  // עדכון סטטוס של תזכורת
+  const updateStatus = (id, newStatus) => {
+    const updated = reminders.map(r => 
+      r.id === id ? { ...r, status: newStatus } : r
+    );
+    // אם confirmed - מחק
+    const filtered = newStatus === 'confirmed' 
+      ? updated.filter(r => r.id !== id)
+      : updated;
+    onUpdateReminders(filtered);
+  };
+  
+  // מחיקה של תזכורת (כפתור "כבר העברתי")
+  const removeReminder = (id) => {
+    onUpdateReminders(reminders.filter(r => r.id !== id));
+  };
+  
+  // לחיצה על כפתור Bit/PayBox
+  const handlePaymentApp = (reminder, app) => {
+    const recipientPhone = phones && phones[reminder.to];
+    const phoneNum = recipientPhone ? recipientPhone.phone : '';
+    openPaymentApp(phoneNum, app);
+    // סימון אוטומטי כ"שולח"
+    updateStatus(reminder.id, 'marked_sent');
+  };
+  
+  // סיכומים כספיים
+  const totalToSend = toSend.reduce((s, r) => s + r.amount, 0);
+  const totalToReceive = toReceive.reduce((s, r) => s + r.amount, 0);
+  
+  return (
+    <div className="rounded-2xl border border-amber-800/50 bg-gradient-to-br from-amber-950/30 to-stone-950/40 backdrop-blur p-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="font-bold text-amber-200 flex items-center gap-2">
+          💸 תזכורות תשלום
+        </div>
+        <div className="text-xs text-stone-500">
+          {toSend.length + toReceive.length} פעילות
+        </div>
+      </div>
+      
+      {/* בלוק "אני צריך לשלם" */}
+      {toSend.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-rose-300 font-bold">🔴 צריך להעביר</span>
+            <span className="text-rose-400 font-extrabold tabular-nums">{totalToSend} ₪</span>
+          </div>
+          {toSend.map(r => {
+            const recipientPhone = phones && phones[r.to];
+            const phoneNum = recipientPhone ? recipientPhone.phone : null;
+            const isHosting = r.type === 'hosting';
+            const isMarkedSent = r.status === 'marked_sent';
+            
+            return (
+              <div key={r.id} className={`rounded-lg border p-2.5 ${
+                isHosting 
+                  ? 'border-purple-800/50 bg-purple-950/20' 
+                  : 'border-stone-800 bg-stone-900/50'
+              } ${isMarkedSent ? 'opacity-60' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm">
+                    <span className="text-stone-100 font-bold">{r.amount} ₪</span>
+                    <span className="text-stone-400"> ל-</span>
+                    <span className="text-stone-100 font-bold">{r.to}</span>
+                    {isHosting && <span className="text-purple-300 text-xs"> (אירוח)</span>}
+                  </div>
+                  {isMarkedSent && (
+                    <span className="text-xs text-emerald-400">✓ סימנת כשולם</span>
+                  )}
+                </div>
+                {!isMarkedSent && (
+                  <div className="flex gap-1.5">
+                    {phoneNum && (
+                      <>
+                        <button 
+                          onClick={() => handlePaymentApp(r, 'bit')}
+                          className="flex-1 rounded bg-blue-600 hover:bg-blue-500 px-2 py-1.5 text-xs font-bold text-white">
+                          💙 Bit
+                        </button>
+                        <button 
+                          onClick={() => handlePaymentApp(r, 'paybox')}
+                          className="flex-1 rounded bg-purple-600 hover:bg-purple-500 px-2 py-1.5 text-xs font-bold text-white">
+                          💜 PayBox
+                        </button>
+                      </>
+                    )}
+                    <button 
+                      onClick={() => removeReminder(r.id)}
+                      title="כבר העברתי - הסר תזכורת"
+                      className="rounded bg-stone-800 hover:bg-stone-700 border border-stone-700 px-2 py-1.5 text-xs font-bold text-stone-300 whitespace-nowrap">
+                      ✓ כבר העברתי
+                    </button>
+                  </div>
+                )}
+                {!phoneNum && !isMarkedSent && (
+                  <div className="text-xs text-amber-400/80 mt-1">
+                    ⚠ אין טלפון של {r.to} - העבר ידנית ולחץ "כבר העברתי"
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      
+      {/* בלוק "אני אמור לקבל" */}
+      {toReceive.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-emerald-300 font-bold">🟢 לקבל</span>
+            <span className="text-emerald-400 font-extrabold tabular-nums">{totalToReceive} ₪</span>
+          </div>
+          {toReceive.map(r => {
+            const isHosting = r.type === 'hosting';
+            const isMarkedSent = r.status === 'marked_sent';
+            
+            return (
+              <div key={r.id} className={`rounded-lg border p-2.5 ${
+                isHosting 
+                  ? 'border-purple-800/50 bg-purple-950/20' 
+                  : 'border-stone-800 bg-stone-900/50'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm">
+                    <span className="text-stone-100 font-bold">{r.amount} ₪</span>
+                    <span className="text-stone-400"> מ-</span>
+                    <span className="text-stone-100 font-bold">{r.from}</span>
+                    {isHosting && <span className="text-purple-300 text-xs"> (אירוח)</span>}
+                  </div>
+                  {isMarkedSent ? (
+                    <span className="text-xs text-amber-400">✓ סימן ששלח</span>
+                  ) : (
+                    <span className="text-xs text-stone-500">⏳ ממתין</span>
+                  )}
+                </div>
+                <button 
+                  onClick={() => updateStatus(r.id, 'confirmed')}
+                  className={`w-full rounded px-3 py-1.5 text-xs font-bold transition ${
+                    isMarkedSent 
+                      ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                      : 'bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300'
+                  }`}>
+                  ✓ קיבלתי
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ===== דשבורד קומפקטי =====
-const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile }) => {
+const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders }) => {
   // 🎉 Confetti בכניסה - אם המשתמש ניצח בערב האחרון ועוד לא ראה
   const [confettiActive, setConfettiActive] = useState(false);
   const [confettiMessage, setConfettiMessage] = useState('');
@@ -3277,6 +3719,13 @@ const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGo
   
   return (
     <div className="space-y-3">
+      {/* 💸 תזכורות תשלום - בראש הדשבורד */}
+      <PaymentReminders 
+        playerName={currentUser}
+        reminders={paymentReminders || []}
+        phones={phones || {}}
+        onUpdateReminders={onUpdateReminders}
+      />
       <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
       <NextHostsCarouselCompact hostingSchedule={hostingSchedule} onSeeAll={onGoToHosting} />
       <TopThreeCarousel stats={stats} />
@@ -4472,6 +4921,25 @@ export default function PokerApp() {
   // 🆕 פרטי תשלום של שחקנים: { 'רון': { phone: '0501234567', app: 'bit' }, ... }
   const [phones, setPhones] = useState({});
   
+  // 💸 תזכורות תשלום (נטען מ-localStorage)
+  const [paymentReminders, setPaymentReminders] = useState([]);
+  
+  // טעינת תזכורות מ-localStorage בעת טעינת האפליקציה
+  useEffect(() => {
+    setPaymentReminders(loadPaymentReminders());
+    // טעינה מחדש כל 30 שניות (במקרה שמכשיר אחר עדכן)
+    const interval = setInterval(() => {
+      setPaymentReminders(loadPaymentReminders());
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // 💸 פונקציה לעדכון תזכורות (מועברת ל-PaymentReminders)
+  const handleUpdateReminders = (newReminders) => {
+    setPaymentReminders(newReminders);
+    savePaymentReminders(newReminders);
+  };
+  
   // 🆕 מצב מסך הזדהות (טלפון) - מוצג למשתמש חדש שאין לו טלפון
   const [phoneSetupOpen, setPhoneSetupOpen] = useState(false);
   
@@ -4992,6 +5460,8 @@ export default function PokerApp() {
     const updatedPlayers = newNames.length > 0 ? [...players, ...newNames] : players;
     if (newNames.length > 0) setPlayers(updatedPlayers);
     await persistSessions(updated, updatedPlayers);
+    // 💸 רענון תזכורות תשלום (LiveSessionModal יצר תזכורות חדשות ב-localStorage)
+    setPaymentReminders(loadPaymentReminders());
   };
 
   const handleDeleteSession = async (date) => {
@@ -5219,6 +5689,9 @@ export default function PokerApp() {
             selectedChartPlayers={selectedChartPlayers}
             setSelectedChartPlayers={setSelectedChartPlayers}
             isMobile={isMobile}
+            paymentReminders={paymentReminders}
+            phones={phones}
+            onUpdateReminders={handleUpdateReminders}
           />
         )}
 
