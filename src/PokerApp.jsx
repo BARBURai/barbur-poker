@@ -9,7 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.1.0 - 27/04 בוקר';
+const APP_VERSION = 'v2.3.0';
+const APP_BUILD_TIME = '27/04/2026 10:13';
+const APP_NOTES = 'מסנן שחקנים פעילים + ±20 + יומית + 0 בתיקו';
 
 
 // ===== הרשאות מנהל =====
@@ -512,6 +514,19 @@ const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, sele
 // ===== טבלה ראשית =====
 const MainLeaderboard = ({ stats, sessions }) => {
   const latestDate = getLatestSessionDate(sessions);
+  // 🎯 מסנן שחקנים פעילים - לפי אחוז מסך המפגשים בעונה
+  // 'all' = כולם, 10/15/20 = מינימום אחוז השתתפות
+  const [activityFilter, setActivityFilter] = useState('all');
+  
+  // חישוב הסינון
+  const totalSessions = sessions.length;
+  const filteredStats = useMemo(() => {
+    if (activityFilter === 'all') return stats;
+    const minPct = parseInt(activityFilter); // 10, 15, 20
+    const minSessions = Math.max(1, Math.ceil(totalSessions * minPct / 100));
+    return stats.filter(p => p.sessions >= minSessions);
+  }, [stats, activityFilter, totalSessions]);
+  
   const columns = [
     { key: 'total', label: 'רווח' },
     { key: 'sessions', label: 'מפגשים' },
@@ -559,12 +574,42 @@ const MainLeaderboard = ({ stats, sessions }) => {
         <h3 className="text-lg md:text-xl font-bold text-amber-200 flex items-center gap-2">
           <Trophy className="h-5 w-5" />
           טבלת דירוג ראשית
+          <span className="text-xs text-stone-400 font-normal">
+            ({filteredStats.length}/{stats.length})
+          </span>
         </h3>
-        {latestDate && (
-          <div className="text-xs text-stone-400">
-            מעודכן עד: <span className="text-amber-300 font-bold">{new Date(latestDate).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* 🎯 מסנן שחקנים פעילים */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-stone-400">סינון:</span>
+            <div className="flex rounded-lg border border-stone-700 bg-stone-900 p-0.5">
+              <button onClick={() => setActivityFilter('all')}
+                className={`px-2 py-1 text-[11px] rounded font-bold transition ${activityFilter === 'all' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
+                הכל
+              </button>
+              <button onClick={() => setActivityFilter('10')}
+                title={`לפחות ${Math.max(1, Math.ceil(totalSessions * 10 / 100))} מפגשים מתוך ${totalSessions}`}
+                className={`px-2 py-1 text-[11px] rounded font-bold transition ${activityFilter === '10' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
+                10%
+              </button>
+              <button onClick={() => setActivityFilter('15')}
+                title={`לפחות ${Math.max(1, Math.ceil(totalSessions * 15 / 100))} מפגשים מתוך ${totalSessions}`}
+                className={`px-2 py-1 text-[11px] rounded font-bold transition ${activityFilter === '15' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
+                15%
+              </button>
+              <button onClick={() => setActivityFilter('20')}
+                title={`לפחות ${Math.max(1, Math.ceil(totalSessions * 20 / 100))} מפגשים מתוך ${totalSessions}`}
+                className={`px-2 py-1 text-[11px] rounded font-bold transition ${activityFilter === '20' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
+                20%
+              </button>
+            </div>
           </div>
-        )}
+          {latestDate && (
+            <div className="text-xs text-stone-400">
+              מעודכן עד: <span className="text-amber-300 font-bold">{new Date(latestDate).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span>
+            </div>
+          )}
+        </div>
       </div>
       <div className="relative overflow-auto rounded-b-2xl" dir="rtl" style={{ maxHeight: '70vh', WebkitOverflowScrolling: 'touch' }}>
         <table className="w-full text-sm border-collapse">
@@ -580,7 +625,7 @@ const MainLeaderboard = ({ stats, sessions }) => {
             </tr>
           </thead>
           <tbody>
-            {stats.map((p, i) => {
+            {filteredStats.map((p, i) => {
               const rowBg = i % 2 === 0 ? 'bg-stone-950' : 'bg-stone-900/50';
               return (
                 <tr key={p.name} className="group hover:bg-amber-950/10">
@@ -3051,17 +3096,37 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                 {participants.map(p => {
                   const chips = Number(finalChips[p.name]) || 0;
                   const profit = chips - p.buyIns * 20;
+                  const currentChips = Number(finalChips[p.name]) || 0;
                   return (
                     <div key={p.name} className="rounded-xl border border-stone-800 bg-stone-900/50 p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex-1">
-                          <div className="font-bold text-stone-100">{p.name}</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-bold text-stone-100 truncate">{p.name}</div>
                           <div className="text-xs text-stone-500">השקעה: {p.buyIns * 20} ₪</div>
                         </div>
-                        <input type="number" value={finalChips[p.name]} onChange={e => setFinalChips({...finalChips, [p.name]: e.target.value})}
-                          placeholder="צ׳יפים בסיום"
-                          className="w-28 rounded-lg border border-stone-700 bg-stone-800 px-3 py-2 text-white text-center text-sm tabular-nums" />
-                        <div className={`w-20 text-left text-base font-extrabold tabular-nums ${profit > 0 ? 'text-emerald-400' : profit < 0 ? 'text-rose-400' : 'text-stone-500'}`}>
+                        {/* כפתור הורדה של 20 */}
+                        <button 
+                          type="button"
+                          onClick={() => setFinalChips({...finalChips, [p.name]: Math.max(0, currentChips - 20)})}
+                          className="w-9 h-9 flex-shrink-0 rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 font-bold text-lg active:scale-95 transition"
+                          title="הפחת 20">
+                          −
+                        </button>
+                        <input 
+                          type="number" 
+                          value={finalChips[p.name]} 
+                          onChange={e => setFinalChips({...finalChips, [p.name]: e.target.value})}
+                          placeholder="0"
+                          className="w-20 rounded-lg border border-stone-700 bg-stone-800 px-2 py-2 text-white text-center text-sm tabular-nums font-bold" />
+                        {/* כפתור הוספה של 20 */}
+                        <button 
+                          type="button"
+                          onClick={() => setFinalChips({...finalChips, [p.name]: currentChips + 20})}
+                          className="w-9 h-9 flex-shrink-0 rounded-lg bg-amber-700 hover:bg-amber-600 border border-amber-600 text-white font-bold text-lg active:scale-95 transition"
+                          title="הוסף 20">
+                          +
+                        </button>
+                        <div className={`w-16 text-left text-base font-extrabold tabular-nums flex-shrink-0 ${profit > 0 ? 'text-emerald-400' : profit < 0 ? 'text-rose-400' : 'text-stone-500'}`}>
                           {profit > 0 ? '+' : ''}{profit}
                         </div>
                       </div>
@@ -5704,8 +5769,8 @@ export default function PokerApp() {
         <footer className="mt-10 pb-6 text-center text-xs text-stone-600 tracking-[0.15em] uppercase">
           {sessions.length} מפגשים • {stats.length} שחקנים • עונת {selectedSeason} • 
           <span className="text-amber-600/60"> BARBUR AI</span>
-          <div className="mt-2 text-[10px] text-stone-700 tracking-normal normal-case">
-            {APP_VERSION}
+          <div className="mt-2 text-[11px] text-stone-100 tracking-normal normal-case font-mono">
+            {APP_VERSION} • {APP_BUILD_TIME} • {APP_NOTES}
           </div>
         </footer>
       </div>
