@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.9.0';
-const APP_BUILD_TIME = '27/04/2026 12:33';
-const APP_NOTES = '🦢 ברבור בקצה הקו בגרף המצטבר';
+const APP_VERSION = 'v2.10.0';
+const APP_BUILD_TIME = '27/04/2026 12:39';
+const APP_NOTES = 'גרף בראש הדשבורד + ברבור גדול וצבעוני + אנימציה איטית';
 
 
 // ===== הרשאות מנהל =====
@@ -465,21 +465,39 @@ const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, sele
   const colors = ['#fbbf24', '#34d399', '#60a5fa', '#f472b6', '#a78bfa', '#fb923c', '#2dd4bf', '#f87171', '#c084fc', '#facc15', '#4ade80', '#38bdf8', '#fb7185', '#818cf8', '#f59e0b'];
   
   // 🦢 Dot מותאם - מציג ברבור רק בנקודה האחרונה של כל קו
+  // כל ברבור עם רקע צבעוני שתואם לצבע הקו - כדי להבדיל בין שחקנים
   const SwanDot = (props) => {
     const { cx, cy, payload, dataKey, stroke, value } = props;
     if (cx === undefined || cy === undefined || cx === null || cy === null) return null;
     if (value === undefined || value === null) return null;
-    // הנקודה האחרונה מסומנת ב-_isLast: true
     if (!payload || !payload._isLast) return null;
     
-    const size = 28;
+    const size = 44; // גדול יותר
+    const halfSize = size / 2;
+    const ringRadius = halfSize + 2;
+    const swanSize = size - 8;
+    const swanOffset = (size - swanSize) / 2;
+    
     return (
-      <g transform={`translate(${cx - size/2}, ${cy - size/2})`}>
+      <g transform={`translate(${cx - halfSize}, ${cy - halfSize})`} style={{ pointerEvents: 'none' }}>
+        {/* רקע צבעוני - עיגול בצבע השחקן */}
+        <circle 
+          cx={halfSize} 
+          cy={halfSize} 
+          r={ringRadius} 
+          fill={stroke}
+          opacity="0.92"
+          stroke="white"
+          strokeWidth="2"
+          style={{ filter: `drop-shadow(0 2px 4px rgba(0,0,0,0.5))` }}
+        />
+        {/* ברבור */}
         <image 
           href={SWAN_IMG}
-          width={size}
-          height={size}
-          style={{ filter: `drop-shadow(0 1px 2px ${stroke})` }}
+          x={swanOffset}
+          y={swanOffset}
+          width={swanSize}
+          height={swanSize}
         />
       </g>
     );
@@ -516,7 +534,17 @@ const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, sele
             <Tooltip contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '12px' }} labelStyle={{ color: '#fbbf24' }} />
             {!isMobile && <Legend wrapperStyle={{ fontSize: '12px', fontFamily: 'Assistant' }} />}
             {selectedPlayers.map((name, i) => (
-              <Line key={name} type="monotone" dataKey={name} stroke={colors[i % colors.length]} strokeWidth={2} dot={<SwanDot />} activeDot={{ r: 5 }} />
+              <Line 
+                key={name} 
+                type="monotone" 
+                dataKey={name} 
+                stroke={colors[i % colors.length]} 
+                strokeWidth={3}
+                dot={<SwanDot />} 
+                activeDot={{ r: 6 }}
+                animationDuration={3500}
+                animationEasing="ease-out"
+              />
             ))}
           </LineChart>
         </ResponsiveContainer>
@@ -4030,9 +4058,7 @@ const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGo
         onUpdateReminders={onUpdateReminders || (() => {})}
       />
       <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
-      <NextHostsCarouselCompact hostingSchedule={hostingSchedule} onSeeAll={onGoToHosting} />
-      <TopThreeCarousel stats={stats} />
-      <SpecialStatsCarousel stats={stats} />
+      {/* 📈 הגרף המצטבר - אחרי המיקום שלך בדירוג */}
       <div className="rounded-2xl border border-stone-800 bg-stone-950/40 backdrop-blur p-2">
         <CumulativeChart sessions={sessions} stats={stats} fullscreen={false}
           onFullscreenToggle={onFullscreenToggle}
@@ -4040,6 +4066,9 @@ const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGo
           onPlayersChange={setSelectedChartPlayers}
           isMobile={isMobile} />
       </div>
+      <NextHostsCarouselCompact hostingSchedule={hostingSchedule} onSeeAll={onGoToHosting} />
+      <TopThreeCarousel stats={stats} />
+      <SpecialStatsCarousel stats={stats} />
       {/* 📋 ארכיון תשלומים - בתחתית הדשבורד */}
       <PaymentArchive 
         playerName={currentUser}
