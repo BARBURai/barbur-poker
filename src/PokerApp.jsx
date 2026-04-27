@@ -2159,180 +2159,6 @@ const calculateSettlements = (results) => {
   return transfers;
 };
 
-// 🎉 קומפוננטת Confetti - 4 צינורות מים שיורים ברבורים
-const Confetti = ({ active, onComplete, message }) => {
-  const SOURCES = useMemo(() => [
-    { side: 'left',  offsetPct: 12, angle: 60 },
-    { side: 'left',  offsetPct: 32, angle: 80 },
-    { side: 'right', offsetPct: 32, angle: 80 },
-    { side: 'right', offsetPct: 12, angle: 60 },
-  ], []);
-  
-  const swans = useMemo(() => {
-    const all = [];
-    SOURCES.forEach((src, srcIdx) => {
-      for (let i = 0; i < 18; i++) {
-        const directionMultiplier = src.side === 'left' ? 1 : -1;
-        const angle = src.angle + (Math.random() - 0.5) * 30;
-        const distance = 200 + Math.random() * 250;
-        const radians = (angle * Math.PI) / 180;
-        const peakX = Math.cos(radians) * distance * directionMultiplier;
-        const peakY = -Math.sin(radians) * distance;
-        const driftX = (Math.random() - 0.5) * 80;
-        all.push({
-          id: srcIdx * 100 + i,
-          side: src.side,
-          offsetPct: src.offsetPct,
-          peakX, peakY,
-          fallX: peakX + driftX,
-          fallY: -peakY * 1.3,
-          delay: Math.random() * 1.2,
-          duration: 4 + Math.random() * 2,
-          flipped: directionMultiplier < 0,
-          bobDelay: Math.random() * 1.5,
-          bobDuration: 1.2 + Math.random() * 0.8,
-          size: 28 + Math.random() * 12,
-        });
-      }
-    });
-    return all;
-  }, [active, SOURCES]);
-  
-  useEffect(() => {
-    if (!active) return;
-    const timer = setTimeout(() => {
-      if (onComplete) onComplete();
-    }, 7000);
-    return () => clearTimeout(timer);
-  }, [active, onComplete]);
-  
-  if (!active) return null;
-  
-  const renderPipe = (size, idSuffix) => {
-    const isLarge = size === 'large';
-    const w = isLarge ? 46 : 40;
-    const h = isLarge ? 150 : 125;
-    return (
-      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id={`waterPipe-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#1e3a5f"/>
-            <stop offset="15%" stopColor="#3b6996"/>
-            <stop offset="40%" stopColor="#7eb1d7"/>
-            <stop offset="55%" stopColor="#b8d4e8"/>
-            <stop offset="75%" stopColor="#5b8bb5"/>
-            <stop offset="100%" stopColor="#1e3a5f"/>
-          </linearGradient>
-          <linearGradient id={`coupling-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#0f172a"/>
-            <stop offset="20%" stopColor="#334155"/>
-            <stop offset="50%" stopColor="#94a3b8"/>
-            <stop offset="80%" stopColor="#334155"/>
-            <stop offset="100%" stopColor="#0f172a"/>
-          </linearGradient>
-          <radialGradient id={`water-${idSuffix}`} cx="50%" cy="50%" r="60%">
-            <stop offset="0%" stopColor="#67e8f9"/>
-            <stop offset="60%" stopColor="#0891b2"/>
-            <stop offset="100%" stopColor="#0e7490"/>
-          </radialGradient>
-        </defs>
-        {isLarge ? (
-          <>
-            <rect x="11" y="35" width="24" height="100" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <rect x="16" y="35" width="2" height="100" fill="white" opacity="0.5"/>
-            <ellipse cx="23" cy="135" rx="14" ry="3" fill="#0f172a"/>
-            <rect x="9" y="128" width="28" height="9" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <rect x="7" y="78" width="32" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <circle cx="11" cy="85" r="1.5" fill="#1e293b"/>
-            <circle cx="35" cy="85" r="1.5" fill="#1e293b"/>
-            <rect x="6" y="20" width="34" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <circle cx="10" cy="27" r="1.5" fill="#1e293b"/>
-            <circle cx="36" cy="27" r="1.5" fill="#1e293b"/>
-            <ellipse cx="23" cy="20" rx="17" ry="5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <ellipse cx="20" cy="18.5" rx="5" ry="1" fill="white" opacity="0.7"/>
-          </>
-        ) : (
-          <>
-            <rect x="9" y="30" width="22" height="85" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <rect x="14" y="30" width="2" height="85" fill="white" opacity="0.5"/>
-            <ellipse cx="20" cy="115" rx="12" ry="3" fill="#0f172a"/>
-            <rect x="7" y="108" width="26" height="8" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <rect x="5" y="65" width="30" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <circle cx="9" cy="71.5" r="1.3" fill="#1e293b"/>
-            <circle cx="31" cy="71.5" r="1.3" fill="#1e293b"/>
-            <rect x="4" y="17" width="32" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <circle cx="8" cy="23.5" r="1.3" fill="#1e293b"/>
-            <circle cx="32" cy="23.5" r="1.3" fill="#1e293b"/>
-            <ellipse cx="20" cy="17" rx="16" ry="4.5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
-            <ellipse cx="17" cy="15.5" rx="4" ry="0.8" fill="white" opacity="0.7"/>
-          </>
-        )}
-      </svg>
-    );
-  };
-  
-  return (
-    <div className="fixed inset-0 pointer-events-none z-[200] overflow-hidden">
-      {message && (
-        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center animate-confetti-message">
-          <div className="rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 border-2 border-amber-400 px-6 py-4 shadow-2xl shadow-amber-900/50">
-            <div className="text-2xl md:text-3xl font-extrabold text-white whitespace-nowrap">
-              {message}
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="absolute" style={{ bottom: '8%', left: '6%', transform: 'rotate(-25deg)', transformOrigin: 'bottom center' }}>
-        {renderPipe('large', 'L')}
-      </div>
-      <div className="absolute" style={{ bottom: '8%', left: '30%', transform: 'rotate(-12deg)', transformOrigin: 'bottom center' }}>
-        {renderPipe('medium', 'LC')}
-      </div>
-      <div className="absolute" style={{ bottom: '8%', right: '30%', transform: 'rotate(12deg)', transformOrigin: 'bottom center' }}>
-        {renderPipe('medium', 'RC')}
-      </div>
-      <div className="absolute" style={{ bottom: '8%', right: '6%', transform: 'rotate(25deg)', transformOrigin: 'bottom center' }}>
-        {renderPipe('large', 'R')}
-      </div>
-      {swans.map(s => (
-        <div
-          key={s.id}
-          className="absolute"
-          style={{
-            bottom: 'calc(8% + 140px)',
-            [s.side]: `${s.offsetPct}%`,
-            width: `${s.size}px`,
-            height: `${s.size}px`,
-            '--peak-x': `${s.peakX}px`,
-            '--peak-y': `${s.peakY}px`,
-            '--fall-x': `${s.fallX}px`,
-            '--fall-y': `${s.fallY}px`,
-            animation: `swan-arc ${s.duration}s ${s.delay}s ease-out forwards`,
-            opacity: 0,
-            willChange: 'transform, opacity',
-          }}>
-          <div style={{
-            animation: `swan-bob ${s.bobDuration}s ${s.bobDelay}s ease-in-out infinite`,
-            transformOrigin: 'center',
-          }}>
-            <img 
-              src={SWAN_IMG}
-              alt="ברבור"
-              width={s.size}
-              height={s.size}
-              style={{ 
-                transform: s.flipped ? 'scaleX(-1)' : 'none', 
-                display: 'block',
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
-              }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-};
-
 const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adminName }) => {
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [host, setHost] = useState('');
@@ -2345,9 +2171,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false); // מודל אישור איפוס
   const [hasLoadedSaved, setHasLoadedSaved] = useState(false);
   const [savedEvening, setSavedEvening] = useState(false); // האם הערב כבר נשמר
-  // 🎉 אנימציית Confetti לרווח של המשתמש הנוכחי
-  const [confettiActive, setConfettiActive] = useState(false);
-  const [confettiShown, setConfettiShown] = useState(false);
 
   // שמירה אוטומטית של מצב הערב לאחסון מקומי בדפדפן
   useEffect(() => {
@@ -2441,27 +2264,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const totalChipsOut = Object.values(finalChips).reduce((sum, c) => sum + (Number(c) || 0), 0);
   const balance = totalChipsOut - totalPot;
   const isBalanced = Math.abs(balance) < 0.01;
-
-  // 🎉 הפעלת Confetti כשהאיזון תקין והמשתמש הנוכחי ברווח
-  useEffect(() => {
-    if (!closing || !isBalanced || confettiShown) return;
-    const myParticipation = participants.find(p => p.name === adminName);
-    if (!myParticipation) return;
-    const myChips = Number(finalChips[adminName]) || 0;
-    const myProfit = myChips - myParticipation.buyIns * 20;
-    if (myProfit > 0) {
-      setConfettiActive(true);
-      setConfettiShown(true);
-    }
-  }, [closing, isBalanced, confettiShown, adminName, participants, finalChips]);
-
-  // איפוס דגל confetti כשהמודל נסגר
-  useEffect(() => {
-    if (!isOpen) {
-      setConfettiShown(false);
-      setConfettiActive(false);
-    }
-  }, [isOpen]);
 
   const handleStartClosing = () => {
     if (participants.length < 2) return alert('צריך לפחות 2 שחקנים');
@@ -2776,20 +2578,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
           </div>
         </div>
       )}
-      
-      {/* 🎉 אנימציית Confetti לרווח */}
-      <Confetti 
-        active={confettiActive} 
-        onComplete={() => setConfettiActive(false)}
-        message={(() => {
-          if (!adminName) return '🚰 צינורות פתוחים!';
-          const myParticipation = participants.find(p => p.name === adminName);
-          if (!myParticipation) return '🚰 צינורות פתוחים!';
-          const myChips = Number(finalChips[adminName]) || 0;
-          const myProfit = myChips - myParticipation.buyIns * 20;
-          return `🚰 צינורות פתוחים! +${myProfit} ₪`;
-        })()}
-      />
     </div>
   );
 };
@@ -3208,6 +2996,181 @@ const PeriodicTables = ({ allSessions, players }) => {
 };
 
 
+// 🎉 קומפוננטת Confetti - אפקט חגיגה עם 4 צינורות מים שיורים ברבורים
+// מופעלת בדשבורד כשמזהים שהמשתמש זכה בערב האחרון
+const Confetti = ({ active, onComplete, message }) => {
+  const SOURCES = useMemo(() => [
+    { side: 'left',  offsetPct: 12, angle: 60 },
+    { side: 'left',  offsetPct: 32, angle: 80 },
+    { side: 'right', offsetPct: 32, angle: 80 },
+    { side: 'right', offsetPct: 12, angle: 60 },
+  ], []);
+  
+  const swans = useMemo(() => {
+    const all = [];
+    SOURCES.forEach((src, srcIdx) => {
+      for (let i = 0; i < 18; i++) {
+        const directionMultiplier = src.side === 'left' ? 1 : -1;
+        const angle = src.angle + (Math.random() - 0.5) * 30;
+        const distance = 200 + Math.random() * 250;
+        const radians = (angle * Math.PI) / 180;
+        const peakX = Math.cos(radians) * distance * directionMultiplier;
+        const peakY = -Math.sin(radians) * distance;
+        const driftX = (Math.random() - 0.5) * 80;
+        all.push({
+          id: srcIdx * 100 + i,
+          side: src.side,
+          offsetPct: src.offsetPct,
+          peakX, peakY,
+          fallX: peakX + driftX,
+          fallY: -peakY * 1.3,
+          delay: Math.random() * 1.2,
+          duration: 4 + Math.random() * 2,
+          flipped: directionMultiplier < 0,
+          bobDelay: Math.random() * 1.5,
+          bobDuration: 1.2 + Math.random() * 0.8,
+          size: 28 + Math.random() * 12,
+        });
+      }
+    });
+    return all;
+  }, [active, SOURCES]);
+  
+  useEffect(() => {
+    if (!active) return;
+    const timer = setTimeout(() => {
+      if (onComplete) onComplete();
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [active, onComplete]);
+  
+  if (!active) return null;
+  
+  const renderPipe = (size, idSuffix) => {
+    const isLarge = size === 'large';
+    const w = isLarge ? 46 : 40;
+    const h = isLarge ? 150 : 125;
+    return (
+      <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id={`waterPipe-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#1e3a5f"/>
+            <stop offset="15%" stopColor="#3b6996"/>
+            <stop offset="40%" stopColor="#7eb1d7"/>
+            <stop offset="55%" stopColor="#b8d4e8"/>
+            <stop offset="75%" stopColor="#5b8bb5"/>
+            <stop offset="100%" stopColor="#1e3a5f"/>
+          </linearGradient>
+          <linearGradient id={`coupling-${idSuffix}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#0f172a"/>
+            <stop offset="20%" stopColor="#334155"/>
+            <stop offset="50%" stopColor="#94a3b8"/>
+            <stop offset="80%" stopColor="#334155"/>
+            <stop offset="100%" stopColor="#0f172a"/>
+          </linearGradient>
+          <radialGradient id={`water-${idSuffix}`} cx="50%" cy="50%" r="60%">
+            <stop offset="0%" stopColor="#67e8f9"/>
+            <stop offset="60%" stopColor="#0891b2"/>
+            <stop offset="100%" stopColor="#0e7490"/>
+          </radialGradient>
+        </defs>
+        {isLarge ? (
+          <>
+            <rect x="11" y="35" width="24" height="100" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="16" y="35" width="2" height="100" fill="white" opacity="0.5"/>
+            <ellipse cx="23" cy="135" rx="14" ry="3" fill="#0f172a"/>
+            <rect x="9" y="128" width="28" height="9" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="7" y="78" width="32" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="11" cy="85" r="1.5" fill="#1e293b"/>
+            <circle cx="35" cy="85" r="1.5" fill="#1e293b"/>
+            <rect x="6" y="20" width="34" height="14" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="10" cy="27" r="1.5" fill="#1e293b"/>
+            <circle cx="36" cy="27" r="1.5" fill="#1e293b"/>
+            <ellipse cx="23" cy="20" rx="17" ry="5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <ellipse cx="20" cy="18.5" rx="5" ry="1" fill="white" opacity="0.7"/>
+          </>
+        ) : (
+          <>
+            <rect x="9" y="30" width="22" height="85" fill={`url(#waterPipe-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="14" y="30" width="2" height="85" fill="white" opacity="0.5"/>
+            <ellipse cx="20" cy="115" rx="12" ry="3" fill="#0f172a"/>
+            <rect x="7" y="108" width="26" height="8" rx="1" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <rect x="5" y="65" width="30" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="9" cy="71.5" r="1.3" fill="#1e293b"/>
+            <circle cx="31" cy="71.5" r="1.3" fill="#1e293b"/>
+            <rect x="4" y="17" width="32" height="13" rx="2" fill={`url(#coupling-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <circle cx="8" cy="23.5" r="1.3" fill="#1e293b"/>
+            <circle cx="32" cy="23.5" r="1.3" fill="#1e293b"/>
+            <ellipse cx="20" cy="17" rx="16" ry="4.5" fill={`url(#water-${idSuffix})`} stroke="#0f172a" strokeWidth="1"/>
+            <ellipse cx="17" cy="15.5" rx="4" ry="0.8" fill="white" opacity="0.7"/>
+          </>
+        )}
+      </svg>
+    );
+  };
+  
+  return (
+    <div className="fixed inset-0 pointer-events-none z-[200] overflow-hidden">
+      {message && (
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center animate-confetti-message">
+          <div className="rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 border-2 border-amber-400 px-6 py-4 shadow-2xl shadow-amber-900/50">
+            <div className="text-2xl md:text-3xl font-extrabold text-white whitespace-nowrap">
+              {message}
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="absolute" style={{ bottom: '8%', left: '6%', transform: 'rotate(-25deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('large', 'L')}
+      </div>
+      <div className="absolute" style={{ bottom: '8%', left: '30%', transform: 'rotate(-12deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('medium', 'LC')}
+      </div>
+      <div className="absolute" style={{ bottom: '8%', right: '30%', transform: 'rotate(12deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('medium', 'RC')}
+      </div>
+      <div className="absolute" style={{ bottom: '8%', right: '6%', transform: 'rotate(25deg)', transformOrigin: 'bottom center' }}>
+        {renderPipe('large', 'R')}
+      </div>
+      {swans.map(s => (
+        <div
+          key={s.id}
+          className="absolute"
+          style={{
+            bottom: 'calc(8% + 140px)',
+            [s.side]: `${s.offsetPct}%`,
+            width: `${s.size}px`,
+            height: `${s.size}px`,
+            '--peak-x': `${s.peakX}px`,
+            '--peak-y': `${s.peakY}px`,
+            '--fall-x': `${s.fallX}px`,
+            '--fall-y': `${s.fallY}px`,
+            animation: `swan-arc ${s.duration}s ${s.delay}s ease-out forwards`,
+            opacity: 0,
+            willChange: 'transform, opacity',
+          }}>
+          <div style={{
+            animation: `swan-bob ${s.bobDuration}s ${s.bobDelay}s ease-in-out infinite`,
+            transformOrigin: 'center',
+          }}>
+            <img 
+              src={SWAN_IMG}
+              alt="ברבור"
+              width={s.size}
+              height={s.size}
+              style={{ 
+                transform: s.flipped ? 'scaleX(-1)' : 'none', 
+                display: 'block',
+                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+              }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // ===== דשבורד קומפקטי =====
 const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile }) => {
   // 🎉 Confetti בכניסה - אם המשתמש ניצח בערב האחרון ועוד לא ראה
@@ -3250,7 +3213,7 @@ const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGo
           onPlayersChange={setSelectedChartPlayers}
           isMobile={isMobile} />
       </div>
-      {/* 🎉 אנימציית Confetti */}
+      {/* 🎉 אנימציית Confetti - לאחר ערב מנצח */}
       <Confetti 
         active={confettiActive} 
         onComplete={() => setConfettiActive(false)}
@@ -5433,7 +5396,7 @@ export default function PokerApp() {
           50% { opacity: 0.85; transform: translateY(-50%) translateX(-3px); }
         }
         .animate-pulse-subtle { animation: pulse-subtle 1.8s ease-in-out infinite; }
-        /* אנימציית ברבור - תעופה בקשת */
+        /* 🦢 אנימציית ברבור - תעופה בקשת */
         @keyframes swan-arc {
           0% { opacity: 0; transform: translate(0, 0); }
           5% { opacity: 1; }
