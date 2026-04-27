@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.12.0';
-const APP_BUILD_TIME = '27/04/2026 20:50';
-const APP_NOTES = '🦢 תובנות אישיות + עיצוב מחודש לגרפים';
+const APP_VERSION = 'v2.15.0';
+const APP_BUILD_TIME = '27/04/2026 21:09';
+const APP_NOTES = 'בורר שנים בגרף המצטבר + דיפולט כל התקופה';
 
 
 // ===== הרשאות מנהל =====
@@ -453,15 +453,56 @@ const PlayerPicker = ({ allPlayers, selected, onChange }) => {
 };
 
 // ===== גרף רווח מצטבר =====
-const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, selectedPlayers, onPlayersChange, isMobile }) => {
+const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscreenToggle, selectedPlayers, onPlayersChange, isMobile }) => {
+  // 🆕 כל השנים הזמינות בהיסטוריה
+  const allYears = useMemo(() => {
+    const years = new Set();
+    const source = allSessions || sessions || [];
+    source.forEach(s => {
+      const y = s.season || (s.date ? new Date(s.date).getFullYear() : null);
+      if (y) years.add(y);
+    });
+    return Array.from(years).sort((a, b) => b - a); // חדשות למעלה
+  }, [allSessions, sessions]);
+  
+  // 🆕 שנים נבחרות לסינון - דיפולט: כל השנים
+  const [selectedYears, setSelectedYears] = useState([]);
+  useEffect(() => {
+    if (allYears.length > 0 && selectedYears.length === 0) {
+      // ברירת מחדל: כל השנים
+      setSelectedYears([...allYears]);
+    }
+  }, [allYears.length]);
+  
+  // ערבים מסוננים לפי השנים שנבחרו
+  const filteredSessions = useMemo(() => {
+    const source = allSessions || sessions || [];
+    if (selectedYears.length === 0) return source;
+    return source.filter(s => {
+      const y = s.season || (s.date ? new Date(s.date).getFullYear() : null);
+      return y && selectedYears.includes(y);
+    });
+  }, [allSessions, sessions, selectedYears]);
+  
   const data = useMemo(() => {
-    const points = calculateCumulative(sessions, selectedPlayers);
+    const points = calculateCumulative(filteredSessions, selectedPlayers);
     if (points.length > 0) {
       // 🦢 מסמן את הנקודה האחרונה - שם יוצג הברבור
       points[points.length - 1] = { ...points[points.length - 1], _isLast: true };
     }
     return points;
-  }, [sessions, selectedPlayers]);
+  }, [filteredSessions, selectedPlayers]);
+  
+  // toggle של שנה בבורר
+  const toggleYear = (year) => {
+    setSelectedYears(prev => {
+      if (prev.includes(year)) {
+        return prev.length === 1 ? prev : prev.filter(y => y !== year);
+      }
+      return [...prev, year].sort((a, b) => b - a);
+    });
+  };
+  const selectAllYears = () => setSelectedYears([...allYears]);
   const colors = ['#fbbf24', '#34d399', '#60a5fa', '#f472b6', '#a78bfa', '#fb923c', '#2dd4bf', '#f87171', '#c084fc', '#facc15', '#4ade80', '#38bdf8', '#fb7185', '#818cf8', '#f59e0b'];
   
   // 🦢 Dot מותאם - מציג ברבור רק בנקודה האחרונה של כל קו
@@ -508,7 +549,7 @@ const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, sele
 
   return (
     <div className={`rounded-2xl border border-stone-800 bg-stone-950/50 p-4 md:p-6 backdrop-blur ${fullscreen ? 'h-full' : ''}`}>
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
         <div className="flex items-center gap-2">
           <h3 className="text-lg md:text-xl font-bold text-amber-200 flex items-center gap-2">
             <TrendingUp className="h-5 w-5" />
@@ -524,6 +565,37 @@ const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, sele
           </button>
         </div>
       </div>
+      
+      {/* 🆕 בורר שנים */}
+      {allYears.length > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap mb-4">
+          <span className="text-xs text-stone-500 font-bold">שנים:</span>
+          <button
+            onClick={selectAllYears}
+            className={`rounded-md px-2 py-1 text-xs font-bold border transition ${
+              selectedYears.length === allYears.length
+                ? 'bg-amber-700 border-amber-600 text-white'
+                : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
+            }`}>
+            הכל
+          </button>
+          {allYears.map(y => (
+            <button
+              key={y}
+              onClick={() => toggleYear(y)}
+              className={`rounded-md px-2 py-1 text-xs font-bold border transition tabular-nums ${
+                selectedYears.includes(y) && selectedYears.length < allYears.length
+                  ? 'bg-amber-700 border-amber-600 text-white'
+                  : selectedYears.includes(y)
+                  ? 'bg-amber-700/50 border-amber-700/50 text-white'
+                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
+              }`}>
+              {y}
+            </button>
+          ))}
+        </div>
+      )}
+      
       <div style={{ width: '100%', height: chartHeight }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: isMobile ? 40 : 10 }}>
@@ -2305,7 +2377,7 @@ const calculateStreakHelper = (playerName, sessions) => {
 // 🦢 תובנות אישיות - על המשתמש המחובר בלבד
 // ============================================================
 // תובנות מעולם המשחק, מגמה, והשוואה לקבוצה
-const PersonalInsightsBox = ({ sessions, stats, currentUser }) => {
+const PersonalInsightsBox = ({ sessions, allSessions, stats, currentUser }) => {
   const insights = useMemo(() => {
     if (!currentUser || !sessions || sessions.length === 0 || !stats) return [];
     
@@ -2586,8 +2658,366 @@ const PersonalInsightsBox = ({ sessions, stats, currentUser }) => {
       }
     }
     
+    // ========================================================
+    // קטגוריה 4: היסטורי (Multi-year)
+    // ========================================================
+    
+    if (allSessions && allSessions.length > 0) {
+      const myAllSessions = allSessions.filter(s => 
+        s.results && s.results[currentUser] !== undefined
+      );
+      
+      if (myAllSessions.length > 0) {
+        // סך הכל לאורך השנים
+        const totalAllTime = myAllSessions.reduce((sum, s) => 
+          sum + (Number(s.results[currentUser]) || 0), 0);
+        const yearsActive = new Set(
+          myAllSessions.map(s => s.season || new Date(s.date).getFullYear())
+        );
+        
+        if (yearsActive.size >= 2) {
+          // משתתף ביותר משנה אחת - יש מקום לתובנות רב-שנתיות
+          const yearLabel = yearsActive.size === 1 ? 'שנה' : `${yearsActive.size} שנים`;
+          
+          if (totalAllTime > 200) {
+            result.push({
+              icon: '🌟',
+              category: 'היסטורי',
+              title: 'מנצח כולל',
+              text: `לאורך ${yearLabel}: +${totalAllTime}₪ ב-${myAllSessions.length} מפגשים — וירטואוז 🏅`,
+              color: 'amber',
+            });
+          } else if (totalAllTime > 0) {
+            result.push({
+              icon: '📈',
+              category: 'היסטורי',
+              title: 'מצטבר חיובי',
+              text: `לאורך ${yearLabel}: +${totalAllTime}₪ ב-${myAllSessions.length} מפגשים`,
+              color: 'emerald',
+            });
+          } else if (totalAllTime < -200) {
+            result.push({
+              icon: '😅',
+              category: 'היסטורי',
+              title: 'משלם הוצאות לאורך השנים',
+              text: `לאורך ${yearLabel}: ${totalAllTime}₪ — הזמן לתת רביו`,
+              color: 'rose',
+            });
+          } else {
+            result.push({
+              icon: '⚖️',
+              category: 'היסטורי',
+              title: 'מאוזן לאורך השנים',
+              text: `לאורך ${yearLabel}: ${totalAllTime > 0 ? '+' : ''}${totalAllTime}₪ ב-${myAllSessions.length} מפגשים`,
+              color: 'stone',
+            });
+          }
+          
+          // השנה הכי טובה
+          const byYear = {};
+          myAllSessions.forEach(s => {
+            const y = s.season || new Date(s.date).getFullYear();
+            byYear[y] = (byYear[y] || 0) + (Number(s.results[currentUser]) || 0);
+          });
+          const yearEntries = Object.entries(byYear);
+          if (yearEntries.length >= 2) {
+            const bestYear = yearEntries.reduce((a, b) => a[1] > b[1] ? a : b);
+            const worstYear = yearEntries.reduce((a, b) => a[1] < b[1] ? a : b);
+            
+            if (bestYear[1] > 100) {
+              result.push({
+                icon: '🏆',
+                category: 'היסטורי',
+                title: `${bestYear[0]} - שנת זהב`,
+                text: `השנה הכי טובה שלך: +${bestYear[1]}₪ סה״כ`,
+                color: 'amber',
+              });
+            }
+            
+            if (worstYear[1] < -100 && worstYear[0] != bestYear[0]) {
+              result.push({
+                icon: '💸',
+                category: 'היסטורי',
+                title: `${worstYear[0]} - שנה לשכוח`,
+                text: `השנה הקשה שלך: ${worstYear[1]}₪ סה״כ`,
+                color: 'rose',
+              });
+            }
+          }
+          
+          // הקופה הכי גדולה אי פעם
+          const winningAllTime = myAllSessions.filter(s => 
+            Number(s.results[currentUser]) > 0
+          );
+          if (winningAllTime.length > 0) {
+            const biggestEverWin = winningAllTime.reduce((a, b) => 
+              Number(a.results[currentUser]) > Number(b.results[currentUser]) ? a : b);
+            const biggestProfit = Number(biggestEverWin.results[currentUser]);
+            const biggestPot = biggestEverWin.pot || 0;
+            const dateStr = new Date(biggestEverWin.date).toLocaleDateString('he-IL', { 
+              day: '2-digit', month: '2-digit', year: 'numeric' 
+            });
+            
+            if (biggestProfit >= 100) {
+              result.push({
+                icon: '💎',
+                category: 'היסטורי',
+                title: 'הזכיה הכי גדולה אי פעם',
+                text: `+${biggestProfit}₪ ב-${dateStr}${biggestPot ? ` (קופה: ₪${biggestPot})` : ''}`,
+                color: 'purple',
+              });
+            }
+          }
+          
+          // התקדמות מהשנה הקודמת
+          if (yearEntries.length >= 2) {
+            const sortedYears = yearEntries.sort((a, b) => a[0] - b[0]);
+            const lastYear = sortedYears[sortedYears.length - 1];
+            const prevYear = sortedYears[sortedYears.length - 2];
+            const diff = lastYear[1] - prevYear[1];
+            
+            if (Math.abs(diff) >= 100) {
+              if (diff > 0) {
+                result.push({
+                  icon: '🚀',
+                  category: 'היסטורי',
+                  title: 'משתפר משנה לשנה',
+                  text: `${lastYear[0]}: ${lastYear[1] > 0 ? '+' : ''}${lastYear[1]}₪, שיפור של +${diff}₪ ביחס ל-${prevYear[0]}`,
+                  color: 'emerald',
+                });
+              } else {
+                result.push({
+                  icon: '📉',
+                  category: 'היסטורי',
+                  title: 'ירידה מהשנה הקודמת',
+                  text: `${lastYear[0]}: ${lastYear[1] > 0 ? '+' : ''}${lastYear[1]}₪, ירידה של ${diff}₪ ביחס ל-${prevYear[0]}`,
+                  color: 'orange',
+                });
+              }
+            }
+          }
+        }
+        
+        // ========================================================
+        // 4ב. משחק היסטורי (Game - All-time)
+        // ========================================================
+        
+        if (myAllSessions.length >= 10) {
+          // אחוז ניצחונות לאורך כל הזמן
+          const allTimeWins = myAllSessions.filter(s => Number(s.results[currentUser]) > 0).length;
+          const allTimeLosses = myAllSessions.filter(s => Number(s.results[currentUser]) < 0).length;
+          const allTimeWinRate = (allTimeWins / myAllSessions.length) * 100;
+          
+          if (allTimeWinRate >= 65) {
+            result.push({
+              icon: '🎖️',
+              category: 'משחק היסטורי',
+              title: 'מנצח עקבי לאורך השנים',
+              text: `${allTimeWinRate.toFixed(0)}% ניצחונות מתוך ${myAllSessions.length} מפגשים — מקצועני`,
+              color: 'amber',
+            });
+          } else if (allTimeWinRate < 35) {
+            result.push({
+              icon: '🎓',
+              category: 'משחק היסטורי',
+              title: 'תהליך למידה',
+              text: `${allTimeWinRate.toFixed(0)}% ניצחונות לאורך ${myAllSessions.length} מפגשים — בדרך אל הפיסגה`,
+              color: 'blue',
+            });
+          }
+          
+          // הקופה הכי גדולה שזכית בה אי פעם (גם אם לא היתה הרבה רווח)
+          const allTimeWinning = myAllSessions.filter(s => Number(s.results[currentUser]) > 0);
+          if (allTimeWinning.length > 0) {
+            const biggestPotEver = allTimeWinning.reduce((a, b) => 
+              (a.pot || 0) > (b.pot || 0) ? a : b);
+            const potValue = biggestPotEver.pot || 0;
+            const profitOnIt = Number(biggestPotEver.results[currentUser]);
+            const dateStr = new Date(biggestPotEver.date).toLocaleDateString('he-IL', { 
+              day: '2-digit', month: '2-digit', year: 'numeric' 
+            });
+            
+            if (potValue >= 300 && profitOnIt > 0) {
+              result.push({
+                icon: '🎰',
+                category: 'משחק היסטורי',
+                title: 'מהקופות הכי גדולות',
+                text: `קופה של ₪${potValue} ב-${dateStr} — וניצחת בה (+${profitOnIt}₪) 💪`,
+                color: 'purple',
+              });
+            }
+          }
+          
+          // ההפסד הגדול אי פעם
+          const allTimeLosing = myAllSessions.filter(s => Number(s.results[currentUser]) < 0);
+          if (allTimeLosing.length > 0) {
+            const biggestLossEver = allTimeLosing.reduce((a, b) => 
+              Number(a.results[currentUser]) < Number(b.results[currentUser]) ? a : b);
+            const lossValue = Number(biggestLossEver.results[currentUser]);
+            const dateStr = new Date(biggestLossEver.date).toLocaleDateString('he-IL', { 
+              day: '2-digit', month: '2-digit', year: 'numeric' 
+            });
+            
+            if (lossValue <= -150) {
+              result.push({
+                icon: '😱',
+                category: 'משחק היסטורי',
+                title: 'ההפסד הכי כואב אי פעם',
+                text: `${lossValue}₪ ב-${dateStr} — אבל קמת מאז 💪`,
+                color: 'rose',
+              });
+            }
+          }
+          
+          // רצף ניצחונות הכי ארוך אי פעם
+          const sortedAll = [...myAllSessions].sort((a, b) => new Date(a.date) - new Date(b.date));
+          let maxStreak = 0;
+          let curStreak = 0;
+          sortedAll.forEach(s => {
+            const r = Number(s.results[currentUser]);
+            if (r >= 0) {
+              curStreak++;
+              if (curStreak > maxStreak) maxStreak = curStreak;
+            } else {
+              curStreak = 0;
+            }
+          });
+          
+          if (maxStreak >= 5) {
+            result.push({
+              icon: '🌋',
+              category: 'משחק היסטורי',
+              title: 'הרצף הארוך אי פעם',
+              text: `הרצף הכי ארוך שלך ללא הפסד: ${maxStreak} מפגשים רצופים`,
+              color: 'orange',
+            });
+          }
+          
+          // ממוצע רווח לערב לאורך כל השנים
+          const allTimeAvg = totalAllTime / myAllSessions.length;
+          if (Math.abs(allTimeAvg) >= 5) {
+            result.push({
+              icon: allTimeAvg > 0 ? '💹' : '📉',
+              category: 'משחק היסטורי',
+              title: 'הממוצע שלך לערב',
+              text: `${allTimeAvg > 0 ? '+' : ''}${allTimeAvg.toFixed(1)}₪ בכל מפגש לאורך השנים`,
+              color: allTimeAvg > 0 ? 'emerald' : 'rose',
+            });
+          }
+        }
+        
+        // ========================================================
+        // 4ג. השוואה היסטורית (Comparison - All-time)
+        // ========================================================
+        
+        if (myAllSessions.length >= 5) {
+          // המקום הממוצע שלך לאורך כל השנים
+          // צובר רווח של כל שחקן לאורך כל הזמן
+          const allTimeStats = {};
+          allSessions.forEach(s => {
+            if (!s.results) return;
+            Object.entries(s.results).forEach(([name, profit]) => {
+              if (!allTimeStats[name]) allTimeStats[name] = { profit: 0, sessions: 0 };
+              allTimeStats[name].profit += Number(profit) || 0;
+              allTimeStats[name].sessions++;
+            });
+          });
+          
+          // דירוג כללי לאורך כל הזמן
+          const totalRanking = Object.entries(allTimeStats)
+            .filter(([_, s]) => s.sessions >= 5) // רק מי שלפחות 5 מפגשים
+            .sort((a, b) => b[1].profit - a[1].profit)
+            .map(([name]) => name);
+          
+          const myAllTimeRank = totalRanking.indexOf(currentUser) + 1;
+          const totalActiveAllTime = totalRanking.length;
+          
+          if (myAllTimeRank > 0 && totalActiveAllTime >= 5) {
+            if (myAllTimeRank === 1) {
+              result.push({
+                icon: '🏅',
+                category: 'השוואה היסטורית',
+                title: 'אגדה בקבוצה',
+                text: `מקום ראשון בכל הזמנים מתוך ${totalActiveAllTime} שחקנים`,
+                color: 'amber',
+              });
+            } else if (myAllTimeRank <= 3) {
+              const medals = ['', '🥇', '🥈', '🥉'];
+              result.push({
+                icon: medals[myAllTimeRank],
+                category: 'השוואה היסטורית',
+                title: `מקום ${myAllTimeRank} בכל הזמנים`,
+                text: `מתוך ${totalActiveAllTime} שחקנים פעילים בקבוצה`,
+                color: 'amber',
+              });
+            }
+          }
+          
+          // יריב הסטורי - מי הכי שיחקת איתו לאורך השנים
+          const allTimeShared = {};
+          const allTimeWinsAgainst = {};
+          
+          myAllSessions.forEach(s => {
+            const myProfit = Number(s.results[currentUser]) || 0;
+            Object.entries(s.results).forEach(([name, profit]) => {
+              if (name === currentUser) return;
+              allTimeShared[name] = (allTimeShared[name] || 0) + 1;
+              if (myProfit > Number(profit)) {
+                allTimeWinsAgainst[name] = (allTimeWinsAgainst[name] || 0) + 1;
+              }
+            });
+          });
+          
+          const allTimeRivals = Object.entries(allTimeShared)
+            .filter(([_, count]) => count >= 10)
+            .map(([name, count]) => ({
+              name,
+              total: count,
+              wins: allTimeWinsAgainst[name] || 0,
+              winRate: ((allTimeWinsAgainst[name] || 0) / count) * 100,
+            }))
+            .sort((a, b) => b.total - a.total);
+          
+          if (allTimeRivals.length > 0) {
+            const longestRival = allTimeRivals[0];
+            result.push({
+              icon: '🤝',
+              category: 'השוואה היסטורית',
+              title: 'היריב הוותיק שלך',
+              text: `${longestRival.name} - שיחקתם יחד ${longestRival.total} מפגשים, אתה מנצח ${longestRival.winRate.toFixed(0)}% מהזמן`,
+              color: 'purple',
+            });
+            
+            // היריב שאתה הכי טוב מולו
+            const easiest = [...allTimeRivals].sort((a, b) => b.winRate - a.winRate)[0];
+            if (easiest.winRate >= 60 && easiest !== longestRival) {
+              result.push({
+                icon: '😈',
+                category: 'השוואה היסטורית',
+                title: `הקורבן שלך`,
+                text: `אתה מנצח את ${easiest.name} ב-${easiest.winRate.toFixed(0)}% מ-${easiest.total} מפגשים`,
+                color: 'emerald',
+              });
+            }
+            
+            // היריב שהכי קשה לך מולו
+            const hardest = [...allTimeRivals].sort((a, b) => a.winRate - b.winRate)[0];
+            if (hardest.winRate <= 40 && hardest !== longestRival && hardest !== easiest) {
+              result.push({
+                icon: '👹',
+                category: 'השוואה היסטורית',
+                title: `האויב המושבע`,
+                text: `${hardest.name} מנצח אותך ב-${(100 - hardest.winRate).toFixed(0)}% מ-${hardest.total} מפגשים`,
+                color: 'rose',
+              });
+            }
+          }
+        }
+      }
+    }
+    
     return result;
-  }, [sessions, stats, currentUser]);
+  }, [sessions, allSessions, stats, currentUser]);
   
   if (insights.length === 0) {
     return null;
@@ -2625,26 +3055,94 @@ const PersonalInsightsBox = ({ sessions, stats, currentUser }) => {
     'משחק': '🎲',
     'מגמה': '📈',
     'השוואה': '⚖️',
+    'היסטורי': '📜',
+    'משחק היסטורי': '🏛️',
+    'השוואה היסטורית': '🤺',
   };
   
   return (
+    <PersonalInsightsCarousel 
+      grouped={grouped} 
+      categoryIcons={categoryIcons}
+      colorClasses={colorClasses}
+      textClasses={textClasses}
+      currentUser={currentUser} />
+  );
+};
+
+// קרוסלה לתובנות אישיות - כל קטגוריה = סלייד
+const PersonalInsightsCarousel = ({ grouped, categoryIcons, colorClasses, textClasses, currentUser }) => {
+  const categories = Object.keys(grouped);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const scrollRef = useRef(null);
+  
+  const scrollToSlide = (idx) => {
+    if (!scrollRef.current) return;
+    const slide = scrollRef.current.children[idx];
+    if (slide) {
+      slide.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      setCurrentSlide(idx);
+    }
+  };
+  
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const scrollLeft = scrollRef.current.scrollLeft;
+    const slideWidth = scrollRef.current.children[0]?.offsetWidth || 0;
+    if (slideWidth > 0) {
+      const newSlide = Math.round(Math.abs(scrollLeft) / slideWidth);
+      if (newSlide !== currentSlide) setCurrentSlide(newSlide);
+    }
+  };
+  
+  if (categories.length === 0) return null;
+  
+  return (
     <div className="rounded-2xl border-2 border-amber-700/50 bg-gradient-to-br from-amber-950/40 via-stone-950/60 to-stone-950/40 backdrop-blur p-4 md:p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <h3 className="text-lg md:text-xl font-bold text-amber-200 flex items-center gap-2">
-          🦢 התובנות שלך
-        </h3>
-        <span className="text-xs text-stone-500">— אישי לך, {currentUser}</span>
+      <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <h3 className="text-lg md:text-xl font-bold text-amber-200 flex items-center gap-2">
+            🦢 התובנות שלך
+          </h3>
+          <span className="text-xs text-stone-500">— אישי לך, {currentUser}</span>
+        </div>
+        {/* כפתורי ניווט */}
+        <div className="flex items-center gap-1.5">
+          <button 
+            onClick={() => scrollToSlide(Math.max(0, currentSlide - 1))}
+            disabled={currentSlide === 0}
+            className="rounded-full bg-stone-800 hover:bg-stone-700 border border-stone-700 w-7 h-7 flex items-center justify-center disabled:opacity-30 transition">
+            <ChevronRight className="h-4 w-4 text-stone-300" />
+          </button>
+          <span className="text-xs text-stone-500 tabular-nums px-1">
+            {currentSlide + 1}/{categories.length}
+          </span>
+          <button 
+            onClick={() => scrollToSlide(Math.min(categories.length - 1, currentSlide + 1))}
+            disabled={currentSlide === categories.length - 1}
+            className="rounded-full bg-stone-800 hover:bg-stone-700 border border-stone-700 w-7 h-7 flex items-center justify-center disabled:opacity-30 transition">
+            <ChevronLeft className="h-4 w-4 text-stone-300" />
+          </button>
+        </div>
       </div>
       
-      <div className="space-y-4">
-        {Object.entries(grouped).map(([cat, items]) => (
-          <div key={cat}>
-            <div className="text-xs text-stone-500 mb-2 flex items-center gap-1.5 font-bold uppercase tracking-wider">
-              <span>{categoryIcons[cat]}</span>
+      {/* קרוסלה - גלילה אופקית עם snap */}
+      <div 
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex overflow-x-auto snap-x snap-mandatory gap-3 scrollbar-hide"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        {categories.map((cat) => (
+          <div 
+            key={cat} 
+            className="flex-shrink-0 w-full snap-center min-h-[220px]">
+            <div className="text-xs text-stone-400 mb-3 flex items-center gap-1.5 font-bold uppercase tracking-wider">
+              <span className="text-base">{categoryIcons[cat]}</span>
               <span>{cat}</span>
+              <span className="text-stone-600 normal-case">({grouped[cat].length})</span>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {items.map((ins, i) => (
+              {grouped[cat].map((ins, i) => (
                 <div 
                   key={i} 
                   className={`rounded-xl border p-3 ${colorClasses[ins.color] || colorClasses.stone}`}>
@@ -2654,7 +3152,7 @@ const PersonalInsightsBox = ({ sessions, stats, currentUser }) => {
                       <div className={`font-bold text-sm ${textClasses[ins.color] || textClasses.stone}`}>
                         {ins.title}
                       </div>
-                      <div className="text-xs text-stone-300 mt-0.5">
+                      <div className="text-xs text-stone-300 mt-0.5 leading-relaxed">
                         {ins.text}
                       </div>
                     </div>
@@ -2665,82 +3163,209 @@ const PersonalInsightsBox = ({ sessions, stats, currentUser }) => {
           </div>
         ))}
       </div>
+      
+      {/* נקודות נווטיות */}
+      <div className="flex justify-center gap-1.5 mt-4">
+        {categories.map((cat, i) => (
+          <button
+            key={i}
+            onClick={() => scrollToSlide(i)}
+            title={cat}
+            className={`h-2 rounded-full transition-all ${
+              currentSlide === i 
+                ? 'w-6 bg-amber-500' 
+                : 'w-2 bg-stone-700 hover:bg-stone-600'
+            }`}
+          />
+        ))}
+      </div>
     </div>
   );
 };
 
-const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
+const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile }) => {
   const players = useMemo(() => 
     stats.filter(s => s.sessions > 0).map(s => s.name)
   , [stats]);
   
   const [selectedPlayer, setSelectedPlayer] = useState(currentUser || (players[0] || ''));
   
-  // 1️⃣ נתונים לגרף ביצועים לאורך החודשים
+  // 🆕 כל השנים הזמינות בהיסטוריה
+  const allYears = useMemo(() => {
+    const years = new Set();
+    (allSessions || []).forEach(s => {
+      const y = s.season || (s.date ? new Date(s.date).getFullYear() : null);
+      if (y) years.add(y);
+    });
+    return Array.from(years).sort((a, b) => b - a); // חדשות למעלה
+  }, [allSessions]);
+  
+  // 🆕 שנים נבחרות לסינון - דיפולט: השנה הנוכחית
+  const [selectedYears, setSelectedYears] = useState([]);
+  useEffect(() => {
+    if (allYears.length > 0 && selectedYears.length === 0) {
+      // ברירת מחדל: השנה הכי חדשה
+      setSelectedYears([allYears[0]]);
+    }
+  }, [allYears.length]);
+  
+  // ערבים מסוננים לפי השנים שנבחרו
+  const filteredSessions = useMemo(() => {
+    if (!allSessions) return [];
+    if (selectedYears.length === 0) return allSessions;
+    return allSessions.filter(s => {
+      const y = s.season || (s.date ? new Date(s.date).getFullYear() : null);
+      return y && selectedYears.includes(y);
+    });
+  }, [allSessions, selectedYears]);
+  
+  // 1️⃣ נתונים לגרף ביצועים לאורך החודשים (כולל בחירת שנים)
   const monthlyData = useMemo(() => {
     if (!selectedPlayer) return [];
     const HEBREW_MONTHS_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יונ', 'יול', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
     const byMonth = {};
-    sessions.forEach(s => {
+    filteredSessions.forEach(s => {
       if (!s.results || s.results[selectedPlayer] === undefined) return;
       const d = new Date(s.date);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const label = HEBREW_MONTHS_SHORT[d.getMonth()];
+      const yearShort = String(d.getFullYear()).slice(-2);
+      const label = selectedYears.length > 1 
+        ? `${HEBREW_MONTHS_SHORT[d.getMonth()]} '${yearShort}` 
+        : HEBREW_MONTHS_SHORT[d.getMonth()];
       if (!byMonth[key]) byMonth[key] = { key, label, profit: 0, count: 0 };
       byMonth[key].profit += Number(s.results[selectedPlayer]) || 0;
       byMonth[key].count++;
     });
     return Object.values(byMonth).sort((a, b) => a.key.localeCompare(b.key));
-  }, [sessions, selectedPlayer]);
+  }, [filteredSessions, selectedPlayer, selectedYears]);
   
-  // 2️⃣ נתונים לגרף דירוג לאורך זמן
+  // 2️⃣ נתונים לגרף דירוג לאורך זמן (כולל בחירת שנים)
   const rankData = useMemo(() => {
-    if (!selectedPlayer) return [];
-    const sortedSessions = [...sessions].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
-    // צובר רווח מצטבר לכל שחקן בכל ערב
+    if (!selectedPlayer || !allSessions) return [];
+    // לחישוב דירוג צריך את כל ההיסטוריה עד עכשיו, אבל מציג רק מהשנים הנבחרות
+    const allSorted = [...allSessions].sort((a, b) => new Date(a.date) - new Date(b.date));
     const cumulativeByPlayer = {};
     const rankings = [];
     
-    sortedSessions.forEach((session, idx) => {
+    allSorted.forEach(session => {
       if (!session.results) return;
-      // עדכון רווח מצטבר לכל שחקן שהשתתף
       Object.entries(session.results).forEach(([name, amount]) => {
         cumulativeByPlayer[name] = (cumulativeByPlayer[name] || 0) + Number(amount);
       });
       
-      // השחקן שלנו השתתף בערב הזה?
       if (session.results[selectedPlayer] === undefined) return;
       
-      // מחשב את הדירוג של השחקן הנבחר מבין כל מי שהשתתף בערב כלשהו עד עכשיו
+      // אם נבחרו שנים - הצג רק ערבים מהשנים האלה
+      const y = session.season || (session.date ? new Date(session.date).getFullYear() : null);
+      if (selectedYears.length > 0 && !selectedYears.includes(y)) return;
+      
       const sortedPlayers = Object.entries(cumulativeByPlayer)
         .sort((a, b) => b[1] - a[1])
         .map(([name]) => name);
       const rank = sortedPlayers.indexOf(selectedPlayer) + 1;
       
       const d = new Date(session.date);
+      const yearShort = String(d.getFullYear()).slice(-2);
+      const label = selectedYears.length > 1 
+        ? `${d.getDate()}/${d.getMonth() + 1}/${yearShort}` 
+        : `${d.getDate()}/${d.getMonth() + 1}`;
       rankings.push({
         date: session.date,
-        label: `${d.getDate()}/${d.getMonth() + 1}`,
+        label,
         rank,
         profit: cumulativeByPlayer[selectedPlayer],
       });
     });
     
     return rankings;
-  }, [sessions, selectedPlayer]);
+  }, [allSessions, selectedPlayer, selectedYears]);
   
-  // 3️⃣ נתונים לגרף התפלגות תוצאות
+  // 3️⃣ נתונים לגרף התפלגות תוצאות (לפי שנים נבחרות)
   const distributionData = useMemo(() => {
     if (!selectedPlayer) return [];
-    const playerStats = stats.find(s => s.name === selectedPlayer);
-    if (!playerStats) return [];
+    let wins = 0, losses = 0, ties = 0;
+    filteredSessions.forEach(s => {
+      if (!s.results || s.results[selectedPlayer] === undefined) return;
+      const v = Number(s.results[selectedPlayer]);
+      if (v > 0) wins++;
+      else if (v < 0) losses++;
+      else ties++;
+    });
     return [
-      { name: 'ניצחונות', value: playerStats.wins, color: '#10b981' },
-      { name: 'הפסדים', value: playerStats.losses, color: '#ef4444' },
-      { name: 'תיקו', value: playerStats.ties, color: '#94a3b8' },
+      { name: 'ניצחונות', value: wins, color: '#10b981' },
+      { name: 'הפסדים', value: losses, color: '#ef4444' },
+      { name: 'תיקו', value: ties, color: '#94a3b8' },
     ].filter(d => d.value > 0);
-  }, [stats, selectedPlayer]);
+  }, [filteredSessions, selectedPlayer]);
+  
+  const distributionStats = useMemo(() => {
+    const total = distributionData.reduce((s, d) => s + d.value, 0);
+    const wins = distributionData.find(d => d.name === 'ניצחונות')?.value || 0;
+    return { total, wins, winRate: total > 0 ? (wins / total) * 100 : 0 };
+  }, [distributionData]);
+  
+  // 4️⃣ 🆕 גרף ביצועים שנתיים - רווח לכל שנה
+  const yearlyData = useMemo(() => {
+    if (!selectedPlayer || !allSessions) return [];
+    const byYear = {};
+    allSessions.forEach(s => {
+      if (!s.results || s.results[selectedPlayer] === undefined) return;
+      const y = s.season || new Date(s.date).getFullYear();
+      if (!byYear[y]) byYear[y] = { year: y, profit: 0, sessions: 0 };
+      byYear[y].profit += Number(s.results[selectedPlayer]) || 0;
+      byYear[y].sessions++;
+    });
+    return Object.values(byYear).sort((a, b) => a.year - b.year);
+  }, [allSessions, selectedPlayer]);
+  
+  // 5️⃣ 🆕 גרף דירוג שנתי - הדירוג הסופי של השחקן בכל שנה
+  const yearlyRankData = useMemo(() => {
+    if (!selectedPlayer || !allSessions) return [];
+    const yearGroups = {};
+    allSessions.forEach(s => {
+      if (!s.results) return;
+      const y = s.season || new Date(s.date).getFullYear();
+      if (!yearGroups[y]) yearGroups[y] = [];
+      yearGroups[y].push(s);
+    });
+    
+    const result = [];
+    Object.entries(yearGroups).forEach(([year, yearSessions]) => {
+      const cumulativeByPlayer = {};
+      yearSessions.forEach(s => {
+        Object.entries(s.results).forEach(([name, amount]) => {
+          cumulativeByPlayer[name] = (cumulativeByPlayer[name] || 0) + Number(amount);
+        });
+      });
+      // האם השחקן השתתף השנה?
+      if (cumulativeByPlayer[selectedPlayer] === undefined) return;
+      const sortedPlayers = Object.entries(cumulativeByPlayer)
+        .sort((a, b) => b[1] - a[1])
+        .map(([name]) => name);
+      const rank = sortedPlayers.indexOf(selectedPlayer) + 1;
+      result.push({
+        year: parseInt(year),
+        rank,
+        totalPlayers: sortedPlayers.length,
+        profit: cumulativeByPlayer[selectedPlayer],
+      });
+    });
+    return result.sort((a, b) => a.year - b.year);
+  }, [allSessions, selectedPlayer]);
+  
+  // toggle של שנה בבורר
+  const toggleYear = (year) => {
+    setSelectedYears(prev => {
+      if (prev.includes(year)) {
+        return prev.length === 1 ? prev : prev.filter(y => y !== year);
+      }
+      return [...prev, year].sort((a, b) => b - a);
+    });
+  };
+  
+  const selectAllYears = () => setSelectedYears([...allYears]);
+  const selectLatestYear = () => setSelectedYears([allYears[0]]);
+  
   
   if (players.length === 0) {
     return (
@@ -2753,31 +3378,202 @@ const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
   const playerStats = stats.find(s => s.name === selectedPlayer);
   const maxRank = Math.max(...rankData.map(r => r.rank), 1);
   
+  // סטטיסטיקה מסוננת לפי שנים נבחרות
+  const filteredStats = useMemo(() => {
+    if (!selectedPlayer) return null;
+    let total = 0, sessions = 0, wins = 0, losses = 0, ties = 0;
+    filteredSessions.forEach(s => {
+      if (!s.results || s.results[selectedPlayer] === undefined) return;
+      const v = Number(s.results[selectedPlayer]);
+      total += v;
+      sessions++;
+      if (v > 0) wins++;
+      else if (v < 0) losses++;
+      else ties++;
+    });
+    return { total, sessions, wins, losses, ties };
+  }, [filteredSessions, selectedPlayer]);
+  
   return (
     <div className="space-y-3">
-      {/* בוחר שחקן */}
-      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-3 flex items-center gap-3 flex-wrap">
-        <div className="font-bold text-amber-200 flex items-center gap-2">
-          <BarChart3 className="h-5 w-5" />
-          גרפים אישיים
+      {/* בוחר שחקן + שנים */}
+      <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-3 space-y-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="font-bold text-amber-200 flex items-center gap-2">
+            <BarChart3 className="h-5 w-5" />
+            גרפים אישיים
+          </div>
+          <select 
+            value={selectedPlayer} 
+            onChange={e => setSelectedPlayer(e.target.value)}
+            className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-1.5 text-sm text-white font-bold flex-1 min-w-[150px]">
+            {players.map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
+          {filteredStats && (
+            <div className="text-xs text-stone-400 flex items-center gap-3 flex-wrap">
+              <span>סה״כ: <span className={`font-bold ${filteredStats.total > 0 ? 'text-emerald-400' : filteredStats.total < 0 ? 'text-rose-400' : 'text-stone-300'}`}>
+                {filteredStats.total > 0 ? '+' : ''}{filteredStats.total}₪
+              </span></span>
+              <span>מפגשים: <span className="text-stone-200 font-bold">{filteredStats.sessions}</span></span>
+            </div>
+          )}
         </div>
-        <select 
-          value={selectedPlayer} 
-          onChange={e => setSelectedPlayer(e.target.value)}
-          className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-1.5 text-sm text-white font-bold flex-1 min-w-[150px]">
-          {players.map(p => (
-            <option key={p} value={p}>{p}</option>
-          ))}
-        </select>
-        {playerStats && (
-          <div className="text-xs text-stone-400 flex items-center gap-3 flex-wrap">
-            <span>סה״כ: <span className={`font-bold ${playerStats.total > 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {playerStats.total > 0 ? '+' : ''}{playerStats.total}₪
-            </span></span>
-            <span>מפגשים: <span className="text-stone-200 font-bold">{playerStats.sessions}</span></span>
+        {/* 🆕 בורר שנים */}
+        {allYears.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-stone-500 font-bold">שנים:</span>
+            <button
+              onClick={selectAllYears}
+              className={`rounded-md px-2 py-1 text-xs font-bold border transition ${
+                selectedYears.length === allYears.length
+                  ? 'bg-amber-700 border-amber-600 text-white'
+                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
+              }`}>
+              הכל
+            </button>
+            {allYears.map(y => (
+              <button
+                key={y}
+                onClick={() => toggleYear(y)}
+                className={`rounded-md px-2 py-1 text-xs font-bold border transition tabular-nums ${
+                  selectedYears.includes(y) && selectedYears.length < allYears.length
+                    ? 'bg-amber-700 border-amber-600 text-white'
+                    : selectedYears.includes(y)
+                    ? 'bg-amber-700/50 border-amber-700/50 text-white'
+                    : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
+                }`}>
+                {y}
+              </button>
+            ))}
           </div>
         )}
       </div>
+      
+      {/* 🆕 גרף ביצועים שנתיים - רווח לכל שנה */}
+      {yearlyData.length >= 2 && (
+        <div className="rounded-2xl border border-yellow-800/40 bg-gradient-to-br from-yellow-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
+          <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
+            <h3 className="text-base md:text-lg font-bold text-yellow-200 flex items-center gap-2">
+              💰 ביצועים שנתיים
+              <span className="text-xs text-stone-500 font-normal">סה״כ רווח לכל שנה</span>
+            </h3>
+            {(() => {
+              const best = yearlyData.reduce((a, b) => a.profit > b.profit ? a : b);
+              return (
+                <span className="rounded-full bg-yellow-900/40 border border-yellow-700/40 px-2 py-0.5 text-yellow-300 font-bold text-xs">
+                  🏆 {best.year}: {best.profit > 0 ? '+' : ''}{best.profit}₪
+                </span>
+              );
+            })()}
+          </div>
+          <div style={{ width: '100%', height: isMobile ? 220 : 280 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={yearlyData} margin={{ top: 20, right: 10, left: 0, bottom: 10 }}>
+                <defs>
+                  <linearGradient id="yearGreen" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#facc15" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#ca8a04" stopOpacity={0.6}/>
+                  </linearGradient>
+                  <linearGradient id="yearRed" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f87171" stopOpacity={0.6}/>
+                    <stop offset="100%" stopColor="#dc2626" stopOpacity={1}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
+                <XAxis dataKey="year" stroke="#78716c" tick={{ fontSize: 12, fill: '#a8a29e', fontWeight: 'bold' }} />
+                <YAxis stroke="#78716c" tick={{ fontSize: 12, fill: '#a8a29e' }} tickFormatter={(v) => v > 0 ? `+${v}` : v} />
+                <Tooltip 
+                  contentStyle={{ background: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', color: '#fff' }}
+                  formatter={(v, _, props) => [`${v > 0 ? '+' : ''}${v} ₪ (${props.payload.sessions} מפגשים)`, 'רווח']}
+                  cursor={{ fill: '#44403c33' }}
+                />
+                <Bar dataKey="profit" radius={[6, 6, 0, 0]} animationDuration={1500}>
+                  {yearlyData.map((d, i) => (
+                    <Cell 
+                      key={i} 
+                      fill={d.profit > 0 ? 'url(#yearGreen)' : 'url(#yearRed)'}
+                      stroke={d.profit > 0 ? '#ca8a04' : '#dc2626'}
+                      strokeWidth={1}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+      
+      {/* 🆕 גרף דירוג שנתי */}
+      {yearlyRankData.length >= 2 && (
+        <div className="rounded-2xl border border-amber-800/40 bg-gradient-to-br from-amber-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
+          <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
+            <h3 className="text-base md:text-lg font-bold text-amber-200 flex items-center gap-2">
+              🏆 דירוג שנתי
+              <span className="text-xs text-stone-500 font-normal">המקום שלך בכל שנה</span>
+            </h3>
+            {(() => {
+              const best = yearlyRankData.reduce((a, b) => a.rank < b.rank ? a : b);
+              return (
+                <span className="rounded-full bg-amber-900/40 border border-amber-700/40 px-2 py-0.5 text-amber-300 font-bold text-xs">
+                  🥇 {best.year}: מקום #{best.rank}
+                </span>
+              );
+            })()}
+          </div>
+          <div style={{ width: '100%', height: isMobile ? 220 : 280 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={yearlyRankData} margin={{ top: 15, right: 15, left: 0, bottom: 10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
+                <XAxis dataKey="year" stroke="#78716c" tick={{ fontSize: 12, fill: '#a8a29e', fontWeight: 'bold' }} />
+                <YAxis 
+                  stroke="#78716c" 
+                  tick={{ fontSize: 12, fill: '#a8a29e', fontWeight: 'bold' }}
+                  reversed 
+                  domain={[1, 'dataMax + 1']}
+                  allowDecimals={false}
+                  tickFormatter={(v) => `#${v}`}
+                />
+                <Tooltip 
+                  contentStyle={{ background: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', color: '#fff' }}
+                  formatter={(v, _, props) => {
+                    const r = props.payload;
+                    return [`מקום #${v} מתוך ${r.totalPlayers} | רווח: ${r.profit > 0 ? '+' : ''}${r.profit}₪`, ''];
+                  }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="rank" 
+                  stroke="#fbbf24" 
+                  strokeWidth={3}
+                  dot={(props) => {
+                    const { cx, cy, payload } = props;
+                    if (cx === undefined || cy === undefined) return null;
+                    let icon = null;
+                    if (payload.rank === 1) icon = '👑';
+                    else if (payload.rank === 2) icon = '🥈';
+                    else if (payload.rank === 3) icon = '🥉';
+                    
+                    return (
+                      <g>
+                        <circle cx={cx} cy={cy} r={6} fill="#fbbf24" stroke="#78350f" strokeWidth={2} />
+                        {icon && (
+                          <text x={cx} y={cy - 14} textAnchor="middle" fontSize={16}>
+                            {icon}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  }}
+                  activeDot={{ r: 8, fill: '#fcd34d', stroke: '#fff', strokeWidth: 2 }}
+                  animationDuration={1800}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
       
       {/* 1️⃣ גרף ביצועים לאורך החודשים */}
       <div className="rounded-2xl border border-emerald-800/40 bg-gradient-to-br from-emerald-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
@@ -2938,7 +3734,7 @@ const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
             🥧 התפלגות תוצאות
           </h3>
           <span className="text-xs text-purple-300/80 font-bold rounded-full bg-purple-900/40 border border-purple-700/40 px-2 py-0.5">
-            {playerStats?.sessions || 0} מפגשים
+            {distributionStats.total} מפגשים
           </span>
         </div>
         {distributionData.length === 0 ? (
@@ -2976,10 +3772,10 @@ const PersonalCharts = ({ sessions, stats, currentUser, isMobile }) => {
               </PieChart>
             </ResponsiveContainer>
             {/* טקסט במרכז ה-donut */}
-            {playerStats && (
+            {distributionStats.total > 0 && (
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <div className="text-3xl md:text-4xl font-extrabold text-amber-300 tabular-nums">
-                  {((playerStats.wins / playerStats.sessions) * 100).toFixed(0)}%
+                  {distributionStats.winRate.toFixed(0)}%
                 </div>
                 <div className="text-xs text-stone-400 mt-1">אחוז ניצחונות</div>
               </div>
@@ -4719,7 +5515,7 @@ const PaymentArchive = ({ playerName, reminders, onUpdateReminders }) => {
 };
 
 // ===== דשבורד קומפקטי =====
-const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders }) => {
+const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders }) => {
   // 🎉 Confetti בכניסה - אם המשתמש ניצח בערב האחרון ועוד לא ראה
   const [confettiActive, setConfettiActive] = useState(false);
   const [confettiMessage, setConfettiMessage] = useState('');
@@ -4756,7 +5552,7 @@ const DashboardCarousel = ({ currentUser, sessions, stats, hostingSchedule, onGo
       <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
       {/* 📈 הגרף המצטבר - אחרי המיקום שלך בדירוג */}
       <div className="rounded-2xl border border-stone-800 bg-stone-950/40 backdrop-blur p-2">
-        <CumulativeChart sessions={sessions} stats={stats} fullscreen={false}
+        <CumulativeChart sessions={sessions} allSessions={allSessions} stats={stats} fullscreen={false}
           onFullscreenToggle={onFullscreenToggle}
           selectedPlayers={selectedChartPlayers}
           onPlayersChange={setSelectedChartPlayers}
@@ -6156,9 +6952,14 @@ export default function PokerApp() {
 
   useEffect(() => {
     if (stats.length > 0 && selectedChartPlayers.length === 0) {
-      setSelectedChartPlayers(stats.slice(0, 5).map(p => p.name));
+      // ברירת מחדל: רק השחקן המחובר. אם הוא לא קיים בסטטיסטיקה - מציג טופ 1
+      if (currentUser && stats.find(p => p.name === currentUser)) {
+        setSelectedChartPlayers([currentUser]);
+      } else if (stats[0]) {
+        setSelectedChartPlayers([stats[0].name]);
+      }
     }
-  }, [stats.length]);
+  }, [stats.length, currentUser]);
 
   const persistSessions = async (sessions, players, hostingScheduleParam, phonesParam) => {
     setSyncing(true);
@@ -6629,7 +7430,7 @@ export default function PokerApp() {
   if (chartFullscreen) {
     return (
       <div dir="rtl" className="fixed inset-0 z-50 bg-stone-950 p-4 overflow-auto" style={{ fontFamily: 'Assistant, sans-serif' }}>
-        <CumulativeChart sessions={sessions} stats={stats} fullscreen={true}
+        <CumulativeChart sessions={sessions} allSessions={allSessions} stats={stats} fullscreen={true}
           onFullscreenToggle={() => setChartFullscreen(false)}
           selectedPlayers={selectedChartPlayers}
           onPlayersChange={setSelectedChartPlayers}
@@ -6642,7 +7443,7 @@ export default function PokerApp() {
     { id: 'dashboard', label: 'דשבורד', icon: LayoutDashboard },
     { id: 'table', label: 'טבלה', icon: Table },
     { id: 'periodic', label: 'תקופות', icon: Calendar },
-    { id: 'charts', label: 'גרפים', icon: BarChart3 },
+    { id: 'charts', label: 'תובנות', icon: BarChart3 },
     { id: 'hosting', label: 'אירוחים', icon: Calendar },
     { id: 'gallery', label: 'גלריה', icon: ImageIcon },
     // 🔒 היסטוריה - רק למנהלים
@@ -6758,6 +7559,7 @@ export default function PokerApp() {
           <DashboardCarousel 
             currentUser={currentUser} 
             sessions={sessions} 
+            allSessions={allSessions}
             stats={stats} 
             hostingSchedule={hostingSchedule}
             onGoToHosting={() => setTab('hosting')}
@@ -6780,15 +7582,17 @@ export default function PokerApp() {
             {/* 🦢 תובנות אישיות - בראש הלשונית */}
             <PersonalInsightsBox 
               sessions={sessions} 
+              allSessions={allSessions}
               stats={stats} 
               currentUser={currentUser} />
-            <CumulativeChart sessions={sessions} stats={stats} fullscreen={false}
+            <CumulativeChart sessions={sessions} allSessions={allSessions} stats={stats} fullscreen={false}
               onFullscreenToggle={() => setChartFullscreen(true)}
               selectedPlayers={selectedChartPlayers}
               onPlayersChange={setSelectedChartPlayers}
               isMobile={isMobile} />
             <PersonalCharts 
               sessions={sessions} 
+              allSessions={allSessions}
               stats={stats} 
               currentUser={currentUser}
               isMobile={isMobile} />
