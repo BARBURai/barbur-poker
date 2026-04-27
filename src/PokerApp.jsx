@@ -8,6 +8,9 @@ import { loadState as fbLoadState, saveState as fbSaveState } from './firebase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
+// 🔖 גרסה - מוצגת בתחתית האפליקציה
+const APP_VERSION = 'v2.1.0 - 27/04 בוקר';
+
 
 // ===== הרשאות מנהל =====
 const ADMIN_PASSWORD = 'barbur2026'; // סיסמה זמנית - להחליף בסיסמה האמיתית
@@ -3437,6 +3440,11 @@ const SettlementModal = ({ isOpen, onClose, participants, finalChips, host, sess
 
 
 // ===== טאב טבלאות תקופתיות =====
+const getDayKey = (dateStr) => {
+  // YYYY-MM-DD - שומר תאריך מלא
+  return dateStr;
+};
+
 const getMonthKey = (dateStr) => {
   const d = new Date(dateStr);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -3455,6 +3463,15 @@ const getHalfKey = (dateStr) => {
 };
 
 const HEBREW_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+const HEBREW_MONTHS_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יונ', 'יול', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
+
+const getDayLabel = (key) => {
+  // מ-YYYY-MM-DD → DD/MMM (לדוגמה: 23/אפר)
+  const parts = key.split('-');
+  if (parts.length < 3) return key;
+  const [y, m, d] = parts;
+  return `${parseInt(d)}/${HEBREW_MONTHS_SHORT[parseInt(m) - 1] || m}`;
+};
 
 const getMonthLabel = (key) => {
   const [y, m] = key.split('-');
@@ -3473,20 +3490,25 @@ const getHalfLabel = (key) => {
 
 const aggregateByPeriod = (sessions, players, keyFn) => {
   // מקבץ תוצאות לפי תקופה
-  const byPeriod = {}; // {periodKey: {playerName: sum}}
+  // byPeriod[periodKey][playerName] = sum (יכול להיות 0 אם השתתף בתיקו)
+  // participated[periodKey][playerName] = true (אם השתתף לפחות פעם אחת בתקופה)
+  const byPeriod = {};
+  const participated = {};
   const allKeys = new Set();
   
   sessions.forEach(s => {
     const key = keyFn(s.date);
     allKeys.add(key);
     if (!byPeriod[key]) byPeriod[key] = {};
+    if (!participated[key]) participated[key] = {};
     Object.entries(s.results || {}).forEach(([name, amount]) => {
       byPeriod[key][name] = (byPeriod[key][name] || 0) + amount;
+      participated[key][name] = true; // השתתף - גם אם התוצאה 0
     });
   });
   
   const sortedKeys = Array.from(allKeys).sort();
-  return { sortedKeys, byPeriod };
+  return { sortedKeys, byPeriod, participated };
 };
 
 const PeriodicTables = ({ allSessions, players }) => {
@@ -3507,12 +3529,13 @@ const PeriodicTables = ({ allSessions, players }) => {
   );
   
   const { keyFn, getLabel, viewLabel } = useMemo(() => {
+    if (viewMode === 'day') return { keyFn: getDayKey, getLabel: getDayLabel, viewLabel: 'יומית' };
     if (viewMode === 'month') return { keyFn: getMonthKey, getLabel: getMonthLabel, viewLabel: 'חודשית' };
     if (viewMode === 'quarter') return { keyFn: getQuarterKey, getLabel: getQuarterLabel, viewLabel: 'רבעונית' };
     return { keyFn: getHalfKey, getLabel: getHalfLabel, viewLabel: 'חצי שנתית' };
   }, [viewMode]);
   
-  const { sortedKeys, byPeriod } = useMemo(() => 
+  const { sortedKeys, byPeriod, participated } = useMemo(() => 
     aggregateByPeriod(sessions, players, keyFn), [sessions, players, keyFn]);
   
   // רק שחקנים שיש להם נתונים בתקופה כלשהי
@@ -3529,13 +3552,16 @@ const PeriodicTables = ({ allSessions, players }) => {
     });
   }, [sortedKeys, byPeriod]);
 
-  const formatCell = (val) => {
+  // מבחין בין "השתתף ב-0" (מציג 0) לבין "לא השתתף" (מציג —)
+  const formatCell = (val, didParticipate) => {
+    if (!didParticipate) return '—';
     if (!val || val === 0) return '0';
     return val > 0 ? `+${val}` : `${val}`;
   };
   
-  const cellColor = (val) => {
-    if (!val || val === 0) return 'text-stone-500';
+  const cellColor = (val, didParticipate) => {
+    if (!didParticipate) return 'text-stone-700'; // לא השתתף - כהה
+    if (!val || val === 0) return 'text-stone-400'; // השתתף בתיקו
     if (val > 0) return 'bg-emerald-900/40 text-emerald-300 font-bold';
     return 'bg-rose-900/40 text-rose-300 font-bold';
   };
@@ -3552,6 +3578,10 @@ const PeriodicTables = ({ allSessions, players }) => {
             {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <div className="flex rounded-lg border border-stone-700 bg-stone-900 p-1">
+            <button onClick={() => setViewMode('day')}
+              className={`px-3 py-1.5 text-xs rounded-md font-bold transition ${viewMode === 'day' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
+              יומית
+            </button>
             <button onClick={() => setViewMode('month')}
               className={`px-3 py-1.5 text-xs rounded-md font-bold transition ${viewMode === 'month' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
               חודשית
@@ -3589,6 +3619,7 @@ const PeriodicTables = ({ allSessions, players }) => {
             {activePlayers.map((name, i) => {
               const rowBg = i % 2 === 0 ? 'bg-stone-950' : 'bg-stone-900/50';
               const total = sortedKeys.reduce((s, k) => s + (byPeriod[k]?.[name] || 0), 0);
+              const totalParticipated = sortedKeys.some(k => participated[k]?.[name]);
               return (
                 <tr key={name} className="group hover:bg-amber-950/10">
                   <td className={`sticky right-0 z-10 ${rowBg} group-hover:bg-amber-950/20 border-b border-l border-stone-800 px-3 py-2.5 font-bold text-stone-100 whitespace-nowrap shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]`}>
@@ -3596,16 +3627,17 @@ const PeriodicTables = ({ allSessions, players }) => {
                   </td>
                   {sortedKeys.map(k => {
                     const val = byPeriod[k]?.[name];
+                    const didParticipate = !!participated[k]?.[name];
                     return (
-                      <td key={k} className={`border-b border-stone-900 px-3 py-2.5 tabular-nums text-center whitespace-nowrap ${cellColor(val)}`}>
-                        {formatCell(val)}
+                      <td key={k} className={`border-b border-stone-900 px-3 py-2.5 tabular-nums text-center whitespace-nowrap ${cellColor(val, didParticipate)}`}>
+                        {formatCell(val, didParticipate)}
                       </td>
                     );
                   })}
                   <td className={`sticky left-0 z-10 border-b border-r border-amber-800/50 px-3 py-2.5 tabular-nums text-center font-extrabold whitespace-nowrap ${
                     total > 0 ? 'bg-emerald-950/60 text-emerald-300' : total < 0 ? 'bg-rose-950/60 text-rose-300' : 'bg-stone-900/80 text-stone-400'
                   }`}>
-                    {formatCell(total)}
+                    {formatCell(total, totalParticipated)}
                   </td>
                 </tr>
               );
@@ -5672,6 +5704,9 @@ export default function PokerApp() {
         <footer className="mt-10 pb-6 text-center text-xs text-stone-600 tracking-[0.15em] uppercase">
           {sessions.length} מפגשים • {stats.length} שחקנים • עונת {selectedSeason} • 
           <span className="text-amber-600/60"> BARBUR AI</span>
+          <div className="mt-2 text-[10px] text-stone-700 tracking-normal normal-case">
+            {APP_VERSION}
+          </div>
         </footer>
       </div>
 
