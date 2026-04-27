@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.15.0';
-const APP_BUILD_TIME = '27/04/2026 21:09';
-const APP_NOTES = 'בורר שנים בגרף המצטבר + דיפולט כל התקופה';
+const APP_VERSION = 'v2.16.1';
+const APP_BUILD_TIME = '27/04/2026 21:19';
+const APP_NOTES = 'גרפים שנתיים תמיד מוצגים';
 
 
 // ===== הרשאות מנהל =====
@@ -3188,7 +3188,16 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
     stats.filter(s => s.sessions > 0).map(s => s.name)
   , [stats]);
   
-  const [selectedPlayer, setSelectedPlayer] = useState(currentUser || (players[0] || ''));
+  const [selectedPlayer, setSelectedPlayer] = useState('');
+  
+  // 🆕 כשcurrentUser מתעדכן (טעינה אסינכרונית) - מגדיר אותו כברירת מחדל
+  useEffect(() => {
+    if (!selectedPlayer && currentUser && players.includes(currentUser)) {
+      setSelectedPlayer(currentUser);
+    } else if (!selectedPlayer && players.length > 0) {
+      setSelectedPlayer(players[0]);
+    }
+  }, [currentUser, players.length]);
   
   // 🆕 כל השנים הזמינות בהיסטוריה
   const allYears = useMemo(() => {
@@ -3240,40 +3249,56 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
   }, [filteredSessions, selectedPlayer, selectedYears]);
   
   // 2️⃣ נתונים לגרף דירוג לאורך זמן (כולל בחירת שנים)
+  // הדירוג מחושב **בתוך כל עונה בנפרד** (כמו הטבלה הראשית)
   const rankData = useMemo(() => {
     if (!selectedPlayer || !allSessions) return [];
-    // לחישוב דירוג צריך את כל ההיסטוריה עד עכשיו, אבל מציג רק מהשנים הנבחרות
     const allSorted = [...allSessions].sort((a, b) => new Date(a.date) - new Date(b.date));
-    const cumulativeByPlayer = {};
+    
+    // מקבץ ערבים לפי שנה/עונה
+    const sessionsBySeason = {};
+    allSorted.forEach(s => {
+      if (!s.results) return;
+      const seasonKey = s.season || (s.date ? new Date(s.date).getFullYear() : 'unknown');
+      if (!sessionsBySeason[seasonKey]) sessionsBySeason[seasonKey] = [];
+      sessionsBySeason[seasonKey].push(s);
+    });
+    
     const rankings = [];
     
-    allSorted.forEach(session => {
-      if (!session.results) return;
-      Object.entries(session.results).forEach(([name, amount]) => {
-        cumulativeByPlayer[name] = (cumulativeByPlayer[name] || 0) + Number(amount);
-      });
+    // לכל עונה - חישוב מצטבר מתחיל מאפס
+    Object.entries(sessionsBySeason).forEach(([seasonKey, seasonSessions]) => {
+      const cumulativeBySeason = {};
       
-      if (session.results[selectedPlayer] === undefined) return;
-      
-      // אם נבחרו שנים - הצג רק ערבים מהשנים האלה
-      const y = session.season || (session.date ? new Date(session.date).getFullYear() : null);
-      if (selectedYears.length > 0 && !selectedYears.includes(y)) return;
-      
-      const sortedPlayers = Object.entries(cumulativeByPlayer)
-        .sort((a, b) => b[1] - a[1])
-        .map(([name]) => name);
-      const rank = sortedPlayers.indexOf(selectedPlayer) + 1;
-      
-      const d = new Date(session.date);
-      const yearShort = String(d.getFullYear()).slice(-2);
-      const label = selectedYears.length > 1 
-        ? `${d.getDate()}/${d.getMonth() + 1}/${yearShort}` 
-        : `${d.getDate()}/${d.getMonth() + 1}`;
-      rankings.push({
-        date: session.date,
-        label,
-        rank,
-        profit: cumulativeByPlayer[selectedPlayer],
+      seasonSessions.forEach(session => {
+        // עדכון רווח מצטבר לכל שחקן שהשתתף **בעונה זו**
+        Object.entries(session.results).forEach(([name, amount]) => {
+          cumulativeBySeason[name] = (cumulativeBySeason[name] || 0) + Number(amount);
+        });
+        
+        // השחקן שלנו השתתף בערב הזה?
+        if (session.results[selectedPlayer] === undefined) return;
+        
+        // אם נבחרו שנים - הצג רק ערבים מהשנים האלה
+        const y = session.season || (session.date ? new Date(session.date).getFullYear() : null);
+        if (selectedYears.length > 0 && !selectedYears.includes(y)) return;
+        
+        // דירוג מבין כל מי שהשתתף **בעונה זו** עד הערב הנוכחי
+        const sortedPlayers = Object.entries(cumulativeBySeason)
+          .sort((a, b) => b[1] - a[1])
+          .map(([name]) => name);
+        const rank = sortedPlayers.indexOf(selectedPlayer) + 1;
+        
+        const d = new Date(session.date);
+        const yearShort = String(d.getFullYear()).slice(-2);
+        const label = selectedYears.length > 1 
+          ? `${d.getDate()}/${d.getMonth() + 1}/${yearShort}` 
+          : `${d.getDate()}/${d.getMonth() + 1}`;
+        rankings.push({
+          date: session.date,
+          label,
+          rank,
+          profit: cumulativeBySeason[selectedPlayer],
+        });
       });
     });
     
@@ -3452,7 +3477,7 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
       </div>
       
       {/* 🆕 גרף ביצועים שנתיים - רווח לכל שנה */}
-      {yearlyData.length >= 2 && (
+      {yearlyData.length >= 1 && (
         <div className="rounded-2xl border border-yellow-800/40 bg-gradient-to-br from-yellow-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
           <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
             <h3 className="text-base md:text-lg font-bold text-yellow-200 flex items-center gap-2">
@@ -3506,7 +3531,7 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
       )}
       
       {/* 🆕 גרף דירוג שנתי */}
-      {yearlyRankData.length >= 2 && (
+      {yearlyRankData.length >= 1 && (
         <div className="rounded-2xl border border-amber-800/40 bg-gradient-to-br from-amber-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
           <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
             <h3 className="text-base md:text-lg font-bold text-amber-200 flex items-center gap-2">
@@ -5552,7 +5577,7 @@ const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingS
       <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
       {/* 📈 הגרף המצטבר - אחרי המיקום שלך בדירוג */}
       <div className="rounded-2xl border border-stone-800 bg-stone-950/40 backdrop-blur p-2">
-        <CumulativeChart sessions={sessions} allSessions={allSessions} stats={stats} fullscreen={false}
+        <CumulativeChart sessions={sessions} stats={stats} fullscreen={false}
           onFullscreenToggle={onFullscreenToggle}
           selectedPlayers={selectedChartPlayers}
           onPlayersChange={setSelectedChartPlayers}
@@ -7430,7 +7455,7 @@ export default function PokerApp() {
   if (chartFullscreen) {
     return (
       <div dir="rtl" className="fixed inset-0 z-50 bg-stone-950 p-4 overflow-auto" style={{ fontFamily: 'Assistant, sans-serif' }}>
-        <CumulativeChart sessions={sessions} allSessions={allSessions} stats={stats} fullscreen={true}
+        <CumulativeChart sessions={sessions} stats={stats} fullscreen={true}
           onFullscreenToggle={() => setChartFullscreen(false)}
           selectedPlayers={selectedChartPlayers}
           onPlayersChange={setSelectedChartPlayers}
