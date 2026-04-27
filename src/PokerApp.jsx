@@ -504,6 +504,79 @@ const CumulativeChart = ({ sessions, stats, fullscreen, onFullscreenToggle, sele
   );
 };
 
+// 🔥 חישוב רצף ניצחונות עבור שחקן
+// מחזיר את מספר הערבים ברציפות שהשחקן ניצח (רק ערבים שהוא השתתף בהם)
+// ערבים שדילג עליהם לא שוברים את הרצף
+const calculateStreak = (playerName, sessions) => {
+  if (!playerName || !sessions || sessions.length === 0) return 0;
+  const playerSessions = sessions
+    .filter(s => s.results && typeof s.results[playerName] === 'number')
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (playerSessions.length === 0) return 0;
+  let streak = 0;
+  for (const s of playerSessions) {
+    if (Number(s.results[playerName]) > 0) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+};
+
+// 🔥 קומפוננטת להבה - SVG מצויר עם אנימציה
+// streak: מספר הניצחונות ברצף - קובע גודל וצבע הלהבה
+const FlameIcon = ({ streak }) => {
+  if (streak < 2) return null;
+  let size, intensity;
+  if (streak >= 7) { size = 22; intensity = 'mega'; }
+  else if (streak >= 5) { size = 19; intensity = 'high'; }
+  else if (streak >= 3) { size = 16; intensity = 'medium'; }
+  else { size = 14; intensity = 'low'; }
+  
+  const colors = {
+    low:    { outer: '#fbbf24', mid: '#f59e0b', inner: '#fde047' },
+    medium: { outer: '#ea580c', mid: '#fb923c', inner: '#fbbf24' },
+    high:   { outer: '#dc2626', mid: '#f97316', inner: '#fde047' },
+    mega:   { outer: '#7f1d1d', mid: '#dc2626', inner: '#fbbf24' },
+  };
+  const c = colors[intensity];
+  const id = `flame-${intensity}-${streak}`;
+  
+  return (
+    <span 
+      className={`inline-flex items-center gap-0.5 align-middle ml-1 streak-flame streak-${intensity}`}
+      title={`${streak} ניצחונות ברציפות 🔥`}>
+      <svg width={size} height={size * 1.3} viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg"
+        style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+        <defs>
+          <radialGradient id={`${id}-grad`} cx="50%" cy="70%" r="60%">
+            <stop offset="0%" stopColor={c.inner}/>
+            <stop offset="50%" stopColor={c.mid}/>
+            <stop offset="100%" stopColor={c.outer}/>
+          </radialGradient>
+        </defs>
+        <path 
+          d="M12 2 C 14 6, 18 9, 18 15 C 18 22, 15 26, 12 30 C 9 26, 6 22, 6 15 C 6 11, 8 9, 12 2 Z"
+          fill={`url(#${id}-grad)`} stroke={c.outer} strokeWidth="0.5"/>
+        <path 
+          d="M12 10 C 13 13, 14.5 15, 14.5 19 C 14.5 23, 13 26, 12 28 C 11 26, 9.5 23, 9.5 19 C 9.5 16, 10.5 14, 12 10 Z"
+          fill={c.inner} opacity="0.85"/>
+        {streak >= 5 && <circle cx="12" cy="22" r="1.5" fill="white" opacity="0.7"/>}
+      </svg>
+      {streak >= 3 && (
+        <span className={`text-[10px] font-extrabold tabular-nums ${
+          intensity === 'mega' ? 'text-red-400' :
+          intensity === 'high' ? 'text-orange-400' :
+          'text-amber-400'
+        }`}>
+          {streak}
+        </span>
+      )}
+    </span>
+  );
+};
+
 // ===== טבלה ראשית =====
 const MainLeaderboard = ({ stats, sessions }) => {
   const latestDate = getLatestSessionDate(sessions);
@@ -567,6 +640,7 @@ const MainLeaderboard = ({ stats, sessions }) => {
           <tbody>
             {stats.map((p, i) => {
               const rowBg = i % 2 === 0 ? 'bg-stone-950' : 'bg-stone-900/50';
+              const streak = calculateStreak(p.name, sessions); // 🔥 חישוב רצף נוכחי
               return (
                 <tr key={p.name} className="group hover:bg-amber-950/10">
                   <td className={`sticky right-0 z-20 ${rowBg} group-hover:bg-amber-950/20 border-b border-l border-stone-800 px-3 py-3 font-bold text-stone-500 tabular-nums whitespace-nowrap shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]`}>
@@ -574,6 +648,7 @@ const MainLeaderboard = ({ stats, sessions }) => {
                   </td>
                   <td className={`sticky z-20 ${rowBg} group-hover:bg-amber-950/20 border-b border-l border-stone-800 px-3 py-3 font-bold text-stone-100 whitespace-nowrap shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]`} style={{ right: '55px' }}>
                     {p.name}
+                    <FlameIcon streak={streak} />
                   </td>
                   {columns.map(c => (
                     <td key={c.key} className={`border-b border-stone-900 px-3 py-3 tabular-nums whitespace-nowrap ${color(p[c.key], c.key)}`}>
@@ -3029,7 +3104,7 @@ const Confetti = ({ active, onComplete, message }) => {
           flipped: directionMultiplier < 0,
           bobDelay: Math.random() * 1.5,
           bobDuration: 1.2 + Math.random() * 0.8,
-          size: 28 + Math.random() * 12,
+          size: 44 + Math.random() * 16, // ברבורים גדולים: 44-60px (היו 28-40)
         });
       }
     });
@@ -5416,6 +5491,31 @@ export default function PokerApp() {
           100% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); }
         }
         .animate-confetti-message { animation: confetti-message 5s ease-out forwards; }
+        /* 🔥 אנימציית להבת Hot Streak - הבהוב ותנועה קלה */
+        @keyframes flame-flicker {
+          0%, 100% { 
+            transform: scale(1) rotate(-1deg);
+            filter: brightness(1) drop-shadow(0 0 3px rgba(251, 146, 60, 0.6));
+          }
+          25% { 
+            transform: scale(1.08) rotate(1.5deg);
+            filter: brightness(1.15) drop-shadow(0 0 5px rgba(251, 146, 60, 0.8));
+          }
+          50% { 
+            transform: scale(0.95) rotate(-0.5deg);
+            filter: brightness(0.95) drop-shadow(0 0 2px rgba(251, 146, 60, 0.5));
+          }
+          75% { 
+            transform: scale(1.05) rotate(1deg);
+            filter: brightness(1.1) drop-shadow(0 0 4px rgba(251, 146, 60, 0.7));
+          }
+        }
+        .streak-flame svg {
+          animation: flame-flicker 1.4s ease-in-out infinite;
+          transform-origin: center bottom;
+        }
+        .streak-flame.streak-mega svg { animation-duration: 0.9s; }
+        .streak-flame.streak-high svg { animation-duration: 1.1s; }
       `}</style>
     </div>
   );
