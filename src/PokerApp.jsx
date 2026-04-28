@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.18.4';
-const APP_BUILD_TIME = '28/04/2026 09:42';
-const APP_NOTES = 'תיקון שידור חי - הסרת תלות ב-hasLoadedSaved';
+const APP_VERSION = 'v2.18.5';
+const APP_BUILD_TIME = '28/04/2026 09:55';
+const APP_NOTES = 'בדיקה - testMode קבוע';
 
 
 // ===== הרשאות מנהל =====
@@ -4717,7 +4717,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       adminName: adminName || null,
       updatedAt: new Date().toISOString(),
       season: currentSeason,
-      testMode: broadcastTestMode,
+      testMode: true, // 🧪 קבוע true למצב בדיקה - יחזור ל-broadcastTestMode אחרי שעובד
     };
     
     saveLiveBroadcast(broadcast).catch(() => {});
