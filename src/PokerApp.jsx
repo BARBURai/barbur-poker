@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.23.0';
-const APP_BUILD_TIME = '28/04/2026 11:39';
-const APP_NOTES = '🎙️ +1307 ציטוטים מהוואטסאפ (סה״כ 2282)';
+const APP_VERSION = 'v2.23.1';
+const APP_BUILD_TIME = '28/04/2026 11:50';
+const APP_NOTES = 'תיקון - כתובת מתעדכנת אוטומטית בשינוי מארח';
 
 
 // ===== הרשאות מנהל =====
@@ -2404,7 +2404,20 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
           <div className="grid grid-cols-2 gap-2 mb-2">
             <input type="date" value={newHost.date} onChange={e => setNewHost({...newHost, date: e.target.value})}
               className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white text-sm" />
-            <select value={newHost.host} onChange={e => setNewHost({...newHost, host: e.target.value})}
+            <select value={newHost.host} onChange={e => {
+              const selectedHost = e.target.value;
+              // 🆕 כתובת אוטומטית מהאירוח האחרון של המארח
+              let autoAddress = newHost.address || '';
+              if (selectedHost) {
+                const lastEntry = [...hostingSchedule]
+                  .filter(x => x.host === selectedHost && x.address)
+                  .sort((a, b) => b.date.localeCompare(a.date))[0];
+                if (lastEntry && lastEntry.address) {
+                  autoAddress = lastEntry.address;
+                }
+              }
+              setNewHost({...newHost, host: selectedHost, address: autoAddress});
+            }}
               className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white text-sm">
               <option value="">בחר מארח...</option>
               {players.map(p => <option key={p} value={p}>{p}</option>)}
@@ -2441,7 +2454,23 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
               {isEditing ? (
                 <div className="space-y-2">
                   <div className="text-sm text-stone-400">{h.dayName} • {dateObj.toLocaleDateString('he-IL', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
-                  <select value={editHost} onChange={e => setEditHost(e.target.value)}
+                  <select value={editHost} onChange={e => {
+                    const newHost = e.target.value;
+                    setEditHost(newHost);
+                    // 🆕 אם בחרו מארח חדש - מצא את הכתובת האחרונה שלו אוטומטית
+                    if (newHost && newHost !== editHost) {
+                      const lastEntry = [...hostingSchedule]
+                        .filter(x => x.host === newHost && x.address)
+                        .sort((a, b) => b.date.localeCompare(a.date))[0];
+                      if (lastEntry && lastEntry.address) {
+                        setEditAddress(lastEntry.address);
+                      } else {
+                        setEditAddress(''); // אין כתובת קודמת - ניקוי
+                      }
+                    } else if (!newHost) {
+                      setEditAddress(''); // אין מארח - ניקוי כתובת
+                    }
+                  }}
                     className="w-full rounded-lg border border-stone-700 bg-stone-800 px-3 py-2 text-white text-sm">
                     <option value="">ללא מארח</option>
                     {players.map(p => <option key={p} value={p}>{p}</option>)}
