@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.25.1';
-const APP_BUILD_TIME = '28/04/2026 19:08';
-const APP_NOTES = '🪶 אימוג\'י כנף לאמרות כנף';
+const APP_VERSION = 'v2.25.2';
+const APP_BUILD_TIME = '28/04/2026 19:15';
+const APP_NOTES = 'תיקון - dropdown של בחירת שחקן צף מעל הכל';
 
 
 // ===== הרשאות מנהל =====
@@ -135,7 +135,9 @@ const getTodayIsrael = () => {
 const SearchableSelect = ({ value, onChange, options, placeholder = 'בחר...', className = '', allowEmpty = false, emptyLabel = 'ללא' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [dropdownPos, setDropdownPos] = useState(null);
   const containerRef = useRef(null);
+  const buttonRef = useRef(null);
   
   // סגירה בלחיצה מחוץ
   useEffect(() => {
@@ -148,6 +150,18 @@ const SearchableSelect = ({ value, onChange, options, placeholder = 'בחר...',
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+  
+  // 🆕 חישוב מיקום ה-dropdown כשהוא נפתח (position: fixed)
+  useEffect(() => {
+    if (isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+      });
+    }
+  }, [isOpen]);
   
   // אופציות מסוננות
   const filtered = useMemo(() => {
@@ -167,8 +181,9 @@ const SearchableSelect = ({ value, onChange, options, placeholder = 'בחר...',
   };
   
   return (
-    <div ref={containerRef} className={`relative ${className}`} style={isOpen ? { zIndex: 9999 } : undefined}>
+    <div ref={containerRef} className={`relative ${className}`}>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-sm text-white text-right flex items-center justify-between gap-2 hover:bg-stone-800 transition">
@@ -177,8 +192,15 @@ const SearchableSelect = ({ value, onChange, options, placeholder = 'בחר...',
           {value || placeholder}
         </span>
       </button>
-      {isOpen && (
-        <div className="absolute mt-1 w-full rounded-lg border border-stone-700 bg-stone-900 shadow-xl shadow-black/50 max-h-64 overflow-hidden flex flex-col" style={{ zIndex: 9999 }}>
+      {isOpen && dropdownPos && (
+        <div 
+          className="fixed rounded-lg border border-stone-700 bg-stone-900 shadow-2xl shadow-black/80 max-h-64 overflow-hidden flex flex-col" 
+          style={{ 
+            zIndex: 99999,
+            top: `${dropdownPos.top}px`,
+            left: `${dropdownPos.left}px`,
+            width: `${dropdownPos.width}px`,
+          }}>
           <div className="p-2 border-b border-stone-700 sticky top-0 bg-stone-900">
             <div className="relative">
               <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
