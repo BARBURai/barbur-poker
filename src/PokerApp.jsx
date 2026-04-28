@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.19.0';
-const APP_BUILD_TIME = '28/04/2026 10:32';
-const APP_NOTES = 'עדכון מארח אוטומטי בחצות שעון ישראל';
+const APP_VERSION = 'v2.20.0';
+const APP_BUILD_TIME = '28/04/2026 10:38';
+const APP_NOTES = '🎯 אופטימיזציית העברות - subset-sum (פחות העברות)';
 
 
 // ===== הרשאות מנהל =====
@@ -2414,20 +2414,93 @@ const LIVE_SESSION_KEY = 'poker_live_session_v1';
 // ===== אלגוריתם חלוקת כספים חכמה - מינימום העברות =====
 const calculateSettlements = (results) => {
   // results = { name: profit }
-  // יוצרים שתי רשימות - חייבים ומקבלים
-  const creditors = []; // מקבלים (רווח חיובי)
-  const debtors = [];   // חייבים (הפסד שלילי)
+  const creditors = [];
+  const debtors = [];
   
   Object.entries(results).forEach(([name, amount]) => {
     if (amount > 0) creditors.push({ name, amount });
-    else if (amount < 0) debtors.push({ name, amount: -amount }); // הופכים לחיובי
+    else if (amount < 0) debtors.push({ name, amount: -amount });
   });
   
-  // מיון - מהגדול לקטן (חמדנות)
-  creditors.sort((a, b) => b.amount - a.amount);
-  debtors.sort((a, b) => b.amount - a.amount);
+  if (creditors.length === 0 || debtors.length === 0) return [];
   
   const transfers = [];
+  
+  // 🆕 שלב 1: התאמות מדויקות 1-ל-1 (זוכה X = מפסיד X)
+  // העברה אחת מאזנת את שניהם - הכי יעיל
+  for (let i = creditors.length - 1; i >= 0; i--) {
+    for (let j = debtors.length - 1; j >= 0; j--) {
+      if (Math.abs(creditors[i].amount - debtors[j].amount) < 0.01) {
+        transfers.push({
+          from: debtors[j].name,
+          to: creditors[i].name,
+          amount: creditors[i].amount,
+        });
+        creditors.splice(i, 1);
+        debtors.splice(j, 1);
+        break;
+      }
+    }
+  }
+  
+  // 🆕 שלב 2: subset-sum - מחפש תת-קבוצה של מפסידים שמסכומם = זוכה אחד (או להפך)
+  // למשל: זוכה 60 = מפסיד 40 + מפסיד 20 → 2 העברות שמסיימות 3 שחקנים
+  // נריץ את זה עד שלא נמצאות התאמות
+  let foundSubsetMatch = true;
+  while (foundSubsetMatch) {
+    foundSubsetMatch = false;
+    
+    // נסה לכל זוכה למצוא תת-קבוצה של מפסידים שסכומם שווה לו
+    for (let cIdx = 0; cIdx < creditors.length; cIdx++) {
+      const target = creditors[cIdx].amount;
+      const subset = findSubsetWithSum(debtors, target);
+      if (subset && subset.length >= 2) {
+        // נמצאה התאמה! צור העברות
+        const creditor = creditors[cIdx];
+        subset.forEach(dIdx => {
+          transfers.push({
+            from: debtors[dIdx].name,
+            to: creditor.name,
+            amount: debtors[dIdx].amount,
+          });
+        });
+        // הסר את הזוכה
+        creditors.splice(cIdx, 1);
+        // הסר את המפסידים (מהגדול לקטן כדי לא לשבור אינדקסים)
+        const sortedIndices = [...subset].sort((a, b) => b - a);
+        sortedIndices.forEach(idx => debtors.splice(idx, 1));
+        foundSubsetMatch = true;
+        break;
+      }
+    }
+    
+    if (foundSubsetMatch) continue;
+    
+    // נסה לכל מפסיד למצוא תת-קבוצה של זוכים שסכומם שווה לו
+    for (let dIdx = 0; dIdx < debtors.length; dIdx++) {
+      const target = debtors[dIdx].amount;
+      const subset = findSubsetWithSum(creditors, target);
+      if (subset && subset.length >= 2) {
+        const debtor = debtors[dIdx];
+        subset.forEach(cIdx => {
+          transfers.push({
+            from: debtor.name,
+            to: creditors[cIdx].name,
+            amount: creditors[cIdx].amount,
+          });
+        });
+        debtors.splice(dIdx, 1);
+        const sortedIndices = [...subset].sort((a, b) => b - a);
+        sortedIndices.forEach(idx => creditors.splice(idx, 1));
+        foundSubsetMatch = true;
+        break;
+      }
+    }
+  }
+  
+  // 🆕 שלב 3: greedy לשארית (מהגדול לקטן)
+  creditors.sort((a, b) => b.amount - a.amount);
+  debtors.sort((a, b) => b.amount - a.amount);
   
   while (creditors.length > 0 && debtors.length > 0) {
     const creditor = creditors[0];
@@ -2437,18 +2510,61 @@ const calculateSettlements = (results) => {
     transfers.push({
       from: debtor.name,
       to: creditor.name,
-      amount: transfer
+      amount: transfer,
     });
     
     creditor.amount -= transfer;
     debtor.amount -= transfer;
     
-    // הסרה של הצד שהתאפס
     if (creditor.amount < 0.01) creditors.shift();
     if (debtor.amount < 0.01) debtors.shift();
   }
   
   return transfers;
+};
+
+// 🆕 פונקציית עזר - מחפשת תת-קבוצה של 2-4 פריטים שסכומם שווה לערך מטרה
+// מחזירה מערך של אינדקסים אם נמצא, null אם לא
+const findSubsetWithSum = (items, target) => {
+  if (items.length === 0) return null;
+  const epsilon = 0.01;
+  
+  // 2 פריטים
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      if (Math.abs(items[i].amount + items[j].amount - target) < epsilon) {
+        return [i, j];
+      }
+    }
+  }
+  
+  // 3 פריטים
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      for (let k = j + 1; k < items.length; k++) {
+        if (Math.abs(items[i].amount + items[j].amount + items[k].amount - target) < epsilon) {
+          return [i, j, k];
+        }
+      }
+    }
+  }
+  
+  // 4 פריטים (רק אם יש לפחות 5 פריטים - אחרת לא יתרום משמעותית)
+  if (items.length >= 5) {
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        for (let k = j + 1; k < items.length; k++) {
+          for (let l = k + 1; l < items.length; l++) {
+            if (Math.abs(items[i].amount + items[j].amount + items[k].amount + items[l].amount - target) < epsilon) {
+              return [i, j, k, l];
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  return null;
 };
 
 
