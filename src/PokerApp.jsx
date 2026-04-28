@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.23.3';
-const APP_BUILD_TIME = '28/04/2026 14:44';
-const APP_NOTES = 'תיקון - גרף התובנות מציג את המשתמש המחובר';
+const APP_VERSION = 'v2.24.0';
+const APP_BUILD_TIME = '28/04/2026 16:57';
+const APP_NOTES = '📚 +316 ערבים מההיסטוריה (2013-2022)';
 
 
 // ===== הרשאות מנהל =====
@@ -32,7 +32,10 @@ const INITIAL_PLAYERS = [
   'אבי', 'איתמר', 'הילאי', 'שליו', 'כליפא', 'עידו רייטר', 'נדב', 'עידן',
   // שחקנים מהיסטוריה
   'נועם', 'נועם 2', 'אייל', 'ערן', "טל רג'וון", 'שחר', 'רז',
-  'מיקי', 'יובל בלוך', 'אמנון', 'אשר/ערן'
+  'מיקי', 'יובל בלוך', 'אמנון', 'אשר/ערן',
+  // שחקנים מהיסטוריה הרחוקה (2013-2022)
+  'ארי', 'אשרי', 'גיא', 'ד"ר יובל', 'הראל', 'מאיר', 'אמיר',
+  'ויקטור', 'צחי', "ריצ'רד", 'טל UTG', 'איל מרזל', 'אורחים לא מזוהים'
 ];
 
 // ===== היסטוריה מהאקסל (נתוני כל 4 השנים: 2023-2026) =====
