@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.16.4';
-const APP_BUILD_TIME = '27/04/2026 21:31';
-const APP_NOTES = 'תיקון - דיפולט שחקן מחובר בגרף הדשבורד';
+const APP_VERSION = 'v2.18.2';
+const APP_BUILD_TIME = '28/04/2026 02:47';
+const APP_NOTES = 'סימני שאלה מסבירים ליד דגלי בדיקה';
 
 
 // ===== הרשאות מנהל =====
@@ -60,6 +60,57 @@ const loadState = async (key = STORAGE_KEY) => {
 
 const saveState = async (state, key = STORAGE_KEY) => {
   return await fbSaveState(state, key);
+};
+
+// ============================================================
+// 📡 שידור חי - מצב ערב חי משותף לכל המשתמשים
+// ============================================================
+// כשיש ערב חי בשעות 19:00-23:59 ביום אירוח - הצופים רואים את המצב בלייב
+const LIVE_BROADCAST_KEY = 'poker_live_broadcast_v1';
+
+const saveLiveBroadcast = async (broadcast) => {
+  try {
+    return await fbSaveState(broadcast, LIVE_BROADCAST_KEY);
+  } catch (e) {
+    console.warn('Failed to save live broadcast:', e);
+  }
+};
+
+const loadLiveBroadcast = async () => {
+  try {
+    return await fbLoadState(LIVE_BROADCAST_KEY);
+  } catch (e) {
+    return null;
+  }
+};
+
+const clearLiveBroadcast = async () => {
+  try {
+    return await fbSaveState({ active: false, clearedAt: new Date().toISOString() }, LIVE_BROADCAST_KEY);
+  } catch (e) {}
+};
+
+// בודק האם השעה כעת בישראל היא בין 19:00-23:59
+const isLiveBroadcastTime = () => {
+  try {
+    const israelTime = new Date().toLocaleString('en-US', { 
+      timeZone: 'Asia/Jerusalem',
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const [hour, minute] = israelTime.split(':').map(Number);
+    return hour >= 19 && hour <= 23;
+  } catch (e) {
+    return false;
+  }
+};
+
+// בודק האם תאריך נתון הוא יום אירוח לפי לוח האירוחים
+const isHostingDay = (hostingSchedule, dateStr) => {
+  if (!hostingSchedule || !Array.isArray(hostingSchedule)) return false;
+  const today = dateStr || new Date().toISOString().split('T')[0];
+  return hostingSchedule.some(h => h.date === today);
 };
 
 // ===== חישובי סטטיסטיקה =====
@@ -4447,6 +4498,153 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
 };
 
 
+// ============================================================
+// 📡 צופה בשידור חי - מסך נפרד שעולה אוטומטית למשתמשים
+// ============================================================
+// מציג רשימת משתתפים + buy-ins של ערב חי שמתנהל כעת
+const LiveBroadcastViewer = ({ broadcast, onClose, currentUser }) => {
+  if (!broadcast || !broadcast.active) return null;
+  
+  const participants = broadcast.participants || [];
+  const totalBuyIns = participants.reduce((sum, p) => sum + (p.buyIns || 0), 0);
+  const totalPot = totalBuyIns * 20;
+  const lastUpdate = broadcast.updatedAt ? new Date(broadcast.updatedAt) : null;
+  const formattedTime = lastUpdate 
+    ? lastUpdate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' })
+    : '';
+  
+  // האם המשתמש המחובר משתתף בערב?
+  const isParticipating = participants.some(p => p.name === currentUser);
+  
+  return (
+    <div dir="rtl" className="fixed inset-0 z-[100] bg-stone-950 overflow-auto" style={{ fontFamily: 'Assistant, sans-serif' }}>
+      {/* רקע אנימטיבי */}
+      <div className="fixed inset-0 -z-10 bg-gradient-to-br from-amber-950/30 via-stone-950 to-stone-950"></div>
+      
+      <div className="max-w-2xl mx-auto p-4 md:p-6 space-y-4">
+        {/* כותרת */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <div className="w-3 h-3 bg-rose-500 rounded-full animate-pulse"></div>
+              <div className="absolute inset-0 w-3 h-3 bg-rose-500 rounded-full animate-ping"></div>
+            </div>
+            <span className="text-rose-400 font-bold text-sm tracking-wider uppercase">משדר חי</span>
+          </div>
+          {onClose && (
+            <button onClick={onClose}
+              className="rounded-full bg-stone-800/80 border border-stone-700 p-2 text-stone-300 hover:bg-stone-700 transition">
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+        
+        {/* תיבה ראשית */}
+        <div className="rounded-3xl border-2 border-amber-700/40 bg-gradient-to-br from-amber-950/40 via-stone-950/80 to-stone-950 backdrop-blur p-6 md:p-8 text-center space-y-4">
+          <div className="flex flex-col items-center gap-2">
+            <img src={SWAN_IMG} alt="ברבור" width={56} height={56} className="opacity-90" />
+            <h1 className="text-2xl md:text-3xl font-extrabold text-amber-200">
+              ערב פוקר ברבורי תל מונד
+            </h1>
+            <div className="text-sm text-stone-400">
+              {new Date(broadcast.sessionDate).toLocaleDateString('he-IL', { 
+                weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' 
+              })}
+            </div>
+          </div>
+          
+          {broadcast.host && (
+            <div className="inline-block rounded-full bg-purple-900/40 border border-purple-700/50 px-4 py-1.5">
+              <span className="text-sm text-purple-200">
+                🏠 מארח: <span className="font-bold">{broadcast.host}</span>
+              </span>
+            </div>
+          )}
+          
+          {/* סכומים */}
+          <div className="grid grid-cols-2 gap-3 max-w-md mx-auto pt-2">
+            <div className="rounded-xl bg-stone-900/60 border border-stone-800 p-3">
+              <div className="text-xs text-stone-500 mb-1">משתתפים</div>
+              <div className="text-2xl font-extrabold text-stone-100 tabular-nums">
+                {participants.length}
+              </div>
+            </div>
+            <div className="rounded-xl bg-emerald-900/30 border border-emerald-700/40 p-3">
+              <div className="text-xs text-emerald-400/80 mb-1">קופה כוללת</div>
+              <div className="text-2xl font-extrabold text-emerald-300 tabular-nums">
+                {totalPot} ₪
+              </div>
+            </div>
+          </div>
+          
+          {isParticipating && (
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-900/40 border border-emerald-700/50 px-3 py-1 text-xs text-emerald-300">
+              ✓ אתה בערב הזה, {currentUser}
+            </div>
+          )}
+        </div>
+        
+        {/* רשימת משתתפים */}
+        {participants.length > 0 && (
+          <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-4">
+            <h3 className="text-base font-bold text-amber-200 mb-3 flex items-center gap-2">
+              👥 משתתפים ({participants.length})
+            </h3>
+            <div className="space-y-2">
+              {participants.map((p, i) => {
+                const isMe = p.name === currentUser;
+                return (
+                  <div 
+                    key={p.name + i} 
+                    className={`flex items-center justify-between rounded-xl border p-3 ${
+                      isMe 
+                        ? 'border-amber-700/60 bg-amber-950/30' 
+                        : 'border-stone-800 bg-stone-900/40'
+                    }`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                        isMe ? 'bg-amber-700 text-white' : 'bg-stone-800 text-stone-300'
+                      }`}>
+                        {i + 1}
+                      </div>
+                      <div className={`font-bold ${isMe ? 'text-amber-200' : 'text-stone-100'}`}>
+                        {p.name}
+                        {isMe && <span className="text-xs text-amber-400 mr-2">(אתה)</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className={`text-sm font-bold tabular-nums px-2.5 py-1 rounded-lg ${
+                        p.buyIns > 1 
+                          ? 'bg-orange-900/40 text-orange-300 border border-orange-700/40'
+                          : 'bg-stone-800 text-stone-300 border border-stone-700'
+                      }`}>
+                        {p.buyIns} {p.buyIns === 1 ? 'באיין' : 'באיינים'}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        
+        {/* פוטר */}
+        <div className="text-center text-xs text-stone-600 space-y-1">
+          {formattedTime && (
+            <div>עודכן לאחרונה: {formattedTime}</div>
+          )}
+          {broadcast.adminName && (
+            <div>מנוהל ע״י: <span className="text-stone-400">{broadcast.adminName}</span></div>
+          )}
+          <div className="text-stone-700 text-[10px] mt-2">
+            המסך מתעדכן אוטומטית — תוצאות לא מוצגות בלייב
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adminName }) => {
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [host, setHost] = useState('');
@@ -4464,6 +4662,11 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const [hostingAmount, setHostingAmount] = useState(50);
   // 🧪 ערב ניסיון - לא יוצר תזכורות תשלום
   const [isTestEvening, setIsTestEvening] = useState(false);
+  // 🧪 מצב בדיקה לשידור חי - מתעלם מתנאי יום אירוח ושעה
+  const [broadcastTestMode, setBroadcastTestMode] = useState(false);
+  
+  // 🆕 סגירה מוקדמת של שחקן - חלון לעדכון צ'יפים תוך כדי הערב
+  const [earlyCloseModal, setEarlyCloseModal] = useState(null); // { name, currentChips }
 
   // שמירה אוטומטית של מצב הערב לאחסון מקומי בדפדפן
   useEffect(() => {
@@ -4499,6 +4702,37 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       setHostingRecipient(host);
     }
   }, [host, hostingRecipient]);
+
+  // 📡 שידור חי ל-Firebase - כל פעם שמשתתפים/buy-ins משתנים
+  // מופעל רק אם יש משתתפים, המודל פתוח, ולא בערב ניסיון
+  useEffect(() => {
+    if (!isOpen || !hasLoadedSaved) return;
+    if (isTestEvening) return; // ערב ניסיון - לא משדרים
+    if (participants.length === 0) return;
+    
+    // נשלח את המצב הנוכחי לFirebase כדי שצופים יוכלו לראות
+    const broadcast = {
+      active: true,
+      sessionDate,
+      host: host || null,
+      participants: participants.map(p => ({ name: p.name, buyIns: p.buyIns })),
+      adminName: adminName || null,
+      updatedAt: new Date().toISOString(),
+      season: currentSeason,
+      testMode: broadcastTestMode, // 🧪 דגל מצב בדיקה
+    };
+    
+    // שמירה אסינכרונית - לא חוסם UI
+    saveLiveBroadcast(broadcast).catch(() => {});
+  }, [participants, host, sessionDate, isOpen, hasLoadedSaved, isTestEvening, adminName, currentSeason, broadcastTestMode]);
+  
+  // 📡 ניקוי שידור כשהמודל נסגר או הערב נשמר
+  useEffect(() => {
+    if (!isOpen && hasLoadedSaved) {
+      // המודל נסגר - מנקים את השידור
+      clearLiveBroadcast().catch(() => {});
+    }
+  }, [isOpen, hasLoadedSaved]);
 
   const reset = () => {
     setParticipants([]); setHost(''); setClosing(false); setFinalChips({});
@@ -4570,8 +4804,14 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     setClosing(true);
     const initial = {};
     participants.forEach(p => {
-      // שומר ערכים שכבר הוזנו אם חוזרים
-      initial[p.name] = finalChips[p.name] !== undefined ? finalChips[p.name] : '';
+      // עדיפות: 1) ערך שכבר הוזן ב-finalChips, 2) earlyClose אם קיים, 3) ריק
+      if (finalChips[p.name] !== undefined && finalChips[p.name] !== '') {
+        initial[p.name] = finalChips[p.name];
+      } else if (typeof p.earlyClose === 'number') {
+        initial[p.name] = p.earlyClose;
+      } else {
+        initial[p.name] = '';
+      }
     });
     setFinalChips(initial);
   };
@@ -4611,6 +4851,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
         }
       } catch (e) {}
     }
+    
+    // 📡 ניקוי שידור חי - הערב נגמר
+    clearLiveBroadcast().catch(() => {});
     
     setSavedEvening(true);
     reset();
@@ -4655,6 +4898,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
         }
       } catch (e) {}
     }
+    
+    // 📡 ניקוי שידור חי - הערב נגמר
+    clearLiveBroadcast().catch(() => {});
     
     setSavedEvening(true);
   };
@@ -4782,29 +5028,118 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                       עדיין לא הוספת שחקנים. לחץ "הוסף שחקנים" כדי להתחיל.
                     </div>
                   )}
-                  {participants.map(p => (
-                    <div key={p.name} className="rounded-xl border border-stone-800 bg-stone-900/50 p-3">
+                  {participants.map(p => {
+                    const hasEarlyClose = typeof p.earlyClose === 'number';
+                    return (
+                    <div key={p.name} className={`rounded-xl border p-3 ${
+                      hasEarlyClose 
+                        ? 'border-stone-700 bg-stone-900/30 opacity-75' 
+                        : 'border-stone-800 bg-stone-900/50'
+                    }`}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex-1">
-                          <div className="font-bold text-stone-100">{p.name}</div>
+                          <div className="font-bold text-stone-100 flex items-center gap-2">
+                            {p.name}
+                            {hasEarlyClose && (
+                              <span className="text-[10px] bg-purple-900/50 border border-purple-700/50 text-purple-300 rounded-full px-2 py-0.5 font-bold">
+                                ✓ נסגר {p.earlyClose}₪
+                              </span>
+                            )}
+                          </div>
                           <div className="text-xs text-stone-500">{p.buyIns} {p.buyIns === 1 ? 'קניה' : 'קניות'} • {p.buyIns * 20} ₪</div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => removeBuyIn(p.name)} disabled={p.buyIns <= 1}
+                          <button onClick={() => removeBuyIn(p.name)} disabled={p.buyIns <= 1 || hasEarlyClose}
                             className="w-9 h-9 rounded-lg bg-stone-800 hover:bg-rose-950 text-stone-300 hover:text-rose-300 font-bold disabled:opacity-30">−</button>
                           <div className="w-12 text-center text-xl font-extrabold text-amber-300 tabular-nums">{p.buyIns * 20}</div>
-                          <button onClick={() => addBuyIn(p.name)}
-                            className="w-9 h-9 rounded-lg bg-emerald-900/50 hover:bg-emerald-800 text-emerald-300 font-bold">+</button>
-                          <button onClick={() => removePlayer(p.name)}
-                            className="ml-1 rounded-lg p-2 text-stone-600 hover:text-rose-400 hover:bg-stone-800">
+                          <button onClick={() => addBuyIn(p.name)} disabled={hasEarlyClose}
+                            className="w-9 h-9 rounded-lg bg-emerald-900/50 hover:bg-emerald-800 text-emerald-300 font-bold disabled:opacity-30">+</button>
+                          {/* 🆕 כפתור סגירה מוקדמת */}
+                          <button 
+                            onClick={() => setEarlyCloseModal({ name: p.name, currentChips: p.earlyClose ?? '' })}
+                            title={hasEarlyClose ? 'ערוך צ׳יפים סופיים' : 'סגירה מוקדמת - שחקן עוזב'}
+                            className={`ml-1 rounded-lg p-2 ${
+                              hasEarlyClose 
+                                ? 'text-purple-400 hover:bg-purple-950/30 bg-purple-950/20'
+                                : 'text-stone-500 hover:text-purple-400 hover:bg-stone-800'
+                            }`}>
+                            {hasEarlyClose ? '📝' : '✋'}
+                          </button>
+                          <button onClick={() => removePlayer(p.name)} disabled={hasEarlyClose}
+                            className="rounded-lg p-2 text-stone-600 hover:text-rose-400 hover:bg-stone-800 disabled:opacity-30">
                             <X className="h-4 w-4" />
                           </button>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                  })}
                 </div>
               </div>
+
+              {/* 🧪 דגלי בדיקה */}
+              {participants.length > 0 && (
+                <div className="space-y-2">
+                  <div className={`rounded-xl border p-3 transition ${isTestEvening ? 'border-yellow-700/70 bg-yellow-950/30' : 'border-stone-800 bg-stone-900/30'}`}>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox"
+                        checked={isTestEvening}
+                        onChange={e => setIsTestEvening(e.target.checked)}
+                        className="w-5 h-5 rounded border-stone-600 bg-stone-800 cursor-pointer accent-yellow-500" />
+                      <div className="flex-1">
+                        <div className="font-bold text-stone-100 flex items-center gap-2 text-sm">
+                          🧪 ערב ניסיון
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              alert('🧪 ערב ניסיון\n\nכשמסומן - הערב נשמר רגיל אבל לא נוצרות תזכורות תשלום בדשבורד של השחקנים.\n\nשימושי כשבודקים את האפליקציה ולא רוצים להפעיל תזכורות מזויפות לאנשים אחרים.');
+                            }}
+                            title="מה זה?"
+                            className="rounded-full bg-stone-800 hover:bg-stone-700 border border-stone-600 w-5 h-5 flex items-center justify-center text-xs text-stone-400 hover:text-yellow-400 font-bold">
+                            ?
+                          </button>
+                          {isTestEvening && <span className="text-xs text-yellow-400 font-normal">(לא יוצר תזכורות)</span>}
+                        </div>
+                        <div className="text-xs text-stone-500 mt-0.5">
+                          לא יוצר תזכורות תשלום בדשבורד של השחקנים
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                  <div className={`rounded-xl border p-3 transition ${broadcastTestMode ? 'border-cyan-700/70 bg-cyan-950/30' : 'border-stone-800 bg-stone-900/30'}`}>
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input 
+                        type="checkbox"
+                        checked={broadcastTestMode}
+                        onChange={e => setBroadcastTestMode(e.target.checked)}
+                        className="w-5 h-5 rounded border-stone-600 bg-stone-800 cursor-pointer accent-cyan-500" />
+                      <div className="flex-1">
+                        <div className="font-bold text-stone-100 flex items-center gap-2 text-sm">
+                          📡 מצב בדיקה לשידור חי
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              alert('📡 מצב בדיקה לשידור חי\n\nכשמסומן - השידור החי של הערב יוצג לכל המשתמשים גם אם:\n• היום לא יום אירוח לפי הלוח\n• השעה מחוץ ל-19:00-23:59\n\nשימושי לבדוק שהשידור עובד כמו שצריך.\n\nכשלא מסומן - שידור יוצג רק ביום אירוח ובין 19:00 ל-23:59 שעון ישראל.');
+                            }}
+                            title="מה זה?"
+                            className="rounded-full bg-stone-800 hover:bg-stone-700 border border-stone-600 w-5 h-5 flex items-center justify-center text-xs text-stone-400 hover:text-cyan-400 font-bold">
+                            ?
+                          </button>
+                          {broadcastTestMode && <span className="text-xs text-cyan-400 font-normal">(שידור גם מחוץ לשעות אירוח)</span>}
+                        </div>
+                        <div className="text-xs text-stone-500 mt-0.5">
+                          לבדיקת השידור החי גם כשהיום לא יום אירוח או השעה מחוץ ל-19:00-23:59
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              )}
 
               {participants.length >= 2 && (
                 <button onClick={handleStartClosing}
@@ -4865,26 +5200,6 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                     </div>
                   );
                 })}
-              </div>
-
-              {/* 🧪 ערב ניסיון - לא יוצר תזכורות */}
-              <div className={`rounded-xl border p-3 transition ${isTestEvening ? 'border-yellow-700/70 bg-yellow-950/30' : 'border-stone-800 bg-stone-900/30'}`}>
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input 
-                    type="checkbox"
-                    checked={isTestEvening}
-                    onChange={e => setIsTestEvening(e.target.checked)}
-                    className="w-5 h-5 rounded border-stone-600 bg-stone-800 cursor-pointer accent-yellow-500" />
-                  <div className="flex-1">
-                    <div className="font-bold text-stone-100 flex items-center gap-2">
-                      🧪 ערב ניסיון
-                      {isTestEvening && <span className="text-xs text-yellow-400 font-normal">(לא יוצר תזכורות תשלום)</span>}
-                    </div>
-                    <div className="text-xs text-stone-500 mt-0.5">
-                      סמן כאשר אתה בודק את האפליקציה ולא רוצה להפעיל תזכורות בדשבורד של השחקנים
-                    </div>
-                  </div>
-                </label>
               </div>
 
               {/* 💸 בלוק העברת אירוח */}
@@ -4981,6 +5296,116 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
           )}
         </div>
       </div>
+
+      {/* 🆕 מודל סגירה מוקדמת של שחקן */}
+      {earlyCloseModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" 
+          onClick={() => setEarlyCloseModal(null)}>
+          <div className="relative w-full max-w-sm rounded-2xl border-2 border-purple-800/60 bg-gradient-to-br from-stone-900 to-stone-950 p-6 shadow-2xl" 
+            onClick={e => e.stopPropagation()} dir="rtl">
+            
+            <div className="flex flex-col items-center text-center mb-4">
+              <div className="text-3xl mb-2">✋</div>
+              <h3 className="text-xl font-bold text-purple-200 mb-1">
+                סגירת {earlyCloseModal.name}
+              </h3>
+              <p className="text-sm text-stone-400">
+                {participants.find(p => p.name === earlyCloseModal.name && typeof p.earlyClose === 'number')
+                  ? 'עדכן את הצ׳יפים הסופיים'
+                  : 'השחקן עוזב באמצע - הזן את הצ׳יפים הסופיים שלו'}
+              </p>
+            </div>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-stone-500 mb-1.5 font-bold">
+                  צ׳יפים סופיים (השקעה: {(participants.find(p => p.name === earlyCloseModal.name)?.buyIns || 0) * 20} ₪)
+                </label>
+                <div className="flex items-center gap-2">
+                  <button 
+                    type="button"
+                    onClick={() => setEarlyCloseModal({
+                      ...earlyCloseModal,
+                      currentChips: Math.max(0, (Number(earlyCloseModal.currentChips) || 0) - 20)
+                    })}
+                    className="w-11 h-11 rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 font-bold text-xl">−</button>
+                  <input 
+                    type="number"
+                    autoFocus
+                    value={earlyCloseModal.currentChips}
+                    onChange={e => setEarlyCloseModal({...earlyCloseModal, currentChips: e.target.value})}
+                    placeholder="0"
+                    className="flex-1 rounded-lg border border-stone-700 bg-stone-800 px-3 py-2.5 text-white text-center text-xl tabular-nums font-bold" />
+                  <button 
+                    type="button"
+                    onClick={() => setEarlyCloseModal({
+                      ...earlyCloseModal,
+                      currentChips: (Number(earlyCloseModal.currentChips) || 0) + 20
+                    })}
+                    className="w-11 h-11 rounded-lg bg-purple-700 hover:bg-purple-600 border border-purple-600 text-white font-bold text-xl">+</button>
+                </div>
+              </div>
+              
+              {/* תצוגת רווח/הפסד */}
+              {earlyCloseModal.currentChips !== '' && (() => {
+                const player = participants.find(p => p.name === earlyCloseModal.name);
+                if (!player) return null;
+                const chips = Number(earlyCloseModal.currentChips) || 0;
+                const profit = chips - player.buyIns * 20;
+                return (
+                  <div className={`rounded-lg p-2 text-center text-sm font-bold ${
+                    profit > 0 ? 'bg-emerald-900/40 text-emerald-300 border border-emerald-700/40' :
+                    profit < 0 ? 'bg-rose-900/40 text-rose-300 border border-rose-700/40' :
+                    'bg-stone-800 text-stone-400 border border-stone-700'
+                  }`}>
+                    {profit > 0 ? `רווח: +${profit} ₪` : profit < 0 ? `הפסד: ${profit} ₪` : 'מאוזן'}
+                  </div>
+                );
+              })()}
+              
+              <div className="flex gap-2 pt-2">
+                <button 
+                  onClick={() => setEarlyCloseModal(null)}
+                  className="flex-1 rounded-lg border border-stone-700 bg-stone-800 hover:bg-stone-700 px-4 py-2.5 font-bold text-stone-300">
+                  ביטול
+                </button>
+                {/* כפתור הסר סגירה (אם כבר נסגר) */}
+                {participants.find(p => p.name === earlyCloseModal.name && typeof p.earlyClose === 'number') && (
+                  <button 
+                    onClick={() => {
+                      setParticipants(participants.map(p => 
+                        p.name === earlyCloseModal.name 
+                          ? { ...p, earlyClose: undefined }
+                          : p
+                      ));
+                      setEarlyCloseModal(null);
+                    }}
+                    className="rounded-lg border border-rose-800/50 bg-rose-950/30 hover:bg-rose-950/50 px-3 py-2.5 font-bold text-rose-300 text-sm">
+                    בטל סגירה
+                  </button>
+                )}
+                <button 
+                  onClick={() => {
+                    const chips = Number(earlyCloseModal.currentChips);
+                    if (isNaN(chips) || chips < 0) {
+                      alert('הזן סכום תקין');
+                      return;
+                    }
+                    setParticipants(participants.map(p => 
+                      p.name === earlyCloseModal.name 
+                        ? { ...p, earlyClose: chips }
+                        : p
+                    ));
+                    setEarlyCloseModal(null);
+                  }}
+                  className="flex-1 rounded-lg bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 px-4 py-2.5 font-bold text-white">
+                  ✓ אישור
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* מודל חלוקת כספים */}
       <SettlementModal 
@@ -6798,7 +7223,14 @@ export default function PokerApp() {
   const [tab, setTab] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false); // תפריט המבורגר
   const [selectedChartPlayers, setSelectedChartPlayers] = useState([]);
+  // 🆕 רשימה נפרדת לגרף בלשונית תובנות - כדי שלא תושפע משינויים בדשבורד
+  const [insightsChartPlayers, setInsightsChartPlayers] = useState([]);
   const [chartFullscreen, setChartFullscreen] = useState(false);
+  
+  // 📡 שידור חי - מצב מקומי
+  const [liveBroadcast, setLiveBroadcast] = useState(null);
+  const [broadcastViewerOpen, setBroadcastViewerOpen] = useState(false);
+  const [broadcastDismissed, setBroadcastDismissed] = useState(false); // המשתמש סגר את הצופה
   const [isMobile, setIsMobile] = useState(false);
   
   // ציטוטים
@@ -6823,6 +7255,57 @@ export default function PokerApp() {
     }, 30000);
     return () => clearInterval(interval);
   }, []);
+  
+  // 📡 שידור חי - polling לבדוק אם יש שידור פעיל
+  // רץ כל 15 שניות, ובודק את התנאים: שעות + יום אירוח
+  useEffect(() => {
+    let cancelled = false;
+    
+    const checkBroadcast = async () => {
+      try {
+        const broadcast = await loadLiveBroadcast();
+        if (cancelled) return;
+        
+        if (!broadcast || !broadcast.active) {
+          setLiveBroadcast(null);
+          setBroadcastViewerOpen(false);
+          return;
+        }
+        
+        // בדיקת תנאים: שעה + יום אירוח (במצב בדיקה - מדלגים על תנאים)
+        const testMode = !!broadcast.testMode;
+        const isInTimeWindow = testMode || isLiveBroadcastTime();
+        const isHostingToday = testMode || isHostingDay(hostingSchedule, broadcast.sessionDate);
+        
+        if (!isInTimeWindow || !isHostingToday) {
+          // השידור לא רלוונטי כעת
+          setLiveBroadcast(null);
+          setBroadcastViewerOpen(false);
+          return;
+        }
+        
+        setLiveBroadcast(broadcast);
+        
+        // אם המנהל הנוכחי הוא ששידר - לא להציג צופה אצלו (הוא רואה את LiveSessionModal)
+        const isAdminBroadcasting = broadcast.adminName === currentUser;
+        
+        if (!isAdminBroadcasting && !broadcastDismissed) {
+          setBroadcastViewerOpen(true);
+        }
+      } catch (e) {}
+    };
+    
+    // בדיקה ראשונה
+    checkBroadcast();
+    
+    // polling
+    const interval = setInterval(checkBroadcast, 15000);
+    
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [hostingSchedule, currentUser, broadcastDismissed]);
   
   // 💸 סנכרון אוטומטי - כל מכשיר יוצר תזכורות לעצמו על ערבים מ-7 ימים אחרונים
   // רץ כשהערבים מתעדכנים (טעינה ראשונה / סנכרון מ-Firebase)
@@ -7035,6 +7518,16 @@ export default function PokerApp() {
       setSelectedChartPlayers([stats[0].name]);
     }
   }, [stats.length, currentUser]);
+  
+  // 🆕 לוגיקה דומה לגרף התובנות - state נפרד
+  useEffect(() => {
+    if (insightsChartPlayers.length > 0) return; // כבר אותחל
+    if (currentUser) {
+      setInsightsChartPlayers([currentUser]);
+    } else if (stats[0]) {
+      setInsightsChartPlayers([stats[0].name]);
+    }
+  }, [currentUser, stats.length]);
 
   const persistSessions = async (sessions, players, hostingScheduleParam, phonesParam) => {
     setSyncing(true);
@@ -7523,7 +8016,7 @@ export default function PokerApp() {
     { id: 'gallery', label: 'גלריה', icon: ImageIcon },
     // 🔒 היסטוריה - רק למנהלים
     ...(isAdmin ? [{ id: 'history', label: 'היסטוריה', icon: History }] : []),
-    { id: 'quotes', label: 'ציטוטים', icon: Quote },
+    { id: 'quotes', label: 'אמרות כנף', icon: Quote },
   ];
 
   return (
@@ -7662,8 +8155,8 @@ export default function PokerApp() {
               currentUser={currentUser} />
             <CumulativeChart sessions={sessions} allSessions={allSessions} stats={stats} fullscreen={false}
               onFullscreenToggle={() => setChartFullscreen(true)}
-              selectedPlayers={selectedChartPlayers}
-              onPlayersChange={setSelectedChartPlayers}
+              selectedPlayers={insightsChartPlayers}
+              onPlayersChange={setInsightsChartPlayers}
               isMobile={isMobile} />
             <PersonalCharts 
               sessions={sessions} 
@@ -7876,6 +8369,18 @@ export default function PokerApp() {
       
       <LiveSessionModal isOpen={liveModalOpen} onClose={() => setLiveModalOpen(false)}
         onSave={handleSaveSession} players={sortedPlayers} currentSeason={selectedSeason} adminName={currentUser} />
+      
+      {/* 📡 צופה בשידור חי - מופיע אוטומטית כשיש ערב חי בשעות מתאימות */}
+      {broadcastViewerOpen && liveBroadcast && (
+        <LiveBroadcastViewer 
+          broadcast={liveBroadcast}
+          currentUser={currentUser}
+          onClose={() => {
+            setBroadcastViewerOpen(false);
+            setBroadcastDismissed(true);
+          }}
+        />
+      )}
       
       <AdminLoginModal isOpen={loginOpen} onClose={() => setLoginOpen(false)} onLogin={handleAdminLogin} currentUser={currentUser} />
 
