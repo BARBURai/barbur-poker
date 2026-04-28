@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.23.1';
-const APP_BUILD_TIME = '28/04/2026 11:50';
-const APP_NOTES = 'תיקון - כתובת מתעדכנת אוטומטית בשינוי מארח';
+const APP_VERSION = 'v2.23.2';
+const APP_BUILD_TIME = '28/04/2026 12:04';
+const APP_NOTES = 'סינון אירוחים לפי שם מארח';
 
 
 // ===== הרשאות מנהל =====
@@ -2330,14 +2330,26 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
   const [showAddNew, setShowAddNew] = useState(false);
   const [newHost, setNewHost] = useState({ date: '', dayName: 'שני', host: '', notes: '', address: '' });
   const [filter, setFilter] = useState(defaultFilter); // upcoming | past | all
+  const [filterHost, setFilterHost] = useState('all'); // 🆕 פילטר לפי שם המארח
   const today = getTodayIsrael();
+  
+  // 🆕 רשימת מארחים ייחודיים מהלוח (מסודרים אלפבית)
+  const allHosts = useMemo(() => {
+    const s = new Set();
+    hostingSchedule.forEach(h => { if (h.host) s.add(h.host); });
+    return Array.from(s).sort();
+  }, [hostingSchedule]);
 
   const filtered = useMemo(() => {
     let list = [...hostingSchedule];
     if (filter === 'upcoming') list = list.filter(h => h.date >= today);
     else if (filter === 'past') list = list.filter(h => h.date < today);
+    // 🆕 סינון לפי שם המארח
+    if (filterHost !== 'all') {
+      list = list.filter(h => h.host === filterHost);
+    }
     return list.sort((a, b) => filter === 'past' ? b.date.localeCompare(a.date) : a.date.localeCompare(b.date));
-  }, [hostingSchedule, filter, today]);
+  }, [hostingSchedule, filter, filterHost, today]);
 
   const startEdit = (h) => {
     setEditingDate(h.date);
@@ -2372,9 +2384,17 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
     <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur">
       <div className="border-b border-stone-800 bg-gradient-to-r from-amber-950/40 to-stone-900/40 px-4 md:px-6 py-4 flex items-center justify-between flex-wrap gap-2">
         <h3 className="text-lg md:text-xl font-bold text-amber-200 flex items-center gap-2">
-          🏠 לוח אירוחים ({hostingSchedule.length})
+          🏠 לוח אירוחים ({filtered.length}{filterHost !== 'all' ? ` / ${hostingSchedule.length}` : ''})
         </h3>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* 🆕 בורר מארח */}
+          <select value={filterHost} onChange={e => setFilterHost(e.target.value)}
+            className="rounded-lg border border-stone-700 bg-stone-900 px-2 py-1 text-xs text-white">
+            <option value="all">כל המארחים</option>
+            {allHosts.map(h => (
+              <option key={h} value={h}>{h}</option>
+            ))}
+          </select>
           <div className="flex rounded-lg border border-stone-700 bg-stone-900 p-1">
             <button onClick={() => setFilter('upcoming')}
               className={`px-3 py-1 text-xs rounded-md font-bold transition ${filter === 'upcoming' ? 'bg-amber-700 text-white' : 'text-stone-400'}`}>
