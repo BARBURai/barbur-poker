@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.24.6';
-const APP_BUILD_TIME = '28/04/2026 18:13';
-const APP_NOTES = 'בורר שנים רק במקומות הרלוונטיים';
+const APP_VERSION = 'v2.24.9';
+const APP_BUILD_TIME = '28/04/2026 18:57';
+const APP_NOTES = 'תיקון: ניקוי תזכורות לא מחזיר אותן מחדש';
 
 
 // ===== הרשאות מנהל =====
@@ -129,6 +129,105 @@ const getTodayIsrael = () => {
   } catch (e) {
     return new Date().toISOString().split('T')[0];
   }
+};
+
+// 🔍 קומפוננט בחירה עם חיפוש - להחלפת <select> כשיש הרבה אפשרויות
+const SearchableSelect = ({ value, onChange, options, placeholder = 'בחר...', className = '', allowEmpty = false, emptyLabel = 'ללא' }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef(null);
+  
+  // סגירה בלחיצה מחוץ
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+        setSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  
+  // אופציות מסוננות
+  const filtered = useMemo(() => {
+    const searchLower = search.toLowerCase().trim();
+    if (!searchLower) return options;
+    return options.filter(opt => {
+      const label = typeof opt === 'string' ? opt : (opt.label || opt.value || '');
+      return label.toLowerCase().includes(searchLower);
+    });
+  }, [options, search]);
+  
+  const selectOption = (opt) => {
+    const val = typeof opt === 'string' ? opt : opt.value;
+    onChange(val);
+    setIsOpen(false);
+    setSearch('');
+  };
+  
+  return (
+    <div ref={containerRef} className={`relative ${className}`}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-sm text-white text-right flex items-center justify-between gap-2 hover:bg-stone-800 transition">
+        <ChevronDown className={`h-4 w-4 text-stone-400 transition ${isOpen ? 'rotate-180' : ''}`} />
+        <span className={value ? 'text-white' : 'text-stone-500'}>
+          {value || placeholder}
+        </span>
+      </button>
+      {isOpen && (
+        <div className="absolute z-50 mt-1 w-full rounded-lg border border-stone-700 bg-stone-900 shadow-xl shadow-black/50 max-h-64 overflow-hidden flex flex-col">
+          <div className="p-2 border-b border-stone-700 sticky top-0 bg-stone-900">
+            <div className="relative">
+              <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="חיפוש..."
+                autoFocus
+                className="w-full rounded-md border border-stone-700 bg-stone-950 pr-8 pl-2 py-1.5 text-sm text-white placeholder-stone-500 focus:outline-none focus:border-amber-600"
+              />
+            </div>
+          </div>
+          <div className="overflow-y-auto flex-1">
+            {allowEmpty && (
+              <button
+                type="button"
+                onClick={() => selectOption('')}
+                className="w-full px-3 py-2 text-sm text-right text-stone-400 italic hover:bg-stone-800 transition">
+                {emptyLabel}
+              </button>
+            )}
+            {filtered.length === 0 ? (
+              <div className="px-3 py-4 text-sm text-stone-500 text-center">לא נמצאו תוצאות</div>
+            ) : (
+              filtered.map((opt, i) => {
+                const optValue = typeof opt === 'string' ? opt : opt.value;
+                const optLabel = typeof opt === 'string' ? opt : (opt.label || opt.value);
+                const isSelected = optValue === value;
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => selectOption(opt)}
+                    className={`w-full px-3 py-2 text-sm text-right transition ${
+                      isSelected
+                        ? 'bg-amber-700 text-white font-bold'
+                        : 'text-white hover:bg-stone-800'
+                    }`}>
+                    {optLabel}
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 };
 
 // ===== חישובי סטטיסטיקה =====
@@ -373,15 +472,14 @@ const ManageAdminsModal = ({ isOpen, onClose, adminNames, currentAdminName, allP
             <div className="rounded-xl border border-emerald-800/50 bg-emerald-950/20 p-3">
               <div className="text-xs text-emerald-300 mb-2 font-bold">הוספת מנהל חדש</div>
               <div className="flex items-center gap-2">
-                <select 
-                  value={selectedNew}
-                  onChange={e => setSelectedNew(e.target.value)}
-                  className="flex-1 rounded-lg border border-stone-700 bg-stone-800 px-3 py-2 text-sm text-white">
-                  <option value="">בחר שחקן...</option>
-                  {eligiblePlayers.map(p => (
-                    <option key={p} value={p}>{p}</option>
-                  ))}
-                </select>
+                <div className="flex-1">
+                  <SearchableSelect
+                    value={selectedNew}
+                    onChange={setSelectedNew}
+                    options={eligiblePlayers}
+                    placeholder="בחר שחקן..."
+                  />
+                </div>
                 <button 
                   onClick={handleAdd}
                   disabled={!selectedNew}
@@ -1117,11 +1215,12 @@ const AddSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, admi
                 </div>
                 <div>
                   <label className="block text-xs text-stone-400 mb-1">מארח</label>
-                  <select value={host} onChange={e => setHost(e.target.value)}
-                    className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white">
-                    <option value="">בחר...</option>
-                    {players.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={host}
+                    onChange={setHost}
+                    options={players}
+                    placeholder="בחר..."
+                  />
                 </div>
               </div>
               {!imagePreview ? (
@@ -1169,11 +1268,12 @@ const AddSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, admi
                 </div>
                 <div>
                   <label className="block text-xs text-stone-400 mb-1">מארח</label>
-                  <select value={host} onChange={e => setHost(e.target.value)}
-                    className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white">
-                    <option value="">בחר...</option>
-                    {players.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={host}
+                    onChange={setHost}
+                    options={players}
+                    placeholder="בחר..."
+                  />
                 </div>
               </div>
               <div className="rounded-xl border border-stone-800 bg-stone-900/50">
@@ -1189,10 +1289,14 @@ const AddSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, admi
                 <div className="max-h-96 overflow-y-auto p-3 space-y-2">
                   {results.map((r, idx) => (
                     <div key={idx} className="flex items-center gap-2">
-                      <select value={r.name} onChange={e => updateResult(idx, 'name', e.target.value)}
-                        className="flex-1 rounded-lg border border-stone-700 bg-stone-800 px-3 py-2 text-white text-sm">
-                        {players.map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
+                      <div className="flex-1">
+                        <SearchableSelect
+                          value={r.name}
+                          onChange={(v) => updateResult(idx, 'name', v)}
+                          options={players}
+                          placeholder="בחר שחקן..."
+                        />
+                      </div>
                       <input type="number" value={r.amount} onChange={e => updateResult(idx, 'amount', e.target.value)}
                         placeholder="סכום"
                         className={`w-28 rounded-lg border bg-stone-800 px-3 py-2 text-sm tabular-nums ${
@@ -1562,13 +1666,12 @@ const AddQuoteModal = ({ isOpen, onClose, currentUser, players, onSave }) => {
         {/* מי אמר */}
         <div className="mb-4">
           <label className="block text-xs text-stone-400 font-bold mb-1.5">מי אמר?</label>
-          <select value={quoted} onChange={e => { setQuoted(e.target.value); setError(''); }}
-            className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2.5 text-white text-sm focus:border-amber-600 focus:outline-none">
-            <option value="">בחר שחקן...</option>
-            {players.filter(p => p !== currentUser).map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            value={quoted}
+            onChange={(v) => { setQuoted(v); setError(''); }}
+            options={players.filter(p => p !== currentUser)}
+            placeholder="בחר שחקן..."
+          />
         </div>
 
         {/* תוכן הציטוט */}
@@ -2447,24 +2550,24 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
           <div className="grid grid-cols-2 gap-2 mb-2">
             <input type="date" value={newHost.date} onChange={e => setNewHost({...newHost, date: e.target.value})}
               className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white text-sm" />
-            <select value={newHost.host} onChange={e => {
-              const selectedHost = e.target.value;
-              // 🆕 כתובת אוטומטית מהאירוח האחרון של המארח
-              let autoAddress = newHost.address || '';
-              if (selectedHost) {
-                const lastEntry = [...hostingSchedule]
-                  .filter(x => x.host === selectedHost && x.address)
-                  .sort((a, b) => b.date.localeCompare(a.date))[0];
-                if (lastEntry && lastEntry.address) {
-                  autoAddress = lastEntry.address;
+            <SearchableSelect
+              value={newHost.host}
+              onChange={(selectedHost) => {
+                // 🆕 כתובת אוטומטית מהאירוח האחרון של המארח
+                let autoAddress = newHost.address || '';
+                if (selectedHost) {
+                  const lastEntry = [...hostingSchedule]
+                    .filter(x => x.host === selectedHost && x.address)
+                    .sort((a, b) => b.date.localeCompare(a.date))[0];
+                  if (lastEntry && lastEntry.address) {
+                    autoAddress = lastEntry.address;
+                  }
                 }
-              }
-              setNewHost({...newHost, host: selectedHost, address: autoAddress});
-            }}
-              className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white text-sm">
-              <option value="">בחר מארח...</option>
-              {players.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
+                setNewHost({...newHost, host: selectedHost, address: autoAddress});
+              }}
+              options={players}
+              placeholder="בחר מארח..."
+            />
           </div>
           <input type="text" value={newHost.address} onChange={e => setNewHost({...newHost, address: e.target.value})}
             placeholder="📍 כתובת (לדוגמה: רחוב הרצל 5, תל מונד)"
@@ -2497,27 +2600,29 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
               {isEditing ? (
                 <div className="space-y-2">
                   <div className="text-sm text-stone-400">{h.dayName} • {dateObj.toLocaleDateString('he-IL', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
-                  <select value={editHost} onChange={e => {
-                    const newHost = e.target.value;
-                    setEditHost(newHost);
-                    // 🆕 אם בחרו מארח חדש - מצא את הכתובת האחרונה שלו אוטומטית
-                    if (newHost && newHost !== editHost) {
-                      const lastEntry = [...hostingSchedule]
-                        .filter(x => x.host === newHost && x.address)
-                        .sort((a, b) => b.date.localeCompare(a.date))[0];
-                      if (lastEntry && lastEntry.address) {
-                        setEditAddress(lastEntry.address);
-                      } else {
-                        setEditAddress(''); // אין כתובת קודמת - ניקוי
+                  <SearchableSelect
+                    value={editHost}
+                    onChange={(newHost) => {
+                      setEditHost(newHost);
+                      // 🆕 אם בחרו מארח חדש - מצא את הכתובת האחרונה שלו אוטומטית
+                      if (newHost && newHost !== editHost) {
+                        const lastEntry = [...hostingSchedule]
+                          .filter(x => x.host === newHost && x.address)
+                          .sort((a, b) => b.date.localeCompare(a.date))[0];
+                        if (lastEntry && lastEntry.address) {
+                          setEditAddress(lastEntry.address);
+                        } else {
+                          setEditAddress('');
+                        }
+                      } else if (!newHost) {
+                        setEditAddress('');
                       }
-                    } else if (!newHost) {
-                      setEditAddress(''); // אין מארח - ניקוי כתובת
-                    }
-                  }}
-                    className="w-full rounded-lg border border-stone-700 bg-stone-800 px-3 py-2 text-white text-sm">
-                    <option value="">ללא מארח</option>
-                    {players.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                    }}
+                    options={players}
+                    placeholder="ללא מארח"
+                    allowEmpty
+                    emptyLabel="ללא מארח"
+                  />
                   <input type="text" value={editAddress} onChange={e => setEditAddress(e.target.value)}
                     placeholder="📍 כתובת (לדוגמה: רחוב הרצל 5, תל מונד)"
                     className="w-full rounded-lg border border-stone-700 bg-stone-800 px-3 py-2 text-white text-sm" />
@@ -3913,14 +4018,13 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
             <BarChart3 className="h-5 w-5" />
             גרפים אישיים
           </div>
-          <select 
-            value={selectedPlayer} 
-            onChange={e => setSelectedPlayer(e.target.value)}
-            className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-1.5 text-sm text-white font-bold flex-1 min-w-[150px]">
-            {players.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
+          <SearchableSelect
+            value={selectedPlayer}
+            onChange={setSelectedPlayer}
+            options={players}
+            placeholder="בחר שחקן..."
+            className="flex-1 min-w-[150px]"
+          />
           {filteredStats && (
             <div className="text-xs text-stone-400 flex items-center gap-3 flex-wrap">
               <span>סה״כ: <span className={`font-bold ${filteredStats.total > 0 ? 'text-emerald-400' : filteredStats.total < 0 ? 'text-rose-400' : 'text-stone-300'}`}>
@@ -5445,11 +5549,12 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                 </div>
                 <div>
                   <label className="block text-xs text-stone-400 mb-1">מארח</label>
-                  <select value={host} onChange={e => setHost(e.target.value)}
-                    className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white">
-                    <option value="">בחר...</option>
-                    {players.map(p => <option key={p} value={p}>{p}</option>)}
-                  </select>
+                  <SearchableSelect
+                    value={host}
+                    onChange={setHost}
+                    options={players}
+                    placeholder="בחר..."
+                  />
                 </div>
               </div>
 
@@ -7680,6 +7785,13 @@ const PhoneSetupModal = ({ isOpen, onClose, playerName, currentPhone, onSave, is
                 {isPhoneLocked ? 'סגור' : 'ביטול'}
               </button>
             )}
+            {/* 🆕 כפתור דילוג בכניסה ראשונה - אופציונלי */}
+            {isFirstTime && (
+              <button onClick={onClose}
+                className="rounded-lg border border-stone-700 bg-stone-900 px-4 py-3 text-stone-400 hover:bg-stone-800 text-sm">
+                דלג
+              </button>
+            )}
             <button onClick={handleSubmit}
               disabled={isPhoneLocked && app === (currentPhone?.app || 'both')}
               className="flex-1 rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 px-4 py-3 font-bold text-white hover:from-amber-500 shadow-lg shadow-amber-900/40 flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed">
@@ -7993,14 +8105,17 @@ export default function PokerApp() {
   const stats = useMemo(() => calculateStats(sessions, players), [sessions, players]);
   
   // 🆕 בודק אם משתמש קיים שאין לו טלפון - הצגת מסך הזדהות
+  // 🆕 רק פעם אחת בכניסה - אם המשתמש דילג, לא נציג שוב
+  const [phoneSetupShown, setPhoneSetupShown] = useState(false);
   useEffect(() => {
-    if (!loading && currentUser && !phoneSetupOpen) {
+    if (!loading && currentUser && !phoneSetupOpen && !phoneSetupShown) {
       const userPhone = phones[currentUser];
       if (!userPhone || !userPhone.phone) {
         setPhoneSetupOpen(true);
+        setPhoneSetupShown(true);
       }
     }
-  }, [loading, currentUser, phones]);
+  }, [loading, currentUser, phones, phoneSetupShown]);
   
   // רשימת שחקנים ממוינת לפי מספר מפגשים בכל ההיסטוריה (מהפעיל ביותר לפחות פעיל)
   const sortedPlayers = useMemo(() => {
@@ -8807,10 +8922,15 @@ export default function PokerApp() {
               </button>
               {/* 🆕 כפתור ניקוי תזכורות תשלום במכשיר זה */}
               <button onClick={() => {
-                if (!confirm('לנקות את כל תזכורות התשלום והארכיון מהמכשיר הזה?\n\n⚠️ זה לא ישפיע על מכשירים אחרים. הפעולה מועילה אם נוצרו תזכורות מערבי ניסיון.')) return;
+                if (!confirm('לסמן את כל תזכורות התשלום כ"טופלו"?\n\n⚠️ זה יסיר אותן מהרשימה ולא יחזיר אותן. מועיל אם נוצרו תזכורות מערבי ניסיון או שטיפלת בהן ידנית.')) return;
                 try {
+                  // 🔑 סימון כל התזכורות הנוכחיות כ"טופלו" כדי שלא יחזרו
+                  const current = loadPaymentReminders();
+                  current.forEach(r => {
+                    markSignatureHandled(reminderSignature(r));
+                  });
+                  // עכשיו מחיקה של התזכורות הנוכחיות
                   window.localStorage.removeItem(PAYMENTS_STORAGE_KEY);
-                  window.localStorage.removeItem(PAYMENTS_HANDLED_KEY);
                   setPaymentReminders([]);
                   setMenuOpen(false);
                   alert('✓ כל התזכורות נוקו מהמכשיר הזה');
