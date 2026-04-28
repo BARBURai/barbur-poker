@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.18.6';
-const APP_BUILD_TIME = '28/04/2026 10:08';
-const APP_NOTES = 'תיקון - שידור חוזר אחרי סגירה בטעות';
+const APP_VERSION = 'v2.18.7';
+const APP_BUILD_TIME = '28/04/2026 10:15';
+const APP_NOTES = 'סגירה מוקדמת מוצגת בשידור החי';
 
 
 // ===== הרשאות מנהל =====
@@ -4597,7 +4597,9 @@ const LiveBroadcastViewer = ({ broadcast, onClose, currentUser }) => {
                   <div 
                     key={p.name + i} 
                     className={`flex items-center justify-between rounded-xl border p-3 ${
-                      isMe 
+                      typeof p.earlyClose === 'number'
+                        ? 'border-stone-700 bg-stone-900/30 opacity-70'
+                        : isMe 
                         ? 'border-amber-700/60 bg-amber-950/30' 
                         : 'border-stone-800 bg-stone-900/40'
                     }`}>
@@ -4610,6 +4612,11 @@ const LiveBroadcastViewer = ({ broadcast, onClose, currentUser }) => {
                       <div className={`font-bold ${isMe ? 'text-amber-200' : 'text-stone-100'}`}>
                         {p.name}
                         {isMe && <span className="text-xs text-amber-400 mr-2">(אתה)</span>}
+                        {typeof p.earlyClose === 'number' && (
+                          <span className="text-[10px] bg-purple-900/50 border border-purple-700/50 text-purple-300 rounded-full px-2 py-0.5 font-bold mr-2">
+                            ✓ עזב
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -4713,7 +4720,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       active: true,
       sessionDate,
       host: host || null,
-      participants: participants.map(p => ({ name: p.name, buyIns: p.buyIns })),
+      participants: participants.map(p => ({ name: p.name, buyIns: p.buyIns, earlyClose: p.earlyClose })),
       adminName: adminName || null,
       updatedAt: new Date().toISOString(),
       season: currentSeason,
@@ -4731,7 +4738,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       active: true,
       sessionDate,
       host: host || null,
-      participants: participants.map(p => ({ name: p.name, buyIns: p.buyIns })),
+      participants: participants.map(p => ({ name: p.name, buyIns: p.buyIns, earlyClose: p.earlyClose })),
       adminName: adminName || null,
       updatedAt: new Date().toISOString(),
       season: currentSeason,
