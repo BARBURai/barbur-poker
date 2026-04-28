@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.24.9';
-const APP_BUILD_TIME = '28/04/2026 18:57';
-const APP_NOTES = 'תיקון: ניקוי תזכורות לא מחזיר אותן מחדש';
+const APP_VERSION = 'v2.25.1';
+const APP_BUILD_TIME = '28/04/2026 19:08';
+const APP_NOTES = '🪶 אימוג\'י כנף לאמרות כנף';
 
 
 // ===== הרשאות מנהל =====
@@ -167,7 +167,7 @@ const SearchableSelect = ({ value, onChange, options, placeholder = 'בחר...',
   };
   
   return (
-    <div ref={containerRef} className={`relative ${className}`}>
+    <div ref={containerRef} className={`relative ${className}`} style={isOpen ? { zIndex: 9999 } : undefined}>
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -178,7 +178,7 @@ const SearchableSelect = ({ value, onChange, options, placeholder = 'בחר...',
         </span>
       </button>
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full rounded-lg border border-stone-700 bg-stone-900 shadow-xl shadow-black/50 max-h-64 overflow-hidden flex flex-col">
+        <div className="absolute mt-1 w-full rounded-lg border border-stone-700 bg-stone-900 shadow-xl shadow-black/50 max-h-64 overflow-hidden flex flex-col" style={{ zIndex: 9999 }}>
           <div className="p-2 border-b border-stone-700 sticky top-0 bg-stone-900">
             <div className="relative">
               <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
@@ -5239,6 +5239,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   
   // 🆕 סגירה מוקדמת של שחקן - חלון לעדכון צ'יפים תוך כדי הערב
   const [earlyCloseModal, setEarlyCloseModal] = useState(null); // { name, currentChips }
+  
+  // 🆕 חיפוש שחקנים בהוספה
+  const [playerSearch, setPlayerSearch] = useState('');
 
   // שמירה אוטומטית של מצב הערב לאחסון מקומי בדפדפן
   useEffect(() => {
@@ -5589,8 +5592,21 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                       <div className="text-xs text-stone-400">בחר שחקנים (מספר אנשים בו זמנית):</div>
                       <div className="text-xs text-amber-400 font-bold">{pendingAdditions.length} נבחרו</div>
                     </div>
+                    {/* 🆕 שדה חיפוש */}
+                    <div className="relative mb-2">
+                      <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
+                      <input
+                        type="text"
+                        value={playerSearch}
+                        onChange={e => setPlayerSearch(e.target.value)}
+                        placeholder="חיפוש שחקן..."
+                        className="w-full rounded-md border border-stone-700 bg-stone-950 pr-8 pl-2 py-1.5 text-sm text-white placeholder-stone-500 focus:outline-none focus:border-amber-600"
+                      />
+                    </div>
                     <div className="grid grid-cols-3 md:grid-cols-4 gap-1.5 max-h-60 overflow-y-auto">
-                      {availablePlayers.map(p => {
+                      {availablePlayers
+                        .filter(p => !playerSearch || p.toLowerCase().includes(playerSearch.toLowerCase()))
+                        .map(p => {
                         const isSelected = pendingAdditions.includes(p);
                         return (
                           <button key={p} onClick={() => togglePending(p)}
@@ -5606,8 +5622,8 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                       })}
                     </div>
                     <div className="flex gap-2 mt-3">
-                      <button onClick={cancelAddPlayers} className="flex-1 rounded-lg border border-stone-700 bg-stone-800 py-2 text-xs text-stone-300">ביטול</button>
-                      <button onClick={confirmAddPlayers} disabled={pendingAdditions.length === 0}
+                      <button onClick={() => { cancelAddPlayers(); setPlayerSearch(''); }} className="flex-1 rounded-lg border border-stone-700 bg-stone-800 py-2 text-xs text-stone-300">ביטול</button>
+                      <button onClick={() => { confirmAddPlayers(); setPlayerSearch(''); }} disabled={pendingAdditions.length === 0}
                         className="flex-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 py-2 text-sm text-white font-bold disabled:opacity-50">
                         הוסף {pendingAdditions.length > 0 ? `(${pendingAdditions.length})` : ''}
                       </button>
@@ -5802,17 +5818,17 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                 </div>
                 <div>
                   <label className="block text-xs text-purple-300/80 mb-1.5">למי משלמים?</label>
-                  <select 
-                    value={hostingRecipient} 
-                    onChange={e => setHostingRecipient(e.target.value)}
-                    className="w-full rounded-lg border border-purple-700/50 bg-stone-900 px-3 py-2 text-white text-sm">
-                    <option value="">❌ ללא תשלום אירוח</option>
-                    {participants.map(p => (
-                      <option key={p.name} value={p.name}>
-                        {p.name === host ? `🏠 ${p.name} (מארח)` : `🍿 ${p.name}`}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchableSelect
+                    value={hostingRecipient}
+                    onChange={setHostingRecipient}
+                    options={participants.map(p => ({
+                      value: p.name,
+                      label: p.name === host ? `🏠 ${p.name} (מארח)` : `🍿 ${p.name}`
+                    }))}
+                    placeholder="❌ ללא תשלום אירוח"
+                    allowEmpty
+                    emptyLabel="❌ ללא תשלום אירוח"
+                  />
                 </div>
                 {hostingRecipient && (
                   <div>
@@ -8673,7 +8689,7 @@ export default function PokerApp() {
     { id: 'gallery', label: 'גלריה', icon: ImageIcon },
     // 🔒 היסטוריה - רק למנהלים
     ...(isAdmin ? [{ id: 'history', label: 'היסטוריה', icon: History }] : []),
-    { id: 'quotes', label: 'אמרות כנף', icon: Quote },
+    { id: 'quotes', label: '🪶 אמרות כנף', icon: Quote },
   ];
 
   return (
