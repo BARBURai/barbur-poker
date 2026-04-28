@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.18.2';
-const APP_BUILD_TIME = '28/04/2026 02:47';
-const APP_NOTES = 'סימני שאלה מסבירים ליד דגלי בדיקה';
+const APP_VERSION = 'v2.18.4';
+const APP_BUILD_TIME = '28/04/2026 09:42';
+const APP_NOTES = 'תיקון שידור חי - הסרת תלות ב-hasLoadedSaved';
 
 
 // ===== הרשאות מנהל =====
@@ -4704,13 +4704,11 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   }, [host, hostingRecipient]);
 
   // 📡 שידור חי ל-Firebase - כל פעם שמשתתפים/buy-ins משתנים
-  // מופעל רק אם יש משתתפים, המודל פתוח, ולא בערב ניסיון
   useEffect(() => {
-    if (!isOpen || !hasLoadedSaved) return;
-    if (isTestEvening) return; // ערב ניסיון - לא משדרים
+    if (!isOpen) return;
+    if (isTestEvening) return;
     if (participants.length === 0) return;
     
-    // נשלח את המצב הנוכחי לFirebase כדי שצופים יוכלו לראות
     const broadcast = {
       active: true,
       sessionDate,
@@ -4719,20 +4717,24 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       adminName: adminName || null,
       updatedAt: new Date().toISOString(),
       season: currentSeason,
-      testMode: broadcastTestMode, // 🧪 דגל מצב בדיקה
+      testMode: broadcastTestMode,
     };
     
-    // שמירה אסינכרונית - לא חוסם UI
     saveLiveBroadcast(broadcast).catch(() => {});
-  }, [participants, host, sessionDate, isOpen, hasLoadedSaved, isTestEvening, adminName, currentSeason, broadcastTestMode]);
+  }, [participants, host, sessionDate, isOpen, isTestEvening, adminName, currentSeason, broadcastTestMode]);
   
-  // 📡 ניקוי שידור כשהמודל נסגר או הערב נשמר
+  // 📡 ניקוי שידור כשהמודל נסגר
+  // נשתמש ב-ref כדי לזהות סגירה אמיתית (לא mount)
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (!isOpen && hasLoadedSaved) {
-      // המודל נסגר - מנקים את השידור
+    if (isOpen) {
+      wasOpenRef.current = true;
+    } else if (wasOpenRef.current) {
+      // היה פתוח ועכשיו סגור = ניקוי
+      wasOpenRef.current = false;
       clearLiveBroadcast().catch(() => {});
     }
-  }, [isOpen, hasLoadedSaved]);
+  }, [isOpen]);
 
   const reset = () => {
     setParticipants([]); setHost(''); setClosing(false); setFinalChips({});
@@ -7264,9 +7266,11 @@ export default function PokerApp() {
     const checkBroadcast = async () => {
       try {
         const broadcast = await loadLiveBroadcast();
+        console.log('📺 viewer check - loaded broadcast:', broadcast);
         if (cancelled) return;
         
         if (!broadcast || !broadcast.active) {
+          console.log('📺 viewer: no active broadcast');
           setLiveBroadcast(null);
           setBroadcastViewerOpen(false);
           return;
@@ -7277,7 +7281,10 @@ export default function PokerApp() {
         const isInTimeWindow = testMode || isLiveBroadcastTime();
         const isHostingToday = testMode || isHostingDay(hostingSchedule, broadcast.sessionDate);
         
+        console.log('📺 viewer conditions: testMode=', testMode, 'isInTimeWindow=', isInTimeWindow, 'isHostingToday=', isHostingToday);
+        
         if (!isInTimeWindow || !isHostingToday) {
+          console.log('📺 viewer: conditions not met');
           // השידור לא רלוונטי כעת
           setLiveBroadcast(null);
           setBroadcastViewerOpen(false);
@@ -7288,11 +7295,15 @@ export default function PokerApp() {
         
         // אם המנהל הנוכחי הוא ששידר - לא להציג צופה אצלו (הוא רואה את LiveSessionModal)
         const isAdminBroadcasting = broadcast.adminName === currentUser;
+        console.log('📺 viewer: isAdminBroadcasting=', isAdminBroadcasting, 'currentUser=', currentUser, 'adminName=', broadcast.adminName);
         
         if (!isAdminBroadcasting && !broadcastDismissed) {
+          console.log('📺 viewer: OPENING viewer!');
           setBroadcastViewerOpen(true);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('📺 viewer check error:', e);
+      }
     };
     
     // בדיקה ראשונה
