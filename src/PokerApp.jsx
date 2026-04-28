@@ -9,15 +9,16 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.25.3';
-const APP_BUILD_TIME = '28/04/2026 19:18';
-const APP_NOTES = 'ביטול חיפוש בגרפים אישיים';
+const APP_VERSION = 'v2.25.5';
+const APP_BUILD_TIME = '28/04/2026 19:30';
+const APP_NOTES = '👥 ניהול משתמשים: הוספת שחקנים + הסתרה משולשת';
 
 
 // ===== הרשאות מנהל =====
 const ADMIN_PASSWORD = 'barbur2026'; // סיסמה זמנית - להחליף בסיסמה האמיתית
 const ADMIN_NAMES = ['רון', 'גילי']; // ברירת מחדל - ניתן לערוך מהאפליקציה
 const ADMIN_NAMES_KEY = 'poker_admin_names_v1'; // 🆕 רשימת מנהלים שמורה ב-Firebase
+const HIDDEN_PLAYERS_KEY = 'poker_hidden_players_v1'; // 🆕 שחקנים מוסתרים מרשימת הפעילים
 
 // ===== לוגו BarburAI (Base64) =====
 
@@ -3756,10 +3757,10 @@ const PersonalInsightsCarousel = ({ grouped, categoryIcons, colorClasses, textCl
   );
 };
 
-const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile }) => {
+const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile, hiddenPlayers = [] }) => {
   const players = useMemo(() => 
-    stats.filter(s => s.sessions > 0).map(s => s.name)
-  , [stats]);
+    stats.filter(s => s.sessions > 0 && !hiddenPlayers.includes(s.name)).map(s => s.name)
+  , [stats, hiddenPlayers]);
   
   const [selectedPlayer, setSelectedPlayer] = useState('');
   
@@ -7535,12 +7536,16 @@ const BackupsModal = ({ isOpen, onClose, backupsList, onCreateBackup, onDownload
 
 
 // ===== מודל מנהל - ניהול פרטי תשלום של כל השחקנים =====
-const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave }) => {
+const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlayers = [], onToggleHidden, onAddPlayer }) => {
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [phone, setPhone] = useState('');
   const [app, setApp] = useState('both');
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
+  // 🆕 הוספת שחקן חדש
+  const [showAddPlayer, setShowAddPlayer] = useState(false);
+  const [newPlayerName, setNewPlayerName] = useState('');
+  const [addError, setAddError] = useState('');
 
   if (!isOpen) return null;
 
@@ -7573,6 +7578,25 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave }) => {
     if (!confirm(`למחוק את פרטי התשלום של ${name}?`)) return;
     onSave(name, null);
   };
+  
+  // 🆕 הוספת שחקן חדש
+  const handleAddPlayer = () => {
+    const trimmed = newPlayerName.trim();
+    if (!trimmed) {
+      setAddError('יש להזין שם');
+      return;
+    }
+    if (players.includes(trimmed)) {
+      setAddError('שחקן עם שם זה כבר קיים');
+      return;
+    }
+    if (onAddPlayer) {
+      onAddPlayer(trimmed);
+    }
+    setNewPlayerName('');
+    setShowAddPlayer(false);
+    setAddError('');
+  };
 
   // מיון: קודם מי שיש לו טלפון, ואז מי שאין
   const sortedPlayers = [...players].sort((a, b) => {
@@ -7591,7 +7615,7 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave }) => {
       <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border-2 border-purple-700/50 bg-gradient-to-br from-stone-900 to-stone-950 p-6 shadow-2xl">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-extrabold text-purple-200 flex items-center gap-2">
-            📱 ניהול פרטי תשלום
+            👥 ניהול משתמשים
           </h2>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-200">
             <X className="h-5 w-5" />
@@ -7608,6 +7632,36 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave }) => {
             <div className="text-xs text-amber-400">⚠️ חסר טלפון</div>
           </div>
         </div>
+        
+        {/* 🆕 הוספת שחקן חדש */}
+        {onAddPlayer && (
+          <div className="mb-3">
+            {!showAddPlayer ? (
+              <button onClick={() => setShowAddPlayer(true)}
+                className="w-full rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm font-bold py-2 flex items-center justify-center gap-2">
+                <Plus className="h-4 w-4" /> הוסף שחקן חדש
+              </button>
+            ) : (
+              <div className="rounded-lg bg-emerald-950/40 border border-emerald-700/50 p-3 space-y-2">
+                <div className="text-xs text-emerald-300 font-bold">הוספת שחקן חדש</div>
+                <input
+                  type="text"
+                  value={newPlayerName}
+                  onChange={e => { setNewPlayerName(e.target.value); setAddError(''); }}
+                  placeholder="שם השחקן"
+                  autoFocus
+                  className="w-full rounded bg-stone-800 border border-stone-700 px-3 py-2 text-stone-100 text-sm" />
+                {addError && <div className="text-rose-400 text-xs">⚠️ {addError}</div>}
+                <div className="flex gap-2">
+                  <button onClick={() => { setShowAddPlayer(false); setNewPlayerName(''); setAddError(''); }}
+                    className="flex-1 rounded bg-stone-800 px-3 py-1.5 text-stone-300 text-sm font-bold">ביטול</button>
+                  <button onClick={handleAddPlayer}
+                    className="flex-1 rounded bg-emerald-700 hover:bg-emerald-600 px-3 py-1.5 text-white text-sm font-bold">הוסף</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <input
           type="text"
@@ -7653,10 +7707,14 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave }) => {
             
             return (
               <div key={name} className={`flex items-center justify-between rounded-lg border p-3 transition ${
+                hiddenPlayers.includes(name) ? 'bg-stone-900/30 border-stone-800 opacity-50' :
                 hasPhone ? 'bg-stone-800/40 border-stone-700/40' : 'bg-amber-950/20 border-amber-800/30'
               }`}>
                 <div className="flex-1">
-                  <div className="font-bold text-stone-100">{name}</div>
+                  <div className="font-bold text-stone-100 flex items-center gap-2">
+                    {name}
+                    {hiddenPlayers.includes(name) && <span className="text-xs text-stone-500">(מוסתר)</span>}
+                  </div>
                   {hasPhone ? (
                     <div className="text-xs text-stone-400 tabular-nums" dir="ltr">
                       {data.phone.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3')}
@@ -7668,6 +7726,15 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave }) => {
                   )}
                 </div>
                 <div className="flex items-center gap-1">
+                  {/* 🆕 כפתור הסתרה/הצגה */}
+                  {onToggleHidden && (
+                    <button 
+                      onClick={() => onToggleHidden(name)} 
+                      className="rounded bg-stone-800 px-2 py-1.5 text-stone-400 hover:bg-stone-700 hover:text-stone-200"
+                      title={hiddenPlayers.includes(name) ? 'הצג שוב במסך פתיחה' : 'הסתר ממסך פתיחה'}>
+                      {hiddenPlayers.includes(name) ? '👁️' : '🚫'}
+                    </button>
+                  )}
                   <button onClick={() => startEdit(name)} className="rounded bg-purple-700 px-3 py-1.5 text-white text-xs font-bold hover:bg-purple-600">
                     {hasPhone ? 'ערוך' : 'הוסף'}
                   </button>
@@ -7860,6 +7927,8 @@ export default function PokerApp() {
   // 🆕 רשימת המנהלים - נטענת מ-Firebase
   const [adminNamesList, setAdminNamesList] = useState(ADMIN_NAMES);
   const [manageAdminsOpen, setManageAdminsOpen] = useState(false);
+  // 🆕 רשימת שחקנים מוסתרים (לא יופיעו ברשימות הפעילים)
+  const [hiddenPlayers, setHiddenPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState('dashboard');
@@ -8091,6 +8160,12 @@ export default function PokerApp() {
         setAdminNamesList(savedAdmins);
       }
       
+      // 🆕 טעינת רשימת שחקנים מוסתרים
+      const savedHidden = await loadState(HIDDEN_PLAYERS_KEY);
+      if (Array.isArray(savedHidden)) {
+        setHiddenPlayers(savedHidden);
+      }
+      
       const savedQuotes = await loadState(QUOTES_STORAGE_KEY);
       if (savedQuotes?.deletedIds) setDeletedQuoteIds(savedQuotes.deletedIds);
       if (savedQuotes?.likes) setQuoteLikes(savedQuotes.likes);
@@ -8172,6 +8247,16 @@ export default function PokerApp() {
       return a.localeCompare(b, 'he');
     });
   }, [players, allSessions]);
+  
+  // 🆕 רשימת שחקנים פעילים (ללא מוסתרים) - לבחירה במסכים פעילים
+  const activePlayers = useMemo(() => {
+    return players.filter(p => !hiddenPlayers.includes(p));
+  }, [players, hiddenPlayers]);
+  
+  // 🆕 רשימת שחקנים פעילים מסודרת - למסך "מי אתה?"
+  const sortedActivePlayers = useMemo(() => {
+    return sortedPlayers.filter(p => !hiddenPlayers.includes(p));
+  }, [sortedPlayers, hiddenPlayers]);
   
   const availableSeasons = useMemo(() => {
     const s = new Set(allSessions.map(s => s.season || 2026));
@@ -8687,7 +8772,7 @@ export default function PokerApp() {
 
   // מסך בחירת משתמש (אם עוד לא בחר)
   if (!currentUser) {
-    return <UserSelectScreen players={sortedPlayers} onSelect={handleUserSelect} />;
+    return <UserSelectScreen players={sortedActivePlayers} onSelect={handleUserSelect} />;
   }
 
   // מסך מלא לגרף
@@ -8859,13 +8944,14 @@ export default function PokerApp() {
               allSessions={allSessions}
               stats={stats} 
               currentUser={currentUser}
-              isMobile={isMobile} />
+              isMobile={isMobile}
+              hiddenPlayers={hiddenPlayers} />
           </div>
         )}
 
         {tab === 'hosting' && (
           <HostingWrapper allSessions={allSessions} hostingSchedule={hostingSchedule}
-            players={players} sortedPlayers={sortedPlayers} isAdmin={isAdmin}
+            players={activePlayers} sortedPlayers={sortedActivePlayers} isAdmin={isAdmin}
             onUpdate={handleHostingUpdate} adminName={adminName} />
         )}
 
@@ -9003,11 +9089,11 @@ export default function PokerApp() {
                   <span className="text-xl">📸</span>
                   <span>עדכון ערב בתמונה</span>
                 </button>
-                {/* 🆕 כפתור ניהול טלפונים */}
+                {/* 🆕 כפתור ניהול משתמשים (טלפונים + הסתרה + הוספה) */}
                 <button onClick={() => { setMenuOpen(false); setAdminPhonesOpen(true); }}
                   className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-purple-700/80 to-purple-800/80 border border-purple-700/50 px-4 py-3 text-white font-bold hover:from-purple-600 hover:to-purple-700 transition text-sm">
-                  <span className="text-xl">📱</span>
-                  <span>ניהול פרטי תשלום</span>
+                  <span className="text-xl">👥</span>
+                  <span>ניהול משתמשים</span>
                 </button>
                 {/* 🆕 כפתור גיבוי ושחזור */}
                 <button onClick={() => { setMenuOpen(false); loadBackupsList(); setBackupsModalOpen(true); }}
@@ -9076,7 +9162,7 @@ export default function PokerApp() {
         onSave={handleSaveSession} players={sortedPlayers} currentSeason={selectedSeason} adminName={currentUser} />
       
       <LiveSessionModal isOpen={liveModalOpen} onClose={() => setLiveModalOpen(false)}
-        onSave={handleSaveSession} players={sortedPlayers} currentSeason={selectedSeason} adminName={currentUser} />
+        onSave={handleSaveSession} players={sortedActivePlayers} currentSeason={selectedSeason} adminName={currentUser} />
       
       {/* 📡 צופה בשידור חי - מופיע אוטומטית כשיש ערב חי בשעות מתאימות */}
       {broadcastViewerOpen && liveBroadcast && (
@@ -9124,13 +9210,30 @@ export default function PokerApp() {
         canCancel={true}
         isAdmin={isAdmin} />
 
-      {/* 🆕 מודל מנהל - ניהול טלפונים של כל השחקנים */}
+      {/* 🆕 מודל מנהל - ניהול משתמשים (טלפונים + הסתרה + הוספה) */}
       <AdminPhonesModal
         isOpen={adminPhonesOpen}
         onClose={() => setAdminPhonesOpen(false)}
         players={players}
         phones={phones}
-        onSave={handleSavePhone} />
+        onSave={handleSavePhone}
+        hiddenPlayers={hiddenPlayers}
+        onToggleHidden={async (name) => {
+          const newHidden = hiddenPlayers.includes(name)
+            ? hiddenPlayers.filter(n => n !== name)
+            : [...hiddenPlayers, name];
+          setHiddenPlayers(newHidden);
+          try {
+            await saveState(newHidden, HIDDEN_PLAYERS_KEY);
+          } catch (e) {
+            console.error('Failed to save hidden players:', e);
+          }
+        }}
+        onAddPlayer={async (name) => {
+          const newPlayers = [...players, name];
+          setPlayers(newPlayers);
+          await persistSessions(allSessions, newPlayers, hostingSchedule);
+        }} />
 
       {/* 🆕 מודל ניהול גיבויים */}
       <BackupsModal
