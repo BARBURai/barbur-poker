@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.23.2';
-const APP_BUILD_TIME = '28/04/2026 12:04';
-const APP_NOTES = 'סינון אירוחים לפי שם מארח';
+const APP_VERSION = 'v2.23.3';
+const APP_BUILD_TIME = '28/04/2026 14:44';
+const APP_NOTES = 'תיקון - גרף התובנות מציג את המשתמש המחובר';
 
 
 // ===== הרשאות מנהל =====
@@ -7896,35 +7896,26 @@ export default function PokerApp() {
   useEffect(() => {
     if (stats.length === 0) return;
     
-    // אם currentUser זמין וקיים ב-stats - וודא שהוא בבחירה
+    // אם currentUser זמין וקיים ב-stats - תמיד נכנס אליו
     if (currentUser && stats.find(p => p.name === currentUser)) {
-      // אם אף אחד לא נבחר עדיין, או שהבחירה היא רק שחקן אחד שאינו המשתמש המחובר
-      // (כלומר ברירת המחדל שלנו לפני שcurrentUser נטען) - תחליף לcurrentUser
-      if (selectedChartPlayers.length === 0) {
-        setSelectedChartPlayers([currentUser]);
-      } else if (selectedChartPlayers.length === 1 && selectedChartPlayers[0] !== currentUser) {
-        // אם הוטל בחירה אוטומטית של שחקן אחר (למשל סטטס[0]=רם), נחליף לcurrentUser
-        // נבדוק אם זה ככל הנראה ברירת מחדל אוטומטית - הבחירה היא הטופ
-        const isAutoChosenTop = selectedChartPlayers[0] === stats[0]?.name;
-        if (isAutoChosenTop) {
-          setSelectedChartPlayers([currentUser]);
-        }
-      }
+      setSelectedChartPlayers([currentUser]);
     } else if (selectedChartPlayers.length === 0 && stats[0]) {
       // אין currentUser זמין - מציג את הטופ
       setSelectedChartPlayers([stats[0].name]);
     }
-  }, [stats.length, currentUser]);
+  }, [currentUser]); // רץ בכל החלפת משתמש
   
   // 🆕 לוגיקה דומה לגרף התובנות - state נפרד
+  // מתעדכן בכל פעם שהמשתמש משתנה (לא רק באתחול)
   useEffect(() => {
-    if (insightsChartPlayers.length > 0) return; // כבר אותחל
     if (currentUser) {
+      // תמיד להגדיר את המשתמש הנוכחי - גם אם כבר היה אחר
       setInsightsChartPlayers([currentUser]);
-    } else if (stats[0]) {
+    } else if (insightsChartPlayers.length === 0 && stats[0]) {
+      // אין משתמש מחובר - דיפולט ראשון בטבלה
       setInsightsChartPlayers([stats[0].name]);
     }
-  }, [currentUser, stats.length]);
+  }, [currentUser]);
 
   const persistSessions = async (sessions, players, hostingScheduleParam, phonesParam) => {
     setSyncing(true);
