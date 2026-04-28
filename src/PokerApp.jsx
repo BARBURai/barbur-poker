@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.18.5';
-const APP_BUILD_TIME = '28/04/2026 09:55';
-const APP_NOTES = 'בדיקה - testMode קבוע';
+const APP_VERSION = 'v2.18.6';
+const APP_BUILD_TIME = '28/04/2026 10:08';
+const APP_NOTES = 'תיקון - שידור חוזר אחרי סגירה בטעות';
 
 
 // ===== הרשאות מנהל =====
@@ -4723,6 +4723,24 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     saveLiveBroadcast(broadcast).catch(() => {});
   }, [participants, host, sessionDate, isOpen, isTestEvening, adminName, currentSeason, broadcastTestMode]);
   
+  // 📡 שידור מחדש בפתיחה - גם אם הנתונים זהים (למקרה של סגירה בטעות וחזרה)
+  useEffect(() => {
+    if (!isOpen || isTestEvening || participants.length === 0) return;
+    
+    const broadcast = {
+      active: true,
+      sessionDate,
+      host: host || null,
+      participants: participants.map(p => ({ name: p.name, buyIns: p.buyIns })),
+      adminName: adminName || null,
+      updatedAt: new Date().toISOString(),
+      season: currentSeason,
+      testMode: true,
+    };
+    
+    saveLiveBroadcast(broadcast).catch(() => {});
+  }, [isOpen]); // רץ רק כשהמודל נפתח
+  
   // 📡 ניקוי שידור כשהמודל נסגר
   // נשתמש ב-ref כדי לזהות סגירה אמיתית (לא mount)
   const wasOpenRef = useRef(false);
@@ -7273,6 +7291,8 @@ export default function PokerApp() {
           console.log('📺 viewer: no active broadcast');
           setLiveBroadcast(null);
           setBroadcastViewerOpen(false);
+          // 🆕 איפוס dismissed - כדי שאם השידור יחזור, יוצג שוב
+          setBroadcastDismissed(false);
           return;
         }
         
