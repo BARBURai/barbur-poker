@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.24.4';
-const APP_BUILD_TIME = '28/04/2026 17:42';
-const APP_NOTES = 'בוררי שנים נפרדים לכל גרף בתובנות';
+const APP_VERSION = 'v2.24.6';
+const APP_BUILD_TIME = '28/04/2026 18:13';
+const APP_NOTES = 'בורר שנים רק במקומות הרלוונטיים';
 
 
 // ===== הרשאות מנהל =====
@@ -712,9 +712,17 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
   // toggle של שנה בבורר
   const toggleYear = (year) => {
     setSelectedYears(prev => {
-      if (prev.includes(year)) {
-        return prev.length === 1 ? prev : prev.filter(y => y !== year);
+      // אם "הכל" דלוק - לחיצה משאירה רק את השנה הזאת
+      if (prev.length === allYears.length) {
+        return [year];
       }
+      // אם השנה כבר נבחרה
+      if (prev.includes(year)) {
+        const newYears = prev.filter(y => y !== year);
+        // אם זאת הייתה האחרונה - חוזרים להכל
+        return newYears.length === 0 ? [...allYears] : newYears;
+      }
+      // הוספת שנה
       return [...prev, year].sort((a, b) => b - a);
     });
   };
@@ -795,21 +803,12 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
             }`}>
             הכל
           </button>
-          <button
-            onClick={() => setSelectedYears([])}
-            className={`rounded-md px-2 py-1 text-xs font-bold border transition ${
-              selectedYears.length === 0
-                ? 'bg-rose-800 border-rose-700 text-white'
-                : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
-            }`}>
-            נקה
-          </button>
           {allYears.map(y => (
             <button
               key={y}
               onClick={() => toggleYear(y)}
               className={`rounded-md px-2 py-1 text-xs font-bold border transition tabular-nums ${
-                selectedYears.includes(y)
+                selectedYears.includes(y) && selectedYears.length < allYears.length
                   ? 'bg-amber-700 border-amber-600 text-white'
                   : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
               }`}>
@@ -3665,27 +3664,34 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
     }
   }, [allYears.length]);
   
-  // 🆕 בוררי שנים נפרדים לכל גרף - ברירת מחדל: כל השנים
+  // 🆕 בוררי שנים נפרדים - רק לגרפים הרלוונטיים: ביצועים חודשיים, דירוג לאורך זמן, התפלגות
   const [yearsMonthly, setYearsMonthly] = useState([]);
-  const [yearsYearly, setYearsYearly] = useState([]);
-  const [yearsRanking, setYearsRanking] = useState([]);
+  const [yearsRankOverTime, setYearsRankOverTime] = useState([]);
+  const [yearsDistribution, setYearsDistribution] = useState([]);
   
   useEffect(() => {
     if (allYears.length > 0 && yearsMonthly.length === 0) setYearsMonthly([...allYears]);
   }, [allYears.length]);
   useEffect(() => {
-    if (allYears.length > 0 && yearsYearly.length === 0) setYearsYearly([...allYears]);
+    if (allYears.length > 0 && yearsRankOverTime.length === 0) setYearsRankOverTime([...allYears]);
   }, [allYears.length]);
   useEffect(() => {
-    if (allYears.length > 0 && yearsRanking.length === 0) setYearsRanking([...allYears]);
+    if (allYears.length > 0 && yearsDistribution.length === 0) setYearsDistribution([...allYears]);
   }, [allYears.length]);
   
   const toggleYearLocal = (year, currentYears, setFn) => {
+    // אם "הכל" דלוק (כל השנים נבחרו) - לחיצה על שנה משאירה רק אותה
+    if (currentYears.length === allYears.length) {
+      setFn([year]);
+      return;
+    }
+    // אם השנה כבר נבחרה
     if (currentYears.includes(year)) {
-      // הוצא את השנה - אם זה ישאיר 0, החזר את כל השנים
       const newYears = currentYears.filter(y => y !== year);
+      // אם זאת הייתה האחרונה - חוזרים להכל
       setFn(newYears.length === 0 ? [...allYears] : newYears);
     } else {
+      // הוספת שנה לבחירה
       setFn([...currentYears, year]);
     }
   };
@@ -3742,24 +3748,20 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
     
     const rankings = [];
     
-    // לכל עונה - חישוב מצטבר מתחיל מאפס
     Object.entries(sessionsBySeason).forEach(([seasonKey, seasonSessions]) => {
       const cumulativeBySeason = {};
       
       seasonSessions.forEach(session => {
-        // עדכון רווח מצטבר לכל שחקן שהשתתף **בעונה זו**
         Object.entries(session.results).forEach(([name, amount]) => {
           cumulativeBySeason[name] = (cumulativeBySeason[name] || 0) + Number(amount);
         });
         
-        // השחקן שלנו השתתף בערב הזה?
         if (session.results[selectedPlayer] === undefined) return;
         
-        // אם נבחרו שנים - הצג רק ערבים מהשנים האלה
+        // 🆕 שימוש ב-yearsRankOverTime
         const y = session.season || (session.date ? new Date(session.date).getFullYear() : null);
-        if (selectedYears.length > 0 && !selectedYears.includes(y)) return;
+        if (yearsRankOverTime.length > 0 && !yearsRankOverTime.includes(y)) return;
         
-        // דירוג מבין כל מי שהשתתף **בעונה זו** עד הערב הנוכחי
         const sortedPlayers = Object.entries(cumulativeBySeason)
           .sort((a, b) => b[1] - a[1])
           .map(([name]) => name);
@@ -3767,12 +3769,13 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
         
         const d = new Date(session.date);
         const yearShort = String(d.getFullYear()).slice(-2);
-        const label = selectedYears.length > 1 
-          ? `${d.getDate()}/${d.getMonth() + 1}/${yearShort}` 
-          : `${d.getDate()}/${d.getMonth() + 1}`;
+        const label = `${d.getDate()}/${d.getMonth() + 1}`;
+        // 🆕 כולל שנה תמיד ב-tooltip
+        const labelWithYear = `${d.getDate()}/${d.getMonth() + 1}/${yearShort}`;
         rankings.push({
           date: session.date,
           label,
+          labelWithYear,
           rank,
           profit: cumulativeBySeason[selectedPlayer],
         });
@@ -3780,13 +3783,18 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
     });
     
     return rankings;
-  }, [allSessions, selectedPlayer, selectedYears]);
+  }, [allSessions, selectedPlayer, yearsRankOverTime]);
   
   // 3️⃣ נתונים לגרף התפלגות תוצאות (לפי שנים נבחרות)
   const distributionData = useMemo(() => {
     if (!selectedPlayer) return [];
     let wins = 0, losses = 0, ties = 0;
-    filteredSessions.forEach(s => {
+    // 🆕 שימוש ב-yearsDistribution
+    const filteredForDistribution = (allSessions || []).filter(s => {
+      const y = s.season || (s.date ? new Date(s.date).getFullYear() : null);
+      return y && yearsDistribution.includes(y);
+    });
+    filteredForDistribution.forEach(s => {
       if (!s.results || s.results[selectedPlayer] === undefined) return;
       const v = Number(s.results[selectedPlayer]);
       if (v > 0) wins++;
@@ -3798,7 +3806,7 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
       { name: 'הפסדים', value: losses, color: '#ef4444' },
       { name: 'תיקו', value: ties, color: '#94a3b8' },
     ].filter(d => d.value > 0);
-  }, [filteredSessions, selectedPlayer]);
+  }, [allSessions, selectedPlayer, yearsDistribution]);
   
   const distributionStats = useMemo(() => {
     const total = distributionData.reduce((s, d) => s + d.value, 0);
@@ -3806,31 +3814,27 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
     return { total, wins, winRate: total > 0 ? (wins / total) * 100 : 0 };
   }, [distributionData]);
   
-  // 4️⃣ 🆕 גרף ביצועים שנתיים - רווח לכל שנה (מסונן לפי yearsYearly)
+  // 4️⃣ גרף ביצועים שנתיים - רווח לכל שנה (כל השנים)
   const yearlyData = useMemo(() => {
     if (!selectedPlayer || !allSessions) return [];
     const byYear = {};
     allSessions.forEach(s => {
       if (!s.results || s.results[selectedPlayer] === undefined) return;
       const y = s.season || new Date(s.date).getFullYear();
-      // 🆕 רק שנים שנבחרו ב-yearsYearly
-      if (!yearsYearly.includes(y)) return;
       if (!byYear[y]) byYear[y] = { year: y, profit: 0, sessions: 0 };
       byYear[y].profit += Number(s.results[selectedPlayer]) || 0;
       byYear[y].sessions++;
     });
     return Object.values(byYear).sort((a, b) => a.year - b.year);
-  }, [allSessions, selectedPlayer, yearsYearly]);
+  }, [allSessions, selectedPlayer]);
   
-  // 5️⃣ 🆕 גרף דירוג שנתי - הדירוג הסופי של השחקן בכל שנה (מסונן לפי yearsRanking)
+  // 5️⃣ גרף דירוג שנתי - הדירוג הסופי של השחקן בכל שנה (כל השנים)
   const yearlyRankData = useMemo(() => {
     if (!selectedPlayer || !allSessions) return [];
     const yearGroups = {};
     allSessions.forEach(s => {
       if (!s.results) return;
       const y = s.season || new Date(s.date).getFullYear();
-      // 🆕 רק שנים שנבחרו ב-yearsRanking
-      if (!yearsRanking.includes(y)) return;
       if (!yearGroups[y]) yearGroups[y] = [];
       yearGroups[y].push(s);
     });
@@ -3929,14 +3933,14 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
       </div>
       
       {/* 🆕 גרף ביצועים שנתיים - רווח לכל שנה */}
-      {allYears.length > 0 && (
+      {yearlyData.length >= 1 && (
         <div className="rounded-2xl border border-yellow-800/40 bg-gradient-to-br from-yellow-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
           <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
             <h3 className="text-base md:text-lg font-bold text-yellow-200 flex items-center gap-2">
               💰 ביצועים שנתיים
               <span className="text-xs text-stone-500 font-normal">סה״כ רווח לכל שנה</span>
             </h3>
-            {yearlyData.length >= 1 && (() => {
+            {(() => {
               const best = yearlyData.reduce((a, b) => a.profit > b.profit ? a : b);
               return (
                 <span className="rounded-full bg-yellow-900/40 border border-yellow-700/40 px-2 py-0.5 text-yellow-300 font-bold text-xs">
@@ -3945,34 +3949,6 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
               );
             })()}
           </div>
-          {/* 🆕 בורר שנים נפרד */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-3">
-            <span className="text-xs text-stone-500 font-bold">שנים:</span>
-            <button
-              onClick={() => setYearsYearly([...allYears])}
-              className={`rounded-md px-2 py-1 text-xs font-bold border transition ${
-                yearsYearly.length === allYears.length
-                  ? 'bg-amber-700 border-amber-600 text-white'
-                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
-              }`}>
-              הכל
-            </button>
-            {allYears.map(y => (
-              <button
-                key={y}
-                onClick={() => toggleYearLocal(y, yearsYearly, setYearsYearly)}
-                className={`rounded-md px-2 py-1 text-xs font-bold border transition tabular-nums ${
-                  yearsYearly.includes(y) && yearsYearly.length < allYears.length
-                    ? 'bg-amber-700 border-amber-600 text-white'
-                    : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
-                }`}>
-                {y}
-              </button>
-            ))}
-          </div>
-          {yearlyData.length === 0 ? (
-            <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
-          ) : (
           <div style={{ width: '100%', height: isMobile ? 220 : 280 }}>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={yearlyData} margin={{ top: 20, right: 10, left: 0, bottom: 10 }}>
@@ -4009,19 +3985,18 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
               </BarChart>
             </ResponsiveContainer>
           </div>
-          )}
         </div>
       )}
       
       {/* 🆕 גרף דירוג שנתי */}
-      {allYears.length > 0 && (
+      {yearlyRankData.length >= 1 && (
         <div className="rounded-2xl border border-amber-800/40 bg-gradient-to-br from-amber-950/20 via-stone-950/60 to-stone-950/40 backdrop-blur p-4">
           <div className="flex items-start justify-between mb-3 flex-wrap gap-2">
             <h3 className="text-base md:text-lg font-bold text-amber-200 flex items-center gap-2">
               🏆 דירוג שנתי
               <span className="text-xs text-stone-500 font-normal">המקום שלך בכל שנה</span>
             </h3>
-            {yearlyRankData.length >= 1 && (() => {
+            {(() => {
               const best = yearlyRankData.reduce((a, b) => a.rank < b.rank ? a : b);
               return (
                 <span className="rounded-full bg-amber-900/40 border border-amber-700/40 px-2 py-0.5 text-amber-300 font-bold text-xs">
@@ -4030,34 +4005,6 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
               );
             })()}
           </div>
-          {/* 🆕 בורר שנים נפרד */}
-          <div className="flex items-center gap-1.5 flex-wrap mb-3">
-            <span className="text-xs text-stone-500 font-bold">שנים:</span>
-            <button
-              onClick={() => setYearsRanking([...allYears])}
-              className={`rounded-md px-2 py-1 text-xs font-bold border transition ${
-                yearsRanking.length === allYears.length
-                  ? 'bg-amber-700 border-amber-600 text-white'
-                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
-              }`}>
-              הכל
-            </button>
-            {allYears.map(y => (
-              <button
-                key={y}
-                onClick={() => toggleYearLocal(y, yearsRanking, setYearsRanking)}
-                className={`rounded-md px-2 py-1 text-xs font-bold border transition tabular-nums ${
-                  yearsRanking.includes(y) && yearsRanking.length < allYears.length
-                    ? 'bg-amber-700 border-amber-600 text-white'
-                    : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
-                }`}>
-                {y}
-              </button>
-            ))}
-          </div>
-          {yearlyRankData.length === 0 ? (
-            <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
-          ) : (
           <div style={{ width: '100%', height: isMobile ? 220 : 280 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={yearlyRankData} margin={{ top: 15, right: 15, left: 0, bottom: 10 }}>
@@ -4108,7 +4055,6 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
               </LineChart>
             </ResponsiveContainer>
           </div>
-          )}
         </div>
       )}
       
@@ -4229,6 +4175,33 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
             );
           })()}
         </div>
+        {/* 🆕 בורר שנים נפרד */}
+        {allYears.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap mb-3">
+            <span className="text-xs text-stone-500 font-bold">שנים:</span>
+            <button
+              onClick={() => setYearsRankOverTime([...allYears])}
+              className={`rounded-md px-2 py-1 text-xs font-bold border transition ${
+                yearsRankOverTime.length === allYears.length
+                  ? 'bg-amber-700 border-amber-600 text-white'
+                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
+              }`}>
+              הכל
+            </button>
+            {allYears.map(y => (
+              <button
+                key={y}
+                onClick={() => toggleYearLocal(y, yearsRankOverTime, setYearsRankOverTime)}
+                className={`rounded-md px-2 py-1 text-xs font-bold border transition tabular-nums ${
+                  yearsRankOverTime.includes(y) && yearsRankOverTime.length < allYears.length
+                    ? 'bg-amber-700 border-amber-600 text-white'
+                    : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
+                }`}>
+                {y}
+              </button>
+            ))}
+          </div>
+        )}
         {rankData.length === 0 ? (
           <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
         ) : (
@@ -4253,7 +4226,15 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
                 />
                 <Tooltip 
                   contentStyle={{ background: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', color: '#fff' }}
+                  labelStyle={{ color: '#fbbf24', fontWeight: 'bold' }}
+                  itemStyle={{ color: '#fff' }}
                   formatter={(v, name) => name === 'rank' ? [`מקום #${v}`, 'דירוג'] : [v, name]}
+                  labelFormatter={(label, items) => {
+                    if (items && items[0]?.payload?.labelWithYear) {
+                      return items[0].payload.labelWithYear;
+                    }
+                    return label;
+                  }}
                   cursor={{ stroke: '#60a5fa', strokeWidth: 1, strokeDasharray: '3 3' }}
                 />
                 <Line 
@@ -4303,6 +4284,33 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
             {distributionStats.total} מפגשים
           </span>
         </div>
+        {/* 🆕 בורר שנים נפרד */}
+        {allYears.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap mb-3">
+            <span className="text-xs text-stone-500 font-bold">שנים:</span>
+            <button
+              onClick={() => setYearsDistribution([...allYears])}
+              className={`rounded-md px-2 py-1 text-xs font-bold border transition ${
+                yearsDistribution.length === allYears.length
+                  ? 'bg-amber-700 border-amber-600 text-white'
+                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
+              }`}>
+              הכל
+            </button>
+            {allYears.map(y => (
+              <button
+                key={y}
+                onClick={() => toggleYearLocal(y, yearsDistribution, setYearsDistribution)}
+                className={`rounded-md px-2 py-1 text-xs font-bold border transition tabular-nums ${
+                  yearsDistribution.includes(y) && yearsDistribution.length < allYears.length
+                    ? 'bg-amber-700 border-amber-600 text-white'
+                    : 'bg-stone-800 border-stone-700 text-stone-400 hover:bg-stone-700'
+                }`}>
+                {y}
+              </button>
+            ))}
+          </div>
+        )}
         {distributionData.length === 0 ? (
           <div className="py-8 text-center text-stone-500 text-sm">אין נתונים זמינים</div>
         ) : (
