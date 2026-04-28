@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.18.9';
-const APP_BUILD_TIME = '28/04/2026 10:45';
-const APP_NOTES = 'תיקון - תזכורות לא חוזרות אחרי "כבר העברתי" / "קיבלתי"';
+const APP_VERSION = 'v2.19.0';
+const APP_BUILD_TIME = '28/04/2026 10:32';
+const APP_NOTES = 'עדכון מארח אוטומטי בחצות שעון ישראל';
 
 
 // ===== הרשאות מנהל =====
@@ -109,8 +109,22 @@ const isLiveBroadcastTime = () => {
 // בודק האם תאריך נתון הוא יום אירוח לפי לוח האירוחים
 const isHostingDay = (hostingSchedule, dateStr) => {
   if (!hostingSchedule || !Array.isArray(hostingSchedule)) return false;
-  const today = dateStr || new Date().toISOString().split('T')[0];
+  const today = dateStr || getTodayIsrael();
   return hostingSchedule.some(h => h.date === today);
+};
+
+// 📅 מחזיר את התאריך של היום לפי שעון ישראל בפורמט YYYY-MM-DD
+const getTodayIsrael = () => {
+  try {
+    // מקבל את התאריך לפי שעון ישראל
+    const israelDate = new Date().toLocaleDateString('en-CA', { 
+      timeZone: 'Asia/Jerusalem' 
+    });
+    // en-CA מחזיר YYYY-MM-DD ישירות
+    return israelDate;
+  } catch (e) {
+    return new Date().toISOString().split('T')[0];
+  }
 };
 
 // ===== חישובי סטטיסטיקה =====
@@ -1558,7 +1572,7 @@ const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
     .sort((a, b) => b[1].total - a[1].total)[0];
 
   // האירוח הקרוב
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayIsrael();
   const myNextHost = hostingSchedule
     .filter(h => h.date >= today && h.host === playerName)
     .sort((a, b) => a.date.localeCompare(b.date))[0];
@@ -2020,7 +2034,7 @@ const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
 
 // ===== באנר 3 המארחים הבאים בדשבורד =====
 const NextHostsBanner = ({ hostingSchedule, onSeeAll }) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayIsrael();
   const upcoming = hostingSchedule
     .filter(h => h.date >= today && h.host)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -2161,7 +2175,7 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
   const [showAddNew, setShowAddNew] = useState(false);
   const [newHost, setNewHost] = useState({ date: '', dayName: 'שני', host: '', notes: '', address: '' });
   const [filter, setFilter] = useState(defaultFilter); // upcoming | past | all
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayIsrael();
 
   const filtered = useMemo(() => {
     let list = [...hostingSchedule];
@@ -6096,7 +6110,7 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const scrollRef = useRef(null);
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayIsrael();
   const upcoming = hostingSchedule
     .filter(h => h.date >= today && h.host)
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -7283,6 +7297,21 @@ export default function PokerApp() {
     }, 30000);
     return () => clearInterval(interval);
   }, []);
+  
+  // 🆕 רענון יומי - מאלץ re-render בחצות כדי שהמארח הבא יתעדכן
+  // משתנה todayKey משתנה כשתאריך ישראל משתנה
+  const [todayKey, setTodayKey] = useState(() => getTodayIsrael());
+  useEffect(() => {
+    const checkDateChange = () => {
+      const newToday = getTodayIsrael();
+      if (newToday !== todayKey) {
+        setTodayKey(newToday);
+      }
+    };
+    // בדיקה כל דקה - רץ בלי תלות במכשיר
+    const interval = setInterval(checkDateChange, 60000);
+    return () => clearInterval(interval);
+  }, [todayKey]);
   
   // 📡 שידור חי - polling לבדוק אם יש שידור פעיל
   // רץ כל 15 שניות, ובודק את התנאים: שעות + יום אירוח
