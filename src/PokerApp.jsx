@@ -9,14 +9,15 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.20.0';
-const APP_BUILD_TIME = '28/04/2026 10:38';
-const APP_NOTES = '🎯 אופטימיזציית העברות - subset-sum (פחות העברות)';
+const APP_VERSION = 'v2.21.0';
+const APP_BUILD_TIME = '28/04/2026 11:04';
+const APP_NOTES = '🔐 ניהול מנהלים מהאפליקציה (תפריט המבורגר)';
 
 
 // ===== הרשאות מנהל =====
 const ADMIN_PASSWORD = 'barbur2026'; // סיסמה זמנית - להחליף בסיסמה האמיתית
-const ADMIN_NAMES = ['רון', 'גילי'];
+const ADMIN_NAMES = ['רון', 'גילי']; // ברירת מחדל - ניתן לערוך מהאפליקציה
+const ADMIN_NAMES_KEY = 'poker_admin_names_v1'; // 🆕 רשימת מנהלים שמורה ב-Firebase
 
 // ===== לוגו BarburAI (Base64) =====
 
@@ -290,6 +291,111 @@ const SplashScreen = ({ onEnter }) => {
 };
 
 // ===== מודל התחברות מנהל =====
+// ============================================================
+// 🆕 ניהול רשימת מנהלים - הוספה/הסרה
+// ============================================================
+const ManageAdminsModal = ({ isOpen, onClose, adminNames, currentAdminName, allPlayers, onAdd, onRemove }) => {
+  const [selectedNew, setSelectedNew] = useState('');
+  
+  if (!isOpen) return null;
+  
+  // שחקנים שעדיין לא מנהלים
+  const eligiblePlayers = allPlayers.filter(p => !adminNames.includes(p));
+  
+  const handleAdd = () => {
+    if (!selectedNew) return;
+    onAdd(selectedNew);
+    setSelectedNew('');
+  };
+  
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" 
+      onClick={onClose}>
+      <div className="relative w-full max-w-md rounded-2xl border-2 border-amber-700/60 bg-gradient-to-br from-stone-900 to-stone-950 shadow-2xl" 
+        onClick={e => e.stopPropagation()} dir="rtl">
+        
+        {/* כותרת */}
+        <div className="flex items-center justify-between p-5 border-b border-stone-800">
+          <h3 className="text-xl font-bold text-amber-200 flex items-center gap-2">
+            🔐 ניהול מנהלים
+          </h3>
+          <button onClick={onClose}
+            className="rounded-full bg-stone-800 hover:bg-stone-700 border border-stone-700 w-8 h-8 flex items-center justify-center text-stone-400">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        
+        {/* תוכן */}
+        <div className="p-5 space-y-4">
+          
+          {/* רשימת מנהלים נוכחיים */}
+          <div>
+            <div className="text-xs text-stone-500 mb-2 font-bold">מנהלים נוכחיים ({adminNames.length})</div>
+            <div className="space-y-2">
+              {adminNames.length === 0 ? (
+                <div className="text-stone-500 text-sm text-center py-4">אין מנהלים</div>
+              ) : (
+                adminNames.map(name => (
+                  <div key={name} className="flex items-center justify-between rounded-xl border border-stone-800 bg-stone-900/50 p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-amber-700 text-white flex items-center justify-center font-bold text-sm">
+                        {name.charAt(0)}
+                      </div>
+                      <div>
+                        <div className="font-bold text-stone-100">{name}</div>
+                        {name === currentAdminName && (
+                          <div className="text-[10px] text-emerald-400">(אתה)</div>
+                        )}
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => onRemove(name)}
+                      title="הסר מנהל"
+                      disabled={adminNames.length <= 1}
+                      className="rounded-lg px-3 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-950/30 border border-rose-800/30 disabled:opacity-30 disabled:cursor-not-allowed">
+                      הסר
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+          
+          {/* הוספת מנהל חדש */}
+          {eligiblePlayers.length > 0 && (
+            <div className="rounded-xl border border-emerald-800/50 bg-emerald-950/20 p-3">
+              <div className="text-xs text-emerald-300 mb-2 font-bold">הוספת מנהל חדש</div>
+              <div className="flex items-center gap-2">
+                <select 
+                  value={selectedNew}
+                  onChange={e => setSelectedNew(e.target.value)}
+                  className="flex-1 rounded-lg border border-stone-700 bg-stone-800 px-3 py-2 text-sm text-white">
+                  <option value="">בחר שחקן...</option>
+                  {eligiblePlayers.map(p => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                <button 
+                  onClick={handleAdd}
+                  disabled={!selectedNew}
+                  className="rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-700 px-4 py-2 text-sm font-bold text-white hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-30 disabled:cursor-not-allowed">
+                  + הוסף
+                </button>
+              </div>
+            </div>
+          )}
+          
+          {/* הסבר */}
+          <div className="rounded-xl bg-stone-800/40 border border-stone-700/40 p-3 text-xs text-stone-400 leading-relaxed">
+            💡 רק שחקנים ברשימה הזו יכולים להיכנס כמנהלים (גם עם הסיסמה הנכונה).<br />
+            כל שינוי כאן נשמר אוטומטית ונראה לכל המכשירים.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AdminLoginModal = ({ isOpen, onClose, onLogin, currentUser }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -4855,7 +4961,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       adminName: adminName || null,
       updatedAt: new Date().toISOString(),
       season: currentSeason,
-      testMode: true, // 🧪 קבוע true למצב בדיקה - יחזור ל-broadcastTestMode אחרי שעובד
+      testMode: broadcastTestMode,
     };
     
     saveLiveBroadcast(broadcast).catch(() => {});
@@ -4873,7 +4979,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
       adminName: adminName || null,
       updatedAt: new Date().toISOString(),
       season: currentSeason,
-      testMode: true,
+      testMode: broadcastTestMode,
     };
     
     saveLiveBroadcast(broadcast).catch(() => {});
@@ -7376,6 +7482,9 @@ export default function PokerApp() {
   const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [adminName, setAdminName] = useState(null); // null = לא מחובר כמנהל
+  // 🆕 רשימת המנהלים - נטענת מ-Firebase
+  const [adminNamesList, setAdminNamesList] = useState(ADMIN_NAMES);
+  const [manageAdminsOpen, setManageAdminsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState('dashboard');
@@ -7595,6 +7704,12 @@ export default function PokerApp() {
       }
       if (saved?.hostingSchedule) setHostingSchedule(saved.hostingSchedule);
       if (saved?.phones) setPhones(saved.phones);
+      
+      // 🆕 טעינת רשימת מנהלים
+      const savedAdmins = await loadState(ADMIN_NAMES_KEY);
+      if (Array.isArray(savedAdmins) && savedAdmins.length > 0) {
+        setAdminNamesList(savedAdmins);
+      }
       
       const savedQuotes = await loadState(QUOTES_STORAGE_KEY);
       if (savedQuotes?.deletedIds) setDeletedQuoteIds(savedQuotes.deletedIds);
@@ -8032,7 +8147,7 @@ export default function PokerApp() {
     } catch {}
   };
 
-  const isAdminEligible = currentUser && ADMIN_NAMES.includes(currentUser);
+  const isAdminEligible = currentUser && adminNamesList.includes(currentUser);
 
   const persistQuotes = async (deletedIds, likes, userQuotesList) => {
     await saveState({ 
@@ -8130,6 +8245,29 @@ export default function PokerApp() {
     setAdminName(name);
     // שמירה של שם המנהל באחסון המקומי של הדפדפן (לא במרכזי) כדי שיישאר מחובר
     try { window.localStorage.setItem('poker_admin_name', name); } catch {}
+  };
+
+  // 🆕 הוספת מנהל חדש לרשימה
+  const handleAddAdmin = async (newAdminName) => {
+    if (!newAdminName || adminNamesList.includes(newAdminName)) return;
+    const updated = [...adminNamesList, newAdminName];
+    setAdminNamesList(updated);
+    await saveState(updated, ADMIN_NAMES_KEY);
+  };
+  
+  // 🆕 הסרת מנהל מהרשימה
+  const handleRemoveAdmin = async (nameToRemove) => {
+    if (adminNamesList.length <= 1) {
+      alert('אי אפשר להסיר את המנהל היחיד - חייב להיות לפחות מנהל אחד');
+      return;
+    }
+    if (nameToRemove === adminName) {
+      const ok = window.confirm(`אתה עומד להסיר את עצמך (${nameToRemove}) מרשימת המנהלים. אחרי זה תצטרך מנהל אחר שיוסיף אותך חזרה. להמשיך?`);
+      if (!ok) return;
+    }
+    const updated = adminNamesList.filter(n => n !== nameToRemove);
+    setAdminNamesList(updated);
+    await saveState(updated, ADMIN_NAMES_KEY);
   };
 
   const handleLogout = () => {
@@ -8498,6 +8636,13 @@ export default function PokerApp() {
                   <span className="text-xl">💾</span>
                   <span>גיבוי ושחזור</span>
                 </button>
+                {/* 🆕 כפתור ניהול מנהלים */}
+                <button onClick={() => { setMenuOpen(false); setManageAdminsOpen(true); }}
+                  className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-amber-700/80 to-amber-800/80 border border-amber-700/50 px-4 py-3 text-white font-bold hover:from-amber-600 hover:to-amber-700 transition text-sm">
+                  <span className="text-xl">🔐</span>
+                  <span>ניהול מנהלים</span>
+                  <span className="mr-auto text-xs bg-amber-950/50 rounded-full px-2 py-0.5">{adminNamesList.length}</span>
+                </button>
               </div>
             )}
 
@@ -8567,6 +8712,17 @@ export default function PokerApp() {
       )}
       
       <AdminLoginModal isOpen={loginOpen} onClose={() => setLoginOpen(false)} onLogin={handleAdminLogin} currentUser={currentUser} />
+      
+      {/* 🆕 ניהול רשימת מנהלים */}
+      <ManageAdminsModal 
+        isOpen={manageAdminsOpen}
+        onClose={() => setManageAdminsOpen(false)}
+        adminNames={adminNamesList}
+        currentAdminName={adminName}
+        allPlayers={players}
+        onAdd={handleAddAdmin}
+        onRemove={handleRemoveAdmin}
+      />
 
       {/* 🆕 מודל הזדהות (כניסה ראשונה - חובה למלא טלפון) */}
       <PhoneSetupModal 
