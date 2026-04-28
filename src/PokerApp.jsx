@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.25.2';
-const APP_BUILD_TIME = '28/04/2026 19:15';
-const APP_NOTES = 'תיקון - dropdown של בחירת שחקן צף מעל הכל';
+const APP_VERSION = 'v2.25.3';
+const APP_BUILD_TIME = '28/04/2026 19:18';
+const APP_NOTES = 'ביטול חיפוש בגרפים אישיים';
 
 
 // ===== הרשאות מנהל =====
@@ -4040,13 +4040,14 @@ const PersonalCharts = ({ sessions, allSessions, stats, currentUser, isMobile })
             <BarChart3 className="h-5 w-5" />
             גרפים אישיים
           </div>
-          <SearchableSelect
-            value={selectedPlayer}
-            onChange={setSelectedPlayer}
-            options={players}
-            placeholder="בחר שחקן..."
-            className="flex-1 min-w-[150px]"
-          />
+          <select 
+            value={selectedPlayer} 
+            onChange={e => setSelectedPlayer(e.target.value)}
+            className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-1.5 text-sm text-white font-bold flex-1 min-w-[150px]">
+            {players.map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
           {filteredStats && (
             <div className="text-xs text-stone-400 flex items-center gap-3 flex-wrap">
               <span>סה״כ: <span className={`font-bold ${filteredStats.total > 0 ? 'text-emerald-400' : filteredStats.total < 0 ? 'text-rose-400' : 'text-stone-300'}`}>
