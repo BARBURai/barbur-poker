@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.21.0';
-const APP_BUILD_TIME = '28/04/2026 11:04';
-const APP_NOTES = '🔐 ניהול מנהלים מהאפליקציה (תפריט המבורגר)';
+const APP_VERSION = 'v2.23.0';
+const APP_BUILD_TIME = '28/04/2026 11:39';
+const APP_NOTES = '🎙️ +1307 ציטוטים מהוואטסאפ (סה״כ 2282)';
 
 
 // ===== הרשאות מנהל =====
@@ -42,7 +42,7 @@ const ALL_INITIAL_SESSIONS = ALL_HISTORICAL_SESSIONS;
 
 // ===== רשימת אירוחים מתוכננים (מה-Google Sheet) =====
 const HOSTING_SCHEDULE = HOSTING_DATA;
-// ===== 975 ציטוטים מהוואטסאפ =====
+// ===== 2282 ציטוטים מהוואטסאפ =====
 const ALL_QUOTES = QUOTES_DATA;
 
 // ===== אחסון משותף - Firebase Firestore =====
@@ -1288,6 +1288,8 @@ const SessionHistory = ({ sessions, onDelete, isAdmin }) => {
 const QuotesSection = ({ deletedIds, likes, userQuotes, currentUser, players, onDelete, onLike, onAddQuote, isAdmin }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterQuoted, setFilterQuoted] = useState('all');
+  // 🆕 סינון שנה - דיפולט: השנה הנוכחית
+  const [filterYear, setFilterYear] = useState(() => new Date().getFullYear());
   const [sortBy, setSortBy] = useState('newest'); // newest | likes
   const [addModalOpen, setAddModalOpen] = useState(false);
 
@@ -1301,6 +1303,23 @@ const QuotesSection = ({ deletedIds, likes, userQuotes, currentUser, players, on
     const s = new Set(combinedQuotes.map(q => q.quoted));
     return Array.from(s).sort();
   }, [combinedQuotes]);
+  
+  // 🆕 כל השנים שיש בציטוטים (לפילטר)
+  const allYears = useMemo(() => {
+    const years = new Set();
+    combinedQuotes.forEach(q => {
+      if (q.date) {
+        const parts = q.date.split('.');
+        if (parts.length === 3) {
+          years.add(parseInt(parts[2]));
+        }
+      }
+      if (q.createdAt) {
+        years.add(new Date(q.createdAt).getFullYear());
+      }
+    });
+    return Array.from(years).filter(y => !isNaN(y)).sort((a, b) => b - a);
+  }, [combinedQuotes]);
 
   // ציטוטים מסוננים
   const visibleQuotes = useMemo(() => {
@@ -1309,6 +1328,24 @@ const QuotesSection = ({ deletedIds, likes, userQuotes, currentUser, players, on
     // סינון לפי מצוטט
     if (filterQuoted !== 'all') {
       list = list.filter(q => q.quoted === filterQuoted);
+    }
+    
+    // 🆕 סינון לפי שנה
+    if (filterYear !== 'all') {
+      list = list.filter(q => {
+        // ציטוטים חדשים - לפי createdAt
+        if (q.createdAt) {
+          return new Date(q.createdAt).getFullYear() === filterYear;
+        }
+        // ציטוטים היסטוריים - לפי date
+        if (q.date) {
+          const parts = q.date.split('.');
+          if (parts.length === 3) {
+            return parseInt(parts[2]) === filterYear;
+          }
+        }
+        return false;
+      });
     }
     
     // חיפוש
@@ -1338,7 +1375,7 @@ const QuotesSection = ({ deletedIds, likes, userQuotes, currentUser, players, on
     }
     
     return list;
-  }, [combinedQuotes, deletedIds, likes, filterQuoted, searchQuery, sortBy]);
+  }, [combinedQuotes, deletedIds, likes, filterQuoted, filterYear, searchQuery, sortBy]);
 
   const totalQuotes = combinedQuotes.length - deletedIds.length;
 
@@ -1375,6 +1412,14 @@ const QuotesSection = ({ deletedIds, likes, userQuotes, currentUser, players, on
               <option key={name} value={name}>ציטוטים של {name}</option>
             ))}
           </select>
+          {/* 🆕 בורר שנה */}
+          <select value={filterYear} onChange={e => setFilterYear(e.target.value === 'all' ? 'all' : parseInt(e.target.value))}
+            className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-sm text-white">
+            <option value="all">כל השנים</option>
+            {allYears.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
           <div className="flex rounded-lg border border-stone-700 bg-stone-900 p-1">
             <button onClick={() => setSortBy('newest')}
               className={`px-3 py-1 text-xs rounded-md font-bold transition ${sortBy === 'newest' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
@@ -1385,8 +1430,8 @@ const QuotesSection = ({ deletedIds, likes, userQuotes, currentUser, players, on
               הכי אהובים
             </button>
           </div>
-          {(filterQuoted !== 'all' || searchQuery || sortBy !== 'newest') && (
-            <button onClick={() => { setFilterQuoted('all'); setSearchQuery(''); setSortBy('newest'); }}
+          {(filterQuoted !== 'all' || filterYear !== new Date().getFullYear() || searchQuery || sortBy !== 'newest') && (
+            <button onClick={() => { setFilterQuoted('all'); setFilterYear(new Date().getFullYear()); setSearchQuery(''); setSortBy('newest'); }}
               className="text-xs text-stone-500 hover:text-amber-300 px-2">איפוס פילטרים</button>
           )}
         </div>
@@ -1486,8 +1531,9 @@ const AddQuoteModal = ({ isOpen, onClose, currentUser, players, onSave }) => {
           </button>
         </div>
 
-        <div className="text-xs text-stone-400 mb-4 bg-stone-900/50 border border-stone-800 rounded-lg px-3 py-2">
-          💡 שמעת משהו מצחיק בשולחן? הקלט אותו לדורות הבאים!
+        <div className="text-xs text-stone-400 mb-4 bg-stone-900/50 border border-stone-800 rounded-lg px-3 py-2 leading-relaxed">
+          💡 שמעת משהו מצחיק בשולחן? הקלט אותו לדורות הבאים!<br />
+          <span className="text-amber-300/80">⚠️ אין צורך לרשום "תומר:" או שם השחקן בתחילת הציטוט - בחר אותו ברשימה למטה.</span>
         </div>
 
         {/* מי אמר */}
@@ -1506,11 +1552,14 @@ const AddQuoteModal = ({ isOpen, onClose, currentUser, players, onSave }) => {
         <div className="mb-4">
           <label className="block text-xs text-stone-400 font-bold mb-1.5">מה הוא אמר?</label>
           <textarea value={text} onChange={e => { setText(e.target.value); setError(''); }}
-            placeholder='"זרקתי דאבל אייס... זה היה חייב להיות שלי"'
+            placeholder='לדוגמה: "זרקתי דאבל אייס... זה היה חייב להיות שלי"'
             rows={3}
             maxLength={300}
             className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2.5 text-white text-sm focus:border-amber-600 focus:outline-none resize-none" />
-          <div className="text-xs text-stone-500 mt-1 text-left">{text.length}/300</div>
+          <div className="flex items-center justify-between mt-1">
+            <span className="text-xs text-stone-500">רשום רק את הציטוט עצמו, בלי שם בהתחלה</span>
+            <span className="text-xs text-stone-500">{text.length}/300</span>
+          </div>
         </div>
 
         {/* מי מוסיף (אוטומטי) */}
@@ -7890,7 +7939,7 @@ export default function PokerApp() {
         playersCount: players.length,
         hostingCount: hostingSchedule.length,
         phonesCount: Object.keys(phones).length,
-        quotesCount: 975 - deletedQuoteIds.length + userQuotes.length,
+        quotesCount: ALL_QUOTES.length - deletedQuoteIds.length + userQuotes.length,
         galleryCount: galleryImages.length,
       }
     };
