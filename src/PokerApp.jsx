@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.24.0';
-const APP_BUILD_TIME = '28/04/2026 16:57';
-const APP_NOTES = '📚 +316 ערבים מההיסטוריה (2013-2022)';
+const APP_VERSION = 'v2.24.1';
+const APP_BUILD_TIME = '28/04/2026 17:17';
+const APP_NOTES = '🔧 תיקון - היסטוריה (2013-2022) נטענת אחרי Firebase';
 
 
 // ===== הרשאות מנהל =====
@@ -7800,7 +7800,12 @@ export default function PokerApp() {
     (async () => {
       const saved = await loadState(STORAGE_KEY);
       if (saved?.sessions) {
-        setAllSessions(saved.sessions);
+        // 🆕 מאחד את הסשנים מהקובץ (היסטוריה) עם הסשנים השמורים ב-Firebase
+        // אם יש כפילויות לפי תאריך+עונה - הגרסה מ-Firebase מנצחת (עדכונים)
+        const fileSessionsKey = (s) => `${s.date}_${s.season || 2026}`;
+        const savedKeys = new Set(saved.sessions.map(fileSessionsKey));
+        const historyOnly = ALL_INITIAL_SESSIONS.filter(s => !savedKeys.has(fileSessionsKey(s)));
+        setAllSessions([...historyOnly, ...saved.sessions]);
         if (saved.players) setPlayers(saved.players);
       }
       if (saved?.hostingSchedule) setHostingSchedule(saved.hostingSchedule);
