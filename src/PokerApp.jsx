@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.18.7';
-const APP_BUILD_TIME = '28/04/2026 10:15';
-const APP_NOTES = 'סגירה מוקדמת מוצגת בשידור החי';
+const APP_VERSION = 'v2.18.9';
+const APP_BUILD_TIME = '28/04/2026 10:45';
+const APP_NOTES = 'תיקון - תזכורות לא חוזרות אחרי "כבר העברתי" / "קיבלתי"';
 
 
 // ===== הרשאות מנהל =====
@@ -4332,6 +4332,10 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
   // עדכון סטטוס + העברה לארכיון אחרי "קיבלתי"
   const updateStatus = (id, newStatus) => {
     const target = reminders.find(r => r.id === id);
+    // 🆕 מסמן signature כטופל מיד - לפני שינוי state
+    if ((newStatus === 'confirmed' || newStatus === 'archived') && target) {
+      markSignatureHandled(reminderSignature(target));
+    }
     const archivedAt = (newStatus === 'confirmed' || newStatus === 'archived') 
       ? new Date().toISOString() 
       : undefined;
@@ -4344,15 +4348,15 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
       return { ...r, status: newStatus };
     });
     onUpdateReminders(updated);
-    // מסמן signature כטופל כדי שלא ייווצר מחדש בסנכרון
-    if (newStatus === 'confirmed' && target) {
-      markSignatureHandled(reminderSignature(target));
-    }
   };
   
   // 🆕 "כבר העברתי" - מעביר לארכיון במקום למחוק
   const archiveReminder = (id) => {
     const target = reminders.find(r => r.id === id);
+    // 🆕 מסמן signature כטופל מיד - לפני שינוי state
+    if (target) {
+      markSignatureHandled(reminderSignature(target));
+    }
     const archivedAt = new Date().toISOString();
     const updated = reminders.map(r => 
       r.id === id 
@@ -4360,9 +4364,6 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
         : r
     );
     onUpdateReminders(updated);
-    if (target) {
-      markSignatureHandled(reminderSignature(target));
-    }
   };
   
   const handlePaymentApp = (reminder, app) => {
@@ -5205,9 +5206,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                       <div className="flex items-center justify-center gap-2">
                         <button 
                           type="button"
-                          onClick={() => setFinalChips({...finalChips, [p.name]: Math.max(0, currentChips - 20)})}
+                          onClick={() => setFinalChips({...finalChips, [p.name]: Math.max(0, currentChips - 10)})}
                           className="w-11 h-10 flex-shrink-0 rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 font-bold text-xl active:scale-95 transition"
-                          title="הפחת 20">
+                          title="הפחת 10">
                           −
                         </button>
                         <input 
@@ -5218,9 +5219,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                           className="flex-1 max-w-[120px] rounded-lg border border-stone-700 bg-stone-800 px-2 py-2 text-white text-center text-base tabular-nums font-bold" />
                         <button 
                           type="button"
-                          onClick={() => setFinalChips({...finalChips, [p.name]: currentChips + 20})}
+                          onClick={() => setFinalChips({...finalChips, [p.name]: currentChips + 10})}
                           className="w-11 h-10 flex-shrink-0 rounded-lg bg-amber-700 hover:bg-amber-600 border border-amber-600 text-white font-bold text-xl active:scale-95 transition"
-                          title="הוסף 20">
+                          title="הוסף 10">
                           +
                         </button>
                       </div>
@@ -5353,7 +5354,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                     type="button"
                     onClick={() => setEarlyCloseModal({
                       ...earlyCloseModal,
-                      currentChips: Math.max(0, (Number(earlyCloseModal.currentChips) || 0) - 20)
+                      currentChips: Math.max(0, (Number(earlyCloseModal.currentChips) || 0) - 10)
                     })}
                     className="w-11 h-11 rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 font-bold text-xl">−</button>
                   <input 
@@ -5367,7 +5368,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                     type="button"
                     onClick={() => setEarlyCloseModal({
                       ...earlyCloseModal,
-                      currentChips: (Number(earlyCloseModal.currentChips) || 0) + 20
+                      currentChips: (Number(earlyCloseModal.currentChips) || 0) + 10
                     })}
                     className="w-11 h-11 rounded-lg bg-purple-700 hover:bg-purple-600 border border-purple-600 text-white font-bold text-xl">+</button>
                 </div>
