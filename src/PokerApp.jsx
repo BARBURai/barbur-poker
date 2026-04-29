@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.28.2';
+const APP_VERSION = 'v2.28.4';
 const APP_BUILD_TIME = '29/04/2026 10:49';
-const APP_NOTES = 'הגדלת ריבועי MVP - גביע + תמונה + שם בלי לפגוע בפרסים';
+const APP_NOTES = 'תמונת אלוף השנה בתוך הגביע + "טרם נקבע" לשנה לא גמורה + הקטנת padding ב-MVP חודשי/רבעוני/חביב הקהל';
 
 
 // ===== הרשאות מנהל =====
@@ -6784,18 +6784,25 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                       <stop offset="50%" stopColor="#451a03"/>
                       <stop offset="100%" stopColor="#1c0a01"/>
                     </linearGradient>
+                    {/* clipPath עגול לתמונת השחקן בתוך הגביע */}
+                    <clipPath id="trophyAvatarClip">
+                      <circle cx="80" cy="82" r="32"/>
+                    </clipPath>
                   </defs>
                   
+                  {/* ידיות הגביע */}
                   <path d="M 25 65 Q 10 60 10 80 Q 10 100 25 100" fill="none" stroke="url(#megaGold)" strokeWidth="9" strokeLinecap="round"/>
                   <path d="M 135 65 Q 150 60 150 80 Q 150 100 135 100" fill="none" stroke="url(#megaGold)" strokeWidth="9" strokeLinecap="round"/>
                   
+                  {/* גוף הגביע */}
                   <path d="M 35 35 L 125 35 L 122 100 Q 122 130 80 138 Q 38 130 38 100 Z" fill="url(#megaGold)"/>
-                  <path d="M 35 35 L 125 35 L 122 100 Q 122 130 80 138 Q 38 130 38 100 Z" fill="url(#megaShine)"/>
                   
+                  {/* פתח הגביע */}
                   <ellipse cx="80" cy="35" rx="48" ry="9" fill="url(#megaGold)"/>
                   <ellipse cx="80" cy="32" rx="48" ry="4" fill="#fef3c7" opacity="0.9"/>
                   <ellipse cx="80" cy="35" rx="44" ry="3" fill="#92400e" opacity="0.4"/>
                   
+                  {/* תכשיטים בפתח */}
                   <circle cx="50" cy="28" r="4" fill="url(#megaGold)" stroke="#92400e" strokeWidth="0.5"/>
                   <circle cx="65" cy="22" r="4" fill="url(#megaGold)" stroke="#92400e" strokeWidth="0.5"/>
                   <circle cx="80" cy="18" r="6" fill="#fef3c7" stroke="#d97706" strokeWidth="1"/>
@@ -6803,6 +6810,31 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                   <circle cx="95" cy="22" r="4" fill="url(#megaGold)" stroke="#92400e" strokeWidth="0.5"/>
                   <circle cx="110" cy="28" r="4" fill="url(#megaGold)" stroke="#92400e" strokeWidth="0.5"/>
                   
+                  {/* 🖼️ תמונת האלוף בתוך הגביע (רק לשנים שהסתיימו ובחירת שנה אחת) */}
+                  {yearChampion.finished && yearChampionYears.length === 1 && PLAYER_AVATARS[yearChampion.name] ? (
+                    <>
+                      {/* רקע כהה מאחורי התמונה (לבליטה) */}
+                      <circle cx="80" cy="82" r="34" fill="#1c0a01"/>
+                      {/* התמונה עצמה */}
+                      <image
+                        href={`data:image/jpeg;base64,${PLAYER_AVATARS[yearChampion.name]}`}
+                        x="48" y="50" width="64" height="64"
+                        clipPath="url(#trophyAvatarClip)"
+                        preserveAspectRatio="xMidYMid slice"
+                      />
+                      {/* טבעת זהב מסביב לתמונה */}
+                      <circle cx="80" cy="82" r="32" fill="none" stroke="url(#megaGold)" strokeWidth="3"/>
+                      <circle cx="80" cy="82" r="32" fill="none" stroke="#fef3c7" strokeWidth="0.5" opacity="0.8"/>
+                    </>
+                  ) : (
+                    <>
+                      {/* גימור gradient רק כשאין תמונה */}
+                      <path d="M 35 35 L 125 35 L 122 100 Q 122 130 80 138 Q 38 130 38 100 Z" fill="url(#megaShine)"/>
+                      <text x="80" y="88" textAnchor="middle" fontFamily="Cinzel, serif" fontSize="22" fontWeight="800" fill="#451a03">★</text>
+                    </>
+                  )}
+                  
+                  {/* בסיס הגביע */}
                   <rect x="65" y="138" width="30" height="12" fill="url(#megaGold)"/>
                   <rect x="65" y="138" width="30" height="3" fill="#fef3c7" opacity="0.7"/>
                   
@@ -6810,38 +6842,53 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                   <rect x="40" y="165" width="80" height="14" rx="3" fill="url(#megaGold)"/>
                   <rect x="35" y="179" width="90" height="10" rx="2" fill="url(#baseGrad)"/>
                   
-                  <ellipse cx="60" cy="65" rx="12" ry="30" fill="url(#megaShine)" opacity="0.7"/>
-                  <ellipse cx="100" cy="80" rx="6" ry="20" fill="url(#megaShine)" opacity="0.5"/>
-                  
-                  <text x="80" y="88" textAnchor="middle" fontFamily="Cinzel, serif" fontSize="22" fontWeight="800" fill="#451a03">★</text>
+                  {/* הילות בוהק - רק כשאין תמונה (כדי לא להפריע לתמונה) */}
+                  {!(yearChampion.finished && yearChampionYears.length === 1 && PLAYER_AVATARS[yearChampion.name]) && (
+                    <>
+                      <ellipse cx="60" cy="65" rx="12" ry="30" fill="url(#megaShine)" opacity="0.7"/>
+                      <ellipse cx="100" cy="80" rx="6" ry="20" fill="url(#megaShine)" opacity="0.5"/>
+                    </>
+                  )}
                 </svg>
               </div>
               
-              {/* 🖼️ תמונת השחקן (כשיש - 1 שחקן בלבד באלוף השנה) */}
-              {yearChampionYears.length === 1 && PLAYER_AVATARS[yearChampion.name] && (
-                <div className="flex justify-center -mt-2 mb-1">
-                  <div style={{ filter: 'drop-shadow(0 0 25px rgba(251,191,36,0.7))' }}>
-                    <PlayerAvatar name={yearChampion.name} size={140} />
+              {/* שם וסטטיסטיקות - רק לשנים שהסתיימו, או למצב מולטי-שנה */}
+              {yearChampion.finished ? (
+                <>
+                  <div className="text-4xl font-extrabold mt-3" style={{
+                    fontFamily: 'Cinzel, serif',
+                    background: 'linear-gradient(180deg, #fef3c7 0%, #fbbf24 100%)',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                    letterSpacing: '0.05em',
+                  }}>
+                    {yearChampion.name}
+                  </div>
+                  <div className="text-base text-amber-300 font-bold tabular-nums mt-1">
+                    {yearChampion.profit > 0 ? '+' : ''}{yearChampion.profit}₪
+                  </div>
+                  <div className="text-[10px] text-stone-500 mt-1 tracking-widest">
+                    {yearChampion.sessions} MEETINGS
+                  </div>
+                </>
+              ) : (
+                <div className="mt-3 mb-1">
+                  <div className="text-2xl font-extrabold" style={{
+                    fontFamily: 'Cinzel, serif',
+                    background: 'linear-gradient(180deg, #fef3c7 0%, #fbbf24 100%)',
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                    letterSpacing: '0.05em',
+                  }}>
+                    טרם נקבע
+                  </div>
+                  <div className="text-[11px] text-stone-500 mt-2 tracking-widest">
+                    THE THRONE AWAITS
                   </div>
                 </div>
               )}
-              
-              <div className="text-4xl font-extrabold mt-3" style={{
-                fontFamily: 'Cinzel, serif',
-                background: 'linear-gradient(180deg, #fef3c7 0%, #fbbf24 100%)',
-                WebkitBackgroundClip: 'text',
-                backgroundClip: 'text',
-                color: 'transparent',
-                letterSpacing: '0.05em',
-              }}>
-                {yearChampion.name}
-              </div>
-              <div className="text-base text-amber-300 font-bold tabular-nums mt-1">
-                {yearChampion.profit > 0 ? '+' : ''}{yearChampion.profit}₪
-              </div>
-              <div className="text-[10px] text-stone-500 mt-1 tracking-widest">
-                {yearChampion.sessions} MEETINGS{!yearChampion.finished ? ' SO FAR' : ''}
-              </div>
               
               <div className="text-[10px] text-amber-500 font-bold tracking-[0.4em] mt-3">★ ★ ★</div>
             </div>
@@ -6902,7 +6949,7 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                 {/* תמונה ענקית */}
                 {PLAYER_AVATARS[q.name] && (
                   <div className="flex justify-center my-2">
-                    <PlayerAvatar name={q.name} size={100} />
+                    <PlayerAvatar name={q.name} size={130} />
                   </div>
                 )}
                 <div className="text-base font-extrabold text-blue-100 mt-1 truncate">
@@ -6966,7 +7013,7 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                   {/* תמונה ענקית */}
                   {PLAYER_AVATARS[m.name] && (
                     <div className="flex justify-center my-2">
-                      <PlayerAvatar name={m.name} size={85} />
+                      <PlayerAvatar name={m.name} size={115} />
                     </div>
                   )}
                   <div className="text-sm font-extrabold text-amber-100 mt-1 truncate">
@@ -7006,7 +7053,7 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                 <div className="text-3xl my-2">🪶</div>
                 {PLAYER_AVATARS[popularityChampions.topQuoted.name] && (
                   <div className="flex justify-center my-2">
-                    <PlayerAvatar name={popularityChampions.topQuoted.name} size={100} />
+                    <PlayerAvatar name={popularityChampions.topQuoted.name} size={130} />
                   </div>
                 )}
                 <div className="text-base font-extrabold text-pink-100 truncate">
@@ -7026,7 +7073,7 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                 <div className="text-3xl my-2">🏠</div>
                 {PLAYER_AVATARS[popularityChampions.topHost.name] && (
                   <div className="flex justify-center my-2">
-                    <PlayerAvatar name={popularityChampions.topHost.name} size={100} />
+                    <PlayerAvatar name={popularityChampions.topHost.name} size={130} />
                   </div>
                 )}
                 <div className="text-base font-extrabold text-purple-100 truncate">
@@ -7046,7 +7093,7 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                 <div className="text-3xl my-2">🎯</div>
                 {PLAYER_AVATARS[popularityChampions.topAttender.name] && (
                   <div className="flex justify-center my-2">
-                    <PlayerAvatar name={popularityChampions.topAttender.name} size={100} />
+                    <PlayerAvatar name={popularityChampions.topAttender.name} size={130} />
                   </div>
                 )}
                 <div className="text-base font-extrabold text-teal-100 truncate">
