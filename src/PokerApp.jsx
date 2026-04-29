@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.31.1';
-const APP_BUILD_TIME = '29/04/2026 17:30';
-const APP_NOTES = '🔐 סיסמת סופר אדמין נשמרת ב-Firebase (לא בקוד). הגדרה ראשונית בכניסה ראשונה + כפתור "שנה סיסמה" בתפריט.';
+const APP_VERSION = 'v2.31.2';
+const APP_BUILD_TIME = '29/04/2026 17:50';
+const APP_NOTES = '🚪 הוספת כפתור "התנתק כמנהל" בתפריט - חזרה למצב שחקן רגיל';
 
 
 // ===== הרשאות מנהל =====
@@ -10941,6 +10941,17 @@ export default function PokerApp() {
     } catch {}
   };
   
+  // 🚪 התנתקות ממנהל - חוזר להיות משתמש רגיל (לא יוצא מהאפליקציה)
+  const handleAdminLogout = () => {
+    if (!confirm('להתנתק ממצב מנהל?\n(תישאר מחובר כשחקן רגיל)')) return;
+    setAdminName(null);
+    setAdminRole(null);
+    try {
+      window.localStorage.removeItem('poker_admin_name');
+      window.localStorage.removeItem('poker_admin_role');
+    } catch {}
+  };
+  
   // 🔐 שמירת hash של סיסמת סופר אדמין ב-Firebase (פעם ראשונה / שינוי)
   const handleSetSuperAdminPassword = async (hash) => {
     setSuperAdminPasswordHash(hash);
@@ -11641,6 +11652,13 @@ export default function PokerApp() {
                     <span>שנה סיסמת סופר אדמין</span>
                   </button>
                 )}
+                {/* 🚪 התנתקות ממנהל - חזרה להיות משתמש רגיל */}
+                <button onClick={() => { setMenuOpen(false); handleAdminLogout(); }}
+                  className="w-full flex items-center gap-3 rounded-lg bg-rose-950/40 border border-rose-800/60 px-4 py-2.5 text-rose-300 font-bold hover:bg-rose-950/70 transition text-sm mt-2">
+                  <LogOut className="h-4 w-4" />
+                  <span>התנתק כמנהל</span>
+                  <span className="mr-auto text-[10px] text-rose-400/70">חזרה למצב שחקן</span>
+                </button>
               </div>
             )}
 
