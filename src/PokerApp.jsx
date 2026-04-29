@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.25.5';
-const APP_BUILD_TIME = '28/04/2026 19:30';
-const APP_NOTES = '👥 ניהול משתמשים: הוספת שחקנים + הסתרה משולשת';
+const APP_VERSION = 'v2.27.2';
+const APP_BUILD_TIME = '29/04/2026 07:51';
+const APP_NOTES = '🎂 ברכה לקבוצה + יום הולדת באיחור עד שבוע';
 
 
 // ===== הרשאות מנהל =====
@@ -19,6 +19,34 @@ const ADMIN_PASSWORD = 'barbur2026'; // סיסמה זמנית - להחליף ב�
 const ADMIN_NAMES = ['רון', 'גילי']; // ברירת מחדל - ניתן לערוך מהאפליקציה
 const ADMIN_NAMES_KEY = 'poker_admin_names_v1'; // 🆕 רשימת מנהלים שמורה ב-Firebase
 const HIDDEN_PLAYERS_KEY = 'poker_hidden_players_v1'; // 🆕 שחקנים מוסתרים מרשימת הפעילים
+const BIRTHDAYS_KEY = 'poker_birthdays_v1'; // 🆕 ימי הולדת של שחקנים
+
+// 🎂 ימי הולדת שחולצו מההיסטוריה של הקבוצה
+const DEFAULT_BIRTHDAYS = {
+  'איילון': '30/01',
+  'הראל': '15/02',
+  'אלון': '12/03',
+  'שראל': '18/03',
+  'רם': '23/03',
+  'שמוליק': '02/04',
+  'רועי': '08/04',
+  'תומר': '24/04',
+  'כליפא': '05/05',
+  'ניר': '10/05',
+  'ולין': '20/05',
+  'רון': '31/05',
+  'אסף': '24/06',
+  'נועם': '27/06',
+  'שגיא': '08/07',
+  'בראדלי': '23/07',
+  'רונן': '14/08',
+  'לירון': '22/08',
+  'גילי': '03/09',
+  'יובל בלוך': '04/09',
+  'שלומי': '18/09',
+  'יניב': '09/10',
+  'דניאל': '08/12',
+};
 
 // ===== לוגו BarburAI (Base64) =====
 
@@ -6386,6 +6414,611 @@ const aggregateByPeriod = (sessions, players, keyFn) => {
   return { sortedKeys, byPeriod, participated };
 };
 
+// ===== 🏆 אלופים - חישוב MVP חודשי, רבעוני, ושנתי =====
+const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quoteLikes = {} }) => {
+  const HEBREW_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
+  
+  // זיהוי כל השנים הזמינות
+  const availableYears = useMemo(() => {
+    const years = new Set(allSessions.map(s => s.season || new Date(s.date).getFullYear()));
+    return Array.from(years).sort((a, b) => b - a);
+  }, [allSessions]);
+  
+  const currentYear = new Date().getFullYear();
+  
+  // 🆕 שנים נבחרות לאלוף השנה (בחירה מרובה)
+  const [yearChampionYears, setYearChampionYears] = useState([]);
+  // 🆕 בורר שנה לרבעונים (בחירה יחידה)
+  const [quartersYear, setQuartersYear] = useState(currentYear);
+  // 🆕 בורר שנה לחודשים (בחירה יחידה)
+  const [monthsYear, setMonthsYear] = useState(currentYear);
+  
+  // אתחול ראשוני
+  useEffect(() => {
+    if (availableYears.length > 0) {
+      // אלוף השנה - דיפולט שנה נוכחית
+      if (yearChampionYears.length === 0) {
+        const initial = availableYears.includes(currentYear) ? currentYear : availableYears[0];
+        setYearChampionYears([initial]);
+      }
+      // רבעונים - דיפולט שנה נוכחית
+      if (!availableYears.includes(quartersYear)) {
+        setQuartersYear(availableYears.includes(currentYear) ? currentYear : availableYears[0]);
+      }
+      // חודשים - דיפולט שנה נוכחית
+      if (!availableYears.includes(monthsYear)) {
+        setMonthsYear(availableYears.includes(currentYear) ? currentYear : availableYears[0]);
+      }
+    }
+  }, [availableYears.join(',')]);
+  
+  // 🆕 toggle של שנה לאלוף - אם הכל דלוק, לחיצה משאירה רק אותה. אחרת מוסיף/מסיר
+  const toggleChampionYear = (year) => {
+    if (yearChampionYears.includes(year)) {
+      // הסרה - אם זאת האחרונה, להחזיר לשנה הנוכחית
+      const filtered = yearChampionYears.filter(y => y !== year);
+      setYearChampionYears(filtered.length === 0 ? [currentYear] : filtered);
+    } else {
+      setYearChampionYears([...yearChampionYears, year]);
+    }
+  };
+  
+  // חישוב פונקציה כללית - מי האלוף בסשנים נתונים
+  const computeMVP = (sessions) => {
+    if (sessions.length === 0) return null;
+    const totals = {};
+    sessions.forEach(s => {
+      Object.entries(s.results || {}).forEach(([name, amount]) => {
+        totals[name] = (totals[name] || 0) + Number(amount);
+      });
+    });
+    const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+    if (sorted.length === 0) return null;
+    const [winner, profit] = sorted[0];
+    return { name: winner, profit };
+  };
+  
+  // 🏆 אלוף השנים הנבחרות
+  const yearChampion = useMemo(() => {
+    if (yearChampionYears.length === 0) return null;
+    const sessions = allSessions.filter(s => {
+      const y = s.season || new Date(s.date).getFullYear();
+      return yearChampionYears.includes(y);
+    });
+    if (sessions.length === 0) return null;
+    
+    // האם השנה האחרונה הסתיימה?
+    const today = new Date();
+    const isMultiYear = yearChampionYears.length > 1;
+    const includesCurrentYear = yearChampionYears.includes(currentYear);
+    const finished = !includesCurrentYear; // אם לא כולל השנה הנוכחית - הסתיים
+    
+    const mvp = computeMVP(sessions);
+    if (!mvp) return null;
+    
+    return { 
+      ...mvp, 
+      sessions: sessions.length,
+      finished,
+      isMultiYear,
+      yearsLabel: isMultiYear 
+        ? yearChampionYears.sort((a,b) => a-b).join(', ')
+        : yearChampionYears[0]
+    };
+  }, [allSessions, yearChampionYears, currentYear]);
+  
+  // 🏆 רבעונים לשנה הנבחרת
+  const quarterlyMVPs = useMemo(() => {
+    const yearSessions = allSessions.filter(s => (s.season || new Date(s.date).getFullYear()) === quartersYear);
+    const today = new Date();
+    const isCurrentYear = quartersYear === currentYear;
+    
+    const result = [];
+    for (let q = 0; q < 4; q++) {
+      const startMonth = q * 3;
+      const endMonth = startMonth + 2;
+      const qSessions = yearSessions.filter(s => {
+        const m = new Date(s.date).getMonth();
+        return m >= startMonth && m <= endMonth;
+      });
+      if (qSessions.length === 0) continue;
+      const qEndDate = new Date(quartersYear, endMonth + 1, 0);
+      const isQuarterFinished = !isCurrentYear || qEndDate < today;
+      const mvp = computeMVP(qSessions);
+      if (isQuarterFinished && mvp) {
+        result.push({ 
+          quarter: q + 1,
+          ...mvp, 
+          sessions: qSessions.length 
+        });
+      }
+    }
+    return result;
+  }, [allSessions, quartersYear, currentYear]);
+  
+  // ⭐ חודשים לשנה הנבחרת
+  const monthlyMVPs = useMemo(() => {
+    const yearSessions = allSessions.filter(s => (s.season || new Date(s.date).getFullYear()) === monthsYear);
+    const today = new Date();
+    const isCurrentYear = monthsYear === currentYear;
+    
+    const result = [];
+    for (let m = 0; m < 12; m++) {
+      const monthSessions = yearSessions.filter(s => new Date(s.date).getMonth() === m);
+      if (monthSessions.length === 0) continue;
+      const monthDate = new Date(monthsYear, m + 1, 0);
+      const isMonthFinished = !isCurrentYear || monthDate < today;
+      const mvp = computeMVP(monthSessions);
+      if (isMonthFinished && mvp) {
+        result.push({ 
+          monthIdx: m,
+          month: HEBREW_MONTHS[m], 
+          ...mvp, 
+          sessions: monthSessions.length 
+        });
+      }
+    }
+    return result;
+  }, [allSessions, monthsYear, currentYear]);
+  
+  // צבעי סרטים מחזוריים לחודשים
+  const RIBBON_COLORS = ['#dc2626', '#2563eb', '#10b981', '#a855f7', '#f97316', '#ec4899', '#14b8a6', '#eab308', '#6366f1', '#84cc16', '#f43f5e', '#06b6d4'];
+  
+  // 🌟 חביב הקהל - 3 קטגוריות (רק לשנה הנוכחית)
+  const popularityChampions = useMemo(() => {
+    const yearSessions = allSessions.filter(s => (s.season || new Date(s.date).getFullYear()) === currentYear);
+    
+    // 1. הכי הרבה ציטוטים השנה
+    const allQuotes = userQuotes || [];
+    const quoteCounts = {};
+    allQuotes.forEach(q => {
+      if (!q.date) return;
+      const d = new Date(q.date);
+      if (d.getFullYear() !== currentYear) return;
+      const quoter = q.quoted || q.who;
+      if (quoter) quoteCounts[quoter] = (quoteCounts[quoter] || 0) + 1;
+    });
+    const topQuoted = Object.entries(quoteCounts).sort((a, b) => b[1] - a[1])[0];
+    
+    // 2. הכי הרבה אירוחים השנה
+    const hostCounts = {};
+    (hostingSchedule || []).forEach(h => {
+      if (!h.date || !h.host) return;
+      const d = new Date(h.date);
+      if (d.getFullYear() !== currentYear) return;
+      // רק אירוחים שעברו (לא עתידיים)
+      const today = new Date();
+      if (d > today) return;
+      hostCounts[h.host] = (hostCounts[h.host] || 0) + 1;
+    });
+    const topHost = Object.entries(hostCounts).sort((a, b) => b[1] - a[1])[0];
+    
+    // 3. הכי הרבה נוכחות במפגשים השנה
+    const attendanceCounts = {};
+    yearSessions.forEach(s => {
+      Object.keys(s.results || {}).forEach(name => {
+        attendanceCounts[name] = (attendanceCounts[name] || 0) + 1;
+      });
+    });
+    const topAttender = Object.entries(attendanceCounts).sort((a, b) => b[1] - a[1])[0];
+    
+    return {
+      topQuoted: topQuoted ? { name: topQuoted[0], count: topQuoted[1] } : null,
+      topHost: topHost ? { name: topHost[0], count: topHost[1] } : null,
+      topAttender: topAttender ? { name: topAttender[0], count: topAttender[1] } : null,
+    };
+  }, [allSessions, userQuotes, hostingSchedule, currentYear]);
+  
+  // 📈 השחקן המשתפר - השוואת רווח השנה (מצטבר עד היום) מול רווח באותה תקופה אשתקד
+  const mostImproved = useMemo(() => {
+    const today = new Date();
+    const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+    
+    // השנה - מתחילת השנה עד היום
+    const thisYearSessions = allSessions.filter(s => {
+      const d = new Date(s.date);
+      return d.getFullYear() === currentYear;
+    });
+    
+    // שנה שעברה - אותה תקופה (1 בינואר עד אותו יום בשנה)
+    const lastYear = currentYear - 1;
+    const cutoffLastYear = new Date(lastYear, 0, dayOfYear);
+    const lastYearSessions = allSessions.filter(s => {
+      const d = new Date(s.date);
+      return d.getFullYear() === lastYear && d <= cutoffLastYear;
+    });
+    
+    if (thisYearSessions.length === 0 || lastYearSessions.length === 0) return null;
+    
+    // חישוב רווחים
+    const thisYearTotals = {};
+    thisYearSessions.forEach(s => {
+      Object.entries(s.results || {}).forEach(([name, amount]) => {
+        thisYearTotals[name] = (thisYearTotals[name] || 0) + Number(amount);
+      });
+    });
+    
+    const lastYearTotals = {};
+    lastYearSessions.forEach(s => {
+      Object.entries(s.results || {}).forEach(([name, amount]) => {
+        lastYearTotals[name] = (lastYearTotals[name] || 0) + Number(amount);
+      });
+    });
+    
+    // מי שיחק בשתי השנים?
+    const playedBoth = Object.keys(thisYearTotals).filter(name => name in lastYearTotals);
+    if (playedBoth.length === 0) return null;
+    
+    // השיפור הגדול ביותר
+    const improvements = playedBoth.map(name => ({
+      name,
+      thisYear: thisYearTotals[name],
+      lastYear: lastYearTotals[name],
+      improvement: thisYearTotals[name] - lastYearTotals[name],
+    })).sort((a, b) => b.improvement - a.improvement);
+    
+    if (improvements.length === 0 || improvements[0].improvement <= 0) return null;
+    
+    return improvements[0];
+  }, [allSessions, currentYear]);
+  
+  if (availableYears.length === 0) {
+    return (
+      <div className="text-center py-12 text-stone-500">
+        <Trophy className="h-12 w-12 mx-auto mb-3 opacity-40" />
+        <div>אין נתונים זמינים</div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-4">
+      {/* 👑 ריבוע אלוף השנה - בחירה מרובה */}
+      <div>
+        {/* בורר שנים - בחירה מרובה */}
+        <div className="rounded-xl border border-amber-900/40 bg-stone-950/80 backdrop-blur p-2 mb-3">
+          <div className="flex items-center gap-1 flex-wrap justify-center">
+            <span className="text-[10px] text-amber-700 font-bold ml-1">SEASON</span>
+            {availableYears.map(y => (
+              <button
+                key={y}
+                onClick={() => toggleChampionYear(y)}
+                className={`rounded px-2.5 py-1 text-xs font-bold border tabular-nums transition ${
+                  yearChampionYears.includes(y)
+                    ? 'bg-amber-700 border-amber-500 text-white shadow-lg shadow-amber-900/40'
+                    : 'bg-stone-900 border-stone-700 text-stone-400 hover:bg-stone-800'
+                }`}>
+                {y}
+              </button>
+            ))}
+          </div>
+          {yearChampionYears.length > 1 && (
+            <div className="text-center text-[10px] text-amber-400 mt-1.5">
+              מחושב על פני {yearChampionYears.length} שנים
+            </div>
+          )}
+        </div>
+        
+        {yearChampion ? (
+          <div style={{
+            background: 'linear-gradient(135deg, #fbbf24 0%, #92400e 25%, #fbbf24 50%, #92400e 75%, #fbbf24 100%)',
+            backgroundSize: '200% 200%',
+            padding: '3px',
+            borderRadius: '1.5rem',
+            animation: 'shimmer 4s linear infinite',
+          }}>
+            <div className="rounded-[1.4rem] py-6 px-4 text-center relative overflow-hidden" style={{
+              background: 'radial-gradient(ellipse at top, rgba(251,191,36,0.2) 0%, transparent 60%), linear-gradient(180deg, rgba(45,24,16,0.9) 0%, rgba(0,0,0,0.95) 100%)',
+              border: '2px solid rgba(251,191,36,0.4)',
+            }}>
+              <div className="text-[10px] text-amber-500 font-bold tracking-[0.4em] mb-1">★ ★ ★</div>
+              <div className="text-[11px] text-amber-400 font-bold tracking-widest mb-3">
+                {yearChampion.finished ? 'CHAMPION' : 'LEADING'} {yearChampion.yearsLabel}
+              </div>
+              
+              <div className="relative inline-block" style={{ filter: 'drop-shadow(0 0 30px rgba(251,191,36,0.7)) drop-shadow(0 0 60px rgba(251,191,36,0.4))' }}>
+                <svg width="160" height="200" viewBox="0 0 160 200">
+                  <defs>
+                    <linearGradient id="megaGold" x1="50%" y1="0%" x2="50%" y2="100%">
+                      <stop offset="0%" stopColor="#fffbeb"/>
+                      <stop offset="15%" stopColor="#fef3c7"/>
+                      <stop offset="35%" stopColor="#fbbf24"/>
+                      <stop offset="65%" stopColor="#d97706"/>
+                      <stop offset="100%" stopColor="#451a03"/>
+                    </linearGradient>
+                    <linearGradient id="megaShine" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#fffbeb" stopOpacity="0.6"/>
+                      <stop offset="50%" stopColor="#fffbeb" stopOpacity="0.1"/>
+                      <stop offset="100%" stopColor="#fffbeb" stopOpacity="0"/>
+                    </linearGradient>
+                    <linearGradient id="baseGrad" x1="50%" y1="0%" x2="50%" y2="100%">
+                      <stop offset="0%" stopColor="#92400e"/>
+                      <stop offset="50%" stopColor="#451a03"/>
+                      <stop offset="100%" stopColor="#1c0a01"/>
+                    </linearGradient>
+                  </defs>
+                  
+                  <path d="M 25 65 Q 10 60 10 80 Q 10 100 25 100" fill="none" stroke="url(#megaGold)" strokeWidth="9" strokeLinecap="round"/>
+                  <path d="M 135 65 Q 150 60 150 80 Q 150 100 135 100" fill="none" stroke="url(#megaGold)" strokeWidth="9" strokeLinecap="round"/>
+                  
+                  <path d="M 35 35 L 125 35 L 122 100 Q 122 130 80 138 Q 38 130 38 100 Z" fill="url(#megaGold)"/>
+                  <path d="M 35 35 L 125 35 L 122 100 Q 122 130 80 138 Q 38 130 38 100 Z" fill="url(#megaShine)"/>
+                  
+                  <ellipse cx="80" cy="35" rx="48" ry="9" fill="url(#megaGold)"/>
+                  <ellipse cx="80" cy="32" rx="48" ry="4" fill="#fef3c7" opacity="0.9"/>
+                  <ellipse cx="80" cy="35" rx="44" ry="3" fill="#92400e" opacity="0.4"/>
+                  
+                  <circle cx="50" cy="28" r="4" fill="url(#megaGold)" stroke="#92400e" strokeWidth="0.5"/>
+                  <circle cx="65" cy="22" r="4" fill="url(#megaGold)" stroke="#92400e" strokeWidth="0.5"/>
+                  <circle cx="80" cy="18" r="6" fill="#fef3c7" stroke="#d97706" strokeWidth="1"/>
+                  <circle cx="80" cy="18" r="3" fill="#fbbf24"/>
+                  <circle cx="95" cy="22" r="4" fill="url(#megaGold)" stroke="#92400e" strokeWidth="0.5"/>
+                  <circle cx="110" cy="28" r="4" fill="url(#megaGold)" stroke="#92400e" strokeWidth="0.5"/>
+                  
+                  <rect x="65" y="138" width="30" height="12" fill="url(#megaGold)"/>
+                  <rect x="65" y="138" width="30" height="3" fill="#fef3c7" opacity="0.7"/>
+                  
+                  <path d="M 45 150 L 115 150 L 110 165 L 50 165 Z" fill="url(#megaGold)"/>
+                  <rect x="40" y="165" width="80" height="14" rx="3" fill="url(#megaGold)"/>
+                  <rect x="35" y="179" width="90" height="10" rx="2" fill="url(#baseGrad)"/>
+                  
+                  <ellipse cx="60" cy="65" rx="12" ry="30" fill="url(#megaShine)" opacity="0.7"/>
+                  <ellipse cx="100" cy="80" rx="6" ry="20" fill="url(#megaShine)" opacity="0.5"/>
+                  
+                  <text x="80" y="88" textAnchor="middle" fontFamily="Cinzel, serif" fontSize="22" fontWeight="800" fill="#451a03">★</text>
+                </svg>
+              </div>
+              
+              <div className="text-4xl font-extrabold mt-3" style={{
+                fontFamily: 'Cinzel, serif',
+                background: 'linear-gradient(180deg, #fef3c7 0%, #fbbf24 100%)',
+                WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
+                color: 'transparent',
+                letterSpacing: '0.05em',
+              }}>
+                {yearChampion.name}
+              </div>
+              <div className="text-base text-amber-300 font-bold tabular-nums mt-1">
+                {yearChampion.profit > 0 ? '+' : ''}{yearChampion.profit}₪
+              </div>
+              <div className="text-[10px] text-stone-500 mt-1 tracking-widest">
+                {yearChampion.sessions} MEETINGS{!yearChampion.finished ? ' SO FAR' : ''}
+              </div>
+              
+              <div className="text-[10px] text-amber-500 font-bold tracking-[0.4em] mt-3">★ ★ ★</div>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-stone-700 bg-stone-900/50 p-6 text-center text-stone-500">
+            <Trophy className="h-12 w-12 mx-auto mb-2 opacity-40" />
+            אין נתונים לשנים שנבחרו
+          </div>
+        )}
+      </div>
+      
+      {/* 🏆 קרוסלת רבעונים */}
+      <div>
+        <div className="flex items-center justify-between px-2 mb-2 gap-2">
+          <h3 className="text-sm font-bold text-blue-300 flex items-center gap-2">
+            🏆 גביעים רבעוניים
+          </h3>
+          <select
+            value={quartersYear}
+            onChange={e => setQuartersYear(Number(e.target.value))}
+            className="rounded-md bg-stone-900 border border-blue-700/40 px-2 py-1 text-xs text-blue-200 font-bold tabular-nums focus:outline-none focus:border-blue-500">
+            {availableYears.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        {quarterlyMVPs.length > 0 ? (
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3" style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
+            {quarterlyMVPs.map(q => (
+              <div key={q.quarter} className="rounded-xl p-3 text-center w-32 shrink-0" style={{
+                scrollSnapAlign: 'center',
+                background: 'radial-gradient(ellipse at top, rgba(59,130,246,0.15) 0%, transparent 70%), linear-gradient(180deg, rgba(28,25,23,0.85) 0%, rgba(0,0,0,0.95) 100%)',
+                border: '1px solid rgba(59,130,246,0.3)',
+              }}>
+                <div className="text-[10px] text-blue-400 font-bold tracking-widest mb-1">Q{q.quarter} - רבעון {q.quarter}</div>
+                <div className="inline-block my-1" style={{ filter: 'drop-shadow(0 0 12px rgba(59,130,246,0.6)) drop-shadow(0 0 24px rgba(59,130,246,0.3))' }}>
+                  <svg width="60" height="75" viewBox="0 0 60 75">
+                    <defs>
+                      <linearGradient id={`blueQ${q.quarter}_${quartersYear}`} x1="50%" y1="0%" x2="50%" y2="100%">
+                        <stop offset="0%" stopColor="#dbeafe"/>
+                        <stop offset="30%" stopColor="#60a5fa"/>
+                        <stop offset="70%" stopColor="#2563eb"/>
+                        <stop offset="100%" stopColor="#1e3a8a"/>
+                      </linearGradient>
+                    </defs>
+                    <ellipse cx="10" cy="30" rx="5" ry="12" fill="none" stroke={`url(#blueQ${q.quarter}_${quartersYear})`} strokeWidth="3" strokeLinecap="round"/>
+                    <ellipse cx="50" cy="30" rx="5" ry="12" fill="none" stroke={`url(#blueQ${q.quarter}_${quartersYear})`} strokeWidth="3" strokeLinecap="round"/>
+                    <path d="M 14 13 L 46 13 L 44 38 Q 44 48 30 50 Q 16 48 16 38 Z" fill={`url(#blueQ${q.quarter}_${quartersYear})`}/>
+                    <ellipse cx="30" cy="13" rx="17" ry="3" fill={`url(#blueQ${q.quarter}_${quartersYear})`}/>
+                    <ellipse cx="22" cy="22" rx="3" ry="10" fill="#dbeafe" opacity="0.6"/>
+                    <rect x="25" y="50" width="10" height="5" fill={`url(#blueQ${q.quarter}_${quartersYear})`}/>
+                    <path d="M 18 55 L 42 55 L 40 62 L 20 62 Z" fill={`url(#blueQ${q.quarter}_${quartersYear})`}/>
+                    <rect x="15" y="62" width="30" height="5" rx="1" fill={`url(#blueQ${q.quarter}_${quartersYear})`}/>
+                    <text x="30" y="35" textAnchor="middle" fontFamily="Cinzel,serif" fontSize="11" fontWeight="800" fill="#1e3a8a">Q{q.quarter}</text>
+                  </svg>
+                </div>
+                <div className="text-base font-extrabold text-blue-100 mt-1 truncate">{q.name}</div>
+                <div className="text-[11px] text-blue-300 tabular-nums font-bold">{q.profit > 0 ? '+' : ''}{q.profit}₪</div>
+                <div className="text-[9px] text-stone-500">{q.sessions} מפגשים</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-stone-700 bg-stone-900/30 p-4 text-center text-stone-500 text-xs">
+            אין רבעונים שהסתיימו ב-{quartersYear}
+          </div>
+        )}
+      </div>
+      
+      {/* ⭐ קרוסלת חודשים */}
+      <div>
+        <div className="flex items-center justify-between px-2 mb-2 gap-2">
+          <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
+            ⭐ MVP חודשי
+          </h3>
+          <select
+            value={monthsYear}
+            onChange={e => setMonthsYear(Number(e.target.value))}
+            className="rounded-md bg-stone-900 border border-amber-700/40 px-2 py-1 text-xs text-amber-200 font-bold tabular-nums focus:outline-none focus:border-amber-500">
+            {availableYears.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+        {monthlyMVPs.length > 0 ? (
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3" style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
+            {monthlyMVPs.map(m => {
+              const ribbonColor = RIBBON_COLORS[m.monthIdx];
+              return (
+                <div key={m.monthIdx} className="rounded-xl p-3 text-center w-28 shrink-0" style={{
+                  scrollSnapAlign: 'center',
+                  background: 'radial-gradient(ellipse at top, rgba(251,146,60,0.15) 0%, transparent 70%), linear-gradient(180deg, rgba(28,25,23,0.85) 0%, rgba(0,0,0,0.95) 100%)',
+                  border: '1px solid rgba(251,146,60,0.3)',
+                }}>
+                  <div className="text-[10px] text-amber-400 font-bold mb-1">{m.month}</div>
+                  <div className="inline-block my-1" style={{ filter: 'drop-shadow(0 0 10px rgba(251,146,60,0.5))' }}>
+                    <svg width="44" height="55" viewBox="0 0 50 60">
+                      <defs>
+                        <radialGradient id={`medalGold${m.monthIdx}_${monthsYear}`}>
+                          <stop offset="0%" stopColor="#fef3c7"/>
+                          <stop offset="60%" stopColor="#d97706"/>
+                          <stop offset="100%" stopColor="#451a03"/>
+                        </radialGradient>
+                      </defs>
+                      <path d="M 18 5 L 22 22 L 28 22 L 32 5 Z" fill={ribbonColor}/>
+                      <path d="M 18 5 L 22 22 L 25 22 L 18 5 Z" fill={ribbonColor} opacity="0.7"/>
+                      <circle cx="25" cy="38" r="16" fill={`url(#medalGold${m.monthIdx}_${monthsYear})`} stroke="#451a03" strokeWidth="1.5"/>
+                      <circle cx="25" cy="38" r="11" fill="none" stroke="#92400e" strokeWidth="1"/>
+                      <circle cx="25" cy="38" r="6" fill="#fbbf24" opacity="0.4"/>
+                      <text x="25" y="43" textAnchor="middle" fontFamily="Cinzel,serif" fontSize="13" fontWeight="800" fill="#451a03">★</text>
+                    </svg>
+                  </div>
+                  <div className="text-sm font-extrabold text-amber-100 mt-1 truncate">{m.name}</div>
+                  <div className="text-[11px] text-amber-300 tabular-nums font-bold">{m.profit > 0 ? '+' : ''}{m.profit}₪</div>
+                  <div className="text-[9px] text-stone-500">{m.sessions} מפגשים</div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-stone-700 bg-stone-900/30 p-4 text-center text-stone-500 text-xs">
+            אין חודשים שהסתיימו ב-{monthsYear}
+          </div>
+        )}
+      </div>
+      
+      {/* 🌟 חביב הקהל - קרוסלה */}
+      {(popularityChampions.topQuoted || popularityChampions.topHost || popularityChampions.topAttender) && (
+        <div>
+          <div className="flex items-center justify-between px-2 mb-2">
+            <h3 className="text-sm font-bold text-pink-300 flex items-center gap-2">
+              🦢 חביב הקהל ({currentYear})
+            </h3>
+            <span className="text-[10px] text-pink-700 tracking-wider">← גלילה →</span>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-3 px-3" style={{ scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}>
+            {/* ציטוטים */}
+            {popularityChampions.topQuoted && (
+              <div className="rounded-xl p-3 text-center w-32 shrink-0" style={{
+                scrollSnapAlign: 'center',
+                background: 'radial-gradient(ellipse at top, rgba(236,72,153,0.15) 0%, transparent 70%), linear-gradient(180deg, rgba(28,25,23,0.85) 0%, rgba(0,0,0,0.95) 100%)',
+                border: '1px solid rgba(236,72,153,0.3)',
+              }}>
+                <div className="text-[10px] text-pink-400 font-bold tracking-widest mb-1">מצוטט הכי הרבה</div>
+                <div className="text-3xl my-2">🪶</div>
+                <div className="text-base font-extrabold text-pink-100 truncate">{popularityChampions.topQuoted.name}</div>
+                <div className="text-[11px] text-pink-300 tabular-nums font-bold">{popularityChampions.topQuoted.count} ציטוטים</div>
+              </div>
+            )}
+            {/* אירוחים */}
+            {popularityChampions.topHost && (
+              <div className="rounded-xl p-3 text-center w-32 shrink-0" style={{
+                scrollSnapAlign: 'center',
+                background: 'radial-gradient(ellipse at top, rgba(168,85,247,0.15) 0%, transparent 70%), linear-gradient(180deg, rgba(28,25,23,0.85) 0%, rgba(0,0,0,0.95) 100%)',
+                border: '1px solid rgba(168,85,247,0.3)',
+              }}>
+                <div className="text-[10px] text-purple-400 font-bold tracking-widest mb-1">המארח של השנה</div>
+                <div className="text-3xl my-2">🏠</div>
+                <div className="text-base font-extrabold text-purple-100 truncate">{popularityChampions.topHost.name}</div>
+                <div className="text-[11px] text-purple-300 tabular-nums font-bold">{popularityChampions.topHost.count} אירוחים</div>
+              </div>
+            )}
+            {/* נוכחות */}
+            {popularityChampions.topAttender && (
+              <div className="rounded-xl p-3 text-center w-32 shrink-0" style={{
+                scrollSnapAlign: 'center',
+                background: 'radial-gradient(ellipse at top, rgba(20,184,166,0.15) 0%, transparent 70%), linear-gradient(180deg, rgba(28,25,23,0.85) 0%, rgba(0,0,0,0.95) 100%)',
+                border: '1px solid rgba(20,184,166,0.3)',
+              }}>
+                <div className="text-[10px] text-teal-400 font-bold tracking-widest mb-1">המתמיד של השנה</div>
+                <div className="text-3xl my-2">🎯</div>
+                <div className="text-base font-extrabold text-teal-100 truncate">{popularityChampions.topAttender.name}</div>
+                <div className="text-[11px] text-teal-300 tabular-nums font-bold">{popularityChampions.topAttender.count} מפגשים</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* 📈 השחקן המשתפר */}
+      {mostImproved && (
+        <div>
+          <div className="px-2 mb-2">
+            <h3 className="text-sm font-bold text-emerald-300 flex items-center gap-2">
+              📈 השחקן המשתפר ({currentYear})
+            </h3>
+            <p className="text-[10px] text-emerald-700 mt-0.5 leading-tight">
+              מי שיפר הכי הרבה את הביצועים מתחילת {currentYear} עד היום, בהשוואה לאותה תקופה ב-{currentYear - 1}
+            </p>
+          </div>
+          <div className="rounded-xl p-4 text-center" style={{
+            background: 'radial-gradient(ellipse at top, rgba(16,185,129,0.15) 0%, transparent 70%), linear-gradient(180deg, rgba(28,25,23,0.85) 0%, rgba(0,0,0,0.95) 100%)',
+            border: '1px solid rgba(16,185,129,0.3)',
+          }}>
+            <div className="text-3xl mb-2">🚀</div>
+            <div className="text-2xl font-extrabold text-emerald-100">{mostImproved.name}</div>
+            <div className="text-base text-emerald-300 font-bold tabular-nums mt-2">
+              שיפור של +{mostImproved.improvement}₪
+            </div>
+            <div className="grid grid-cols-2 gap-2 mt-3">
+              <div className="rounded-lg bg-stone-900/60 p-2 border border-stone-700/50">
+                <div className="text-[10px] text-stone-400 font-bold">{currentYear - 1}</div>
+                <div className={`text-sm font-bold tabular-nums ${mostImproved.lastYear > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                  {mostImproved.lastYear > 0 ? '+' : ''}{mostImproved.lastYear}₪
+                </div>
+              </div>
+              <div className="rounded-lg bg-stone-900/60 p-2 border border-stone-700/50">
+                <div className="text-[10px] text-stone-400 font-bold">{currentYear}</div>
+                <div className={`text-sm font-bold tabular-nums ${mostImproved.thisYear > 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                  {mostImproved.thisYear > 0 ? '+' : ''}{mostImproved.thisYear}₪
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* פוטר */}
+      <div className="mt-6 mb-4 text-center">
+        <div className="text-[10px] text-amber-700 tracking-[0.4em]">★ ★ ★</div>
+        <div className="text-[10px] text-stone-600 mt-1 italic">תהילת הזכייה לעולם תיוותר</div>
+      </div>
+      
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: 0% 50%; }
+          100% { background-position: 200% 50%; }
+        }
+      `}</style>
+    </div>
+  );
+};
+
 const PeriodicTables = ({ allSessions, players }) => {
   const [viewMode, setViewMode] = useState('month'); // month | quarter | half
   
@@ -7536,7 +8169,7 @@ const BackupsModal = ({ isOpen, onClose, backupsList, onCreateBackup, onDownload
 
 
 // ===== מודל מנהל - ניהול פרטי תשלום של כל השחקנים =====
-const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlayers = [], onToggleHidden, onAddPlayer }) => {
+const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlayers = [], onToggleHidden, onAddPlayer, birthdays = {}, onSaveBirthday }) => {
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [phone, setPhone] = useState('');
   const [app, setApp] = useState('both');
@@ -7546,6 +8179,11 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlay
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [newPlayerName, setNewPlayerName] = useState('');
   const [addError, setAddError] = useState('');
+  // 🎂 עריכת יום הולדת
+  const [editingBirthday, setEditingBirthday] = useState(null);
+  const [birthdayDay, setBirthdayDay] = useState('');
+  const [birthdayMonth, setBirthdayMonth] = useState('');
+  const [bdayError, setBdayError] = useState('');
 
   if (!isOpen) return null;
 
@@ -7706,44 +8344,117 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlay
             }
             
             return (
-              <div key={name} className={`flex items-center justify-between rounded-lg border p-3 transition ${
+              <div key={name} className={`rounded-lg border p-3 transition ${
                 hiddenPlayers.includes(name) ? 'bg-stone-900/30 border-stone-800 opacity-50' :
                 hasPhone ? 'bg-stone-800/40 border-stone-700/40' : 'bg-amber-950/20 border-amber-800/30'
               }`}>
-                <div className="flex-1">
-                  <div className="font-bold text-stone-100 flex items-center gap-2">
-                    {name}
-                    {hiddenPlayers.includes(name) && <span className="text-xs text-stone-500">(מוסתר)</span>}
-                  </div>
-                  {hasPhone ? (
-                    <div className="text-xs text-stone-400 tabular-nums" dir="ltr">
-                      {data.phone.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3')}
-                      {' · '}
-                      {data.app === 'bit' ? '💙' : data.app === 'paybox' ? '💜' : '✅'}
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="font-bold text-stone-100 flex items-center gap-2 flex-wrap">
+                      {name}
+                      {hiddenPlayers.includes(name) && <span className="text-xs text-stone-500">(מוסתר)</span>}
+                      {birthdays[name] && editingBirthday !== name && (
+                        <button onClick={() => {
+                          setEditingBirthday(name);
+                          const [d, m] = birthdays[name].split('/');
+                          setBirthdayDay(d);
+                          setBirthdayMonth(m);
+                          setBdayError('');
+                        }}
+                        className="text-[10px] text-pink-300 bg-pink-950/30 border border-pink-800/40 rounded px-1.5 py-0.5 hover:bg-pink-950/50">
+                          🎂 {birthdays[name]}
+                        </button>
+                      )}
+                      {!birthdays[name] && editingBirthday !== name && onSaveBirthday && (
+                        <button onClick={() => {
+                          setEditingBirthday(name);
+                          setBirthdayDay('');
+                          setBirthdayMonth('');
+                          setBdayError('');
+                        }}
+                        className="text-[10px] text-stone-500 bg-stone-800/50 border border-stone-700/40 rounded px-1.5 py-0.5 hover:bg-stone-700/50">
+                          + יום הולדת
+                        </button>
+                      )}
                     </div>
-                  ) : (
-                    <div className="text-xs text-amber-400">⚠️ חסר טלפון</div>
-                  )}
-                </div>
-                <div className="flex items-center gap-1">
-                  {/* 🆕 כפתור הסתרה/הצגה */}
-                  {onToggleHidden && (
-                    <button 
-                      onClick={() => onToggleHidden(name)} 
-                      className="rounded bg-stone-800 px-2 py-1.5 text-stone-400 hover:bg-stone-700 hover:text-stone-200"
-                      title={hiddenPlayers.includes(name) ? 'הצג שוב במסך פתיחה' : 'הסתר ממסך פתיחה'}>
-                      {hiddenPlayers.includes(name) ? '👁️' : '🚫'}
+                    {hasPhone ? (
+                      <div className="text-xs text-stone-400 tabular-nums" dir="ltr">
+                        {data.phone.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3')}
+                        {' · '}
+                        {data.app === 'bit' ? '💙' : data.app === 'paybox' ? '💜' : '✅'}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-400">⚠️ חסר טלפון</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {/* 🆕 כפתור הסתרה/הצגה */}
+                    {onToggleHidden && (
+                      <button 
+                        onClick={() => onToggleHidden(name)} 
+                        className="rounded bg-stone-800 px-2 py-1.5 text-stone-400 hover:bg-stone-700 hover:text-stone-200"
+                        title={hiddenPlayers.includes(name) ? 'הצג שוב במסך פתיחה' : 'הסתר ממסך פתיחה'}>
+                        {hiddenPlayers.includes(name) ? '👁️' : '🚫'}
+                      </button>
+                    )}
+                    <button onClick={() => startEdit(name)} className="rounded bg-purple-700 px-3 py-1.5 text-white text-xs font-bold hover:bg-purple-600">
+                      {hasPhone ? 'ערוך' : 'הוסף'}
                     </button>
-                  )}
-                  <button onClick={() => startEdit(name)} className="rounded bg-purple-700 px-3 py-1.5 text-white text-xs font-bold hover:bg-purple-600">
-                    {hasPhone ? 'ערוך' : 'הוסף'}
-                  </button>
-                  {hasPhone && (
-                    <button onClick={() => removePhone(name)} className="rounded bg-stone-800 px-2 py-1.5 text-rose-400 hover:bg-rose-950/50">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
+                    {hasPhone && (
+                      <button onClick={() => removePhone(name)} className="rounded bg-stone-800 px-2 py-1.5 text-rose-400 hover:bg-rose-950/50">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </div>
+                
+                {/* 🎂 עריכת יום הולדת */}
+                {editingBirthday === name && (
+                  <div className="mt-2 pt-2 border-t border-pink-900/30 flex items-center gap-2">
+                    <span className="text-xs text-pink-300 font-bold">🎂 יום הולדת:</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={birthdayDay}
+                      onChange={e => { setBirthdayDay(e.target.value); setBdayError(''); }}
+                      placeholder="יום"
+                      className="w-14 rounded bg-stone-800 border border-stone-700 px-2 py-1 text-stone-100 text-sm text-center" />
+                    <span className="text-stone-500">/</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="12"
+                      value={birthdayMonth}
+                      onChange={e => { setBirthdayMonth(e.target.value); setBdayError(''); }}
+                      placeholder="חודש"
+                      className="w-14 rounded bg-stone-800 border border-stone-700 px-2 py-1 text-stone-100 text-sm text-center" />
+                    <button onClick={() => {
+                      const d = parseInt(birthdayDay);
+                      const m = parseInt(birthdayMonth);
+                      if (!d || !m || d < 1 || d > 31 || m < 1 || m > 12) {
+                        setBdayError('תאריך לא תקין');
+                        return;
+                      }
+                      const formatted = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+                      onSaveBirthday(name, formatted);
+                      setEditingBirthday(null);
+                    }}
+                      className="rounded bg-emerald-700 px-2 py-1 text-white text-xs font-bold hover:bg-emerald-600">שמור</button>
+                    <button onClick={() => setEditingBirthday(null)}
+                      className="rounded bg-stone-800 px-2 py-1 text-stone-400 text-xs hover:bg-stone-700">ביטול</button>
+                    {birthdays[name] && (
+                      <button onClick={() => {
+                        onSaveBirthday(name, null);
+                        setEditingBirthday(null);
+                      }}
+                        className="rounded bg-rose-900/50 px-2 py-1 text-rose-300 text-xs hover:bg-rose-900">🗑️</button>
+                    )}
+                  </div>
+                )}
+                {editingBirthday === name && bdayError && (
+                  <div className="text-rose-400 text-xs mt-1">⚠️ {bdayError}</div>
+                )}
               </div>
             );
           })}
@@ -7757,6 +8468,162 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlay
   );
 };
 
+
+// ===== 🎂 פופאפ יום הולדת =====
+const BirthdayPopup = ({ name, daysLate = 0, onClose }) => {
+  if (!name) return null;
+  
+  const isLate = daysLate > 0;
+  
+  // ברכות מגניבות אקראיות
+  const blessings = isLate ? [
+    `${name}, מזל טוב באיחור! 🎉\nראינו שלא נכנסת ליום הולדתך - אבל לא שכחנו אותך 🃏`,
+    `${name}, מזל טוב! 🥳\nיום הולדת שעבר - אבל הברכות לא מתיישנות. שתהיה שנה מנצחת!`,
+    `${name} יקר 🎂\nמזל טוב באיחור! שנה של פלאשים ופולים מחכה לך 🍀`,
+  ] : [
+    `${name}, יום הולדת שמח אלוף! 🎉\nהיום אתה האלוף של היום - גם כשאתה מפסיד 🃏`,
+    `${name}, מזל טוב! 🥳\nשהקלפים יפלו לטובתך השנה - וגם הצ'יפים, הביתה!`,
+    `${name} יקר 🎂\nשנה של פלאשים, פולים והמון רווחים מהפוקר!`,
+    `🎉 יום הולדת ${name}!\nשנה של ניצחונות, צחוקים ותמיד עם A על Q בריבר 🃏`,
+    `${name}! יומולדת שמח 🎊\nגם המארח של הערב הבא ישלח לך את הפינוקים על השולחן 🍀`,
+    `🥳 ${name}, מזל טוב!\nשהשנה הזאת תהיה שנה של אול-אינים מנצחים בלבד!`,
+  ];
+  
+  const blessing = blessings[Math.floor(Math.random() * blessings.length)];
+  
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4" dir="rtl"
+      onClick={onClose}>
+      <div 
+        className="relative w-full max-w-md rounded-3xl p-6 text-center"
+        style={{
+          background: 'linear-gradient(135deg, #fbbf24 0%, #92400e 25%, #fbbf24 50%, #92400e 75%, #fbbf24 100%)',
+          backgroundSize: '200% 200%',
+          padding: '4px',
+          animation: 'shimmer 4s linear infinite',
+        }}
+        onClick={e => e.stopPropagation()}>
+        <div className="rounded-3xl py-8 px-5 relative overflow-hidden"
+          style={{
+            background: 'radial-gradient(ellipse at center, rgba(251,191,36,0.25) 0%, rgba(28,25,23,0.95) 70%)',
+            border: '2px solid rgba(251,191,36,0.5)',
+          }}>
+          
+          {/* קונפטי דקורטיבי */}
+          <div className="absolute top-3 right-4 text-2xl animate-bounce" style={{animationDelay: '0s'}}>🎉</div>
+          <div className="absolute top-6 left-5 text-xl animate-bounce" style={{animationDelay: '0.3s'}}>🎊</div>
+          <div className="absolute top-12 right-8 text-lg animate-bounce" style={{animationDelay: '0.6s'}}>✨</div>
+          <div className="absolute bottom-8 left-3 text-2xl animate-bounce" style={{animationDelay: '0.9s'}}>🎈</div>
+          <div className="absolute bottom-4 right-6 text-xl animate-bounce" style={{animationDelay: '1.2s'}}>🎁</div>
+          
+          {/* עוגת יום הולדת SVG עם קלפים */}
+          <div className="flex justify-center mb-4" style={{ filter: 'drop-shadow(0 0 30px rgba(251,191,36,0.6))' }}>
+            <svg width="180" height="160" viewBox="0 0 200 180" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="cake1" x1="50%" y1="0%" x2="50%" y2="100%">
+                  <stop offset="0%" stopColor="#f9a8d4"/>
+                  <stop offset="100%" stopColor="#be185d"/>
+                </linearGradient>
+                <linearGradient id="cake2" x1="50%" y1="0%" x2="50%" y2="100%">
+                  <stop offset="0%" stopColor="#fde68a"/>
+                  <stop offset="100%" stopColor="#d97706"/>
+                </linearGradient>
+                <linearGradient id="cake3" x1="50%" y1="0%" x2="50%" y2="100%">
+                  <stop offset="0%" stopColor="#a78bfa"/>
+                  <stop offset="100%" stopColor="#5b21b6"/>
+                </linearGradient>
+                <radialGradient id="flame">
+                  <stop offset="0%" stopColor="#fef3c7"/>
+                  <stop offset="50%" stopColor="#fbbf24"/>
+                  <stop offset="100%" stopColor="#dc2626"/>
+                </radialGradient>
+              </defs>
+              
+              {/* בסיס - שלוש שכבות */}
+              {/* שכבה תחתונה - הכי גדולה */}
+              <ellipse cx="100" cy="155" rx="75" ry="8" fill="#451a03" opacity="0.4"/>
+              <rect x="25" y="115" width="150" height="40" rx="6" fill="url(#cake1)"/>
+              <rect x="25" y="115" width="150" height="6" fill="#fce7f3"/>
+              {/* קלפים על השכבה התחתונה */}
+              <g transform="translate(45, 135) rotate(-15)">
+                <rect width="14" height="20" rx="2" fill="white" stroke="#1c1917" strokeWidth="0.5"/>
+                <text x="3" y="8" fontSize="6" fill="#dc2626" fontWeight="800">A</text>
+                <text x="7" y="16" fontSize="7" fill="#dc2626">♥</text>
+              </g>
+              <g transform="translate(140, 135) rotate(15)">
+                <rect width="14" height="20" rx="2" fill="white" stroke="#1c1917" strokeWidth="0.5"/>
+                <text x="3" y="8" fontSize="6" fill="#1c1917" fontWeight="800">K</text>
+                <text x="7" y="16" fontSize="7" fill="#1c1917">♠</text>
+              </g>
+              
+              {/* שכבה אמצעית */}
+              <ellipse cx="100" cy="115" rx="55" ry="5" fill="#451a03" opacity="0.3"/>
+              <rect x="45" y="80" width="110" height="35" rx="4" fill="url(#cake2)"/>
+              <rect x="45" y="80" width="110" height="5" fill="#fef3c7"/>
+              {/* טפטופי קצפת */}
+              <path d="M 50 80 Q 55 75 60 80 Q 65 75 70 80 Q 75 75 80 80 Q 85 75 90 80 Q 95 75 100 80 Q 105 75 110 80 Q 115 75 120 80 Q 125 75 130 80 Q 135 75 140 80 Q 145 75 150 80" fill="#fef3c7" stroke="#fbbf24" strokeWidth="0.5"/>
+              
+              {/* שכבה עליונה */}
+              <ellipse cx="100" cy="80" rx="40" ry="4" fill="#451a03" opacity="0.3"/>
+              <rect x="65" y="50" width="70" height="30" rx="4" fill="url(#cake3)"/>
+              <rect x="65" y="50" width="70" height="5" fill="#ddd6fe"/>
+              {/* קלף על העליונה */}
+              <g transform="translate(94, 60)">
+                <rect width="12" height="17" rx="1.5" fill="white" stroke="#1c1917" strokeWidth="0.5"/>
+                <text x="2" y="7" fontSize="5" fill="#dc2626" fontWeight="800">A</text>
+                <text x="6" y="13" fontSize="6" fill="#dc2626">♦</text>
+              </g>
+              
+              {/* נר במרכז */}
+              <rect x="97" y="35" width="6" height="15" fill="#fbbf24"/>
+              <rect x="97" y="35" width="6" height="3" fill="#fef3c7"/>
+              {/* להבה */}
+              <ellipse cx="100" cy="30" rx="4" ry="7" fill="url(#flame)">
+                <animate attributeName="ry" values="7;8;7" dur="0.5s" repeatCount="indefinite"/>
+              </ellipse>
+              <ellipse cx="100" cy="32" rx="2" ry="4" fill="#fef3c7" opacity="0.8"/>
+              
+              {/* ניצוצות מסביב */}
+              <circle cx="40" cy="50" r="1.5" fill="#fbbf24" opacity="0.8"/>
+              <circle cx="160" cy="60" r="1.5" fill="#f9a8d4" opacity="0.8"/>
+              <circle cx="30" cy="100" r="2" fill="#a78bfa" opacity="0.8"/>
+              <circle cx="170" cy="105" r="1.5" fill="#fef3c7" opacity="0.8"/>
+            </svg>
+          </div>
+          
+          {/* כותרת */}
+          <div className="text-xs text-amber-400 font-bold tracking-[0.4em] mb-1">★ HAPPY BIRTHDAY ★</div>
+          <h2 className="text-3xl font-extrabold mb-3" style={{
+            fontFamily: 'Cinzel, serif',
+            background: 'linear-gradient(180deg, #fef3c7 0%, #fbbf24 100%)',
+            WebkitBackgroundClip: 'text',
+            backgroundClip: 'text',
+            color: 'transparent',
+            letterSpacing: '0.05em',
+          }}>
+            {name}
+          </h2>
+          
+          {/* ברכה */}
+          <div className="text-sm leading-relaxed mb-5 whitespace-pre-line px-2" style={{ color: '#fef3c7' }}>
+            {blessing}
+          </div>
+          
+          {/* כפתור */}
+          <button onClick={onClose}
+            className="w-full rounded-xl py-3 px-4 font-extrabold text-base text-white shadow-lg transition hover:scale-105"
+            style={{
+              background: 'linear-gradient(135deg, #d97706 0%, #92400e 100%)',
+              border: '2px solid #fbbf24',
+              textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+            }}>
+            🎁 תודה רבה! 🥳
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ===== מודל הזדהות / עריכת פרטי תשלום =====
 const PhoneSetupModal = ({ isOpen, onClose, playerName, currentPhone, onSave, isFirstTime = false, canCancel = false, isAdmin = false }) => {
@@ -7929,6 +8796,9 @@ export default function PokerApp() {
   const [manageAdminsOpen, setManageAdminsOpen] = useState(false);
   // 🆕 רשימת שחקנים מוסתרים (לא יופיעו ברשימות הפעילים)
   const [hiddenPlayers, setHiddenPlayers] = useState([]);
+  // 🆕 ימי הולדת של שחקנים {שם: 'DD/MM'}
+  const [birthdays, setBirthdays] = useState(DEFAULT_BIRTHDAYS);
+  const [birthdayPopup, setBirthdayPopup] = useState(null); // { name, age } או null
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState('dashboard');
@@ -8166,6 +9036,13 @@ export default function PokerApp() {
         setHiddenPlayers(savedHidden);
       }
       
+      // 🆕 טעינת ימי הולדת
+      const savedBirthdays = await loadState(BIRTHDAYS_KEY);
+      if (savedBirthdays && typeof savedBirthdays === 'object') {
+        // מאחד את הדיפולט עם השמורים (השמורים מנצחים על שינויים)
+        setBirthdays({ ...DEFAULT_BIRTHDAYS, ...savedBirthdays });
+      }
+      
       const savedQuotes = await loadState(QUOTES_STORAGE_KEY);
       if (savedQuotes?.deletedIds) setDeletedQuoteIds(savedQuotes.deletedIds);
       if (savedQuotes?.likes) setQuoteLikes(savedQuotes.likes);
@@ -8230,6 +9107,37 @@ export default function PokerApp() {
       }
     }
   }, [loading, currentUser, phones, phoneSetupShown]);
+  
+  // 🎂 בדיקה אם היום יום הולדת של המשתמש המחובר (או בתוך 7 ימים אחרי)
+  const [birthdayShownToday, setBirthdayShownToday] = useState(false);
+  useEffect(() => {
+    if (!loading || !currentUser || birthdayShownToday) return;
+    const userBday = birthdays[currentUser];
+    if (!userBday) return;
+    
+    const today = new Date();
+    const [bdayDay, bdayMonth] = userBday.split('/').map(Number);
+    
+    // יום ההולדת השנה
+    let bdayThisYear = new Date(today.getFullYear(), bdayMonth - 1, bdayDay);
+    bdayThisYear.setHours(0, 0, 0, 0);
+    const todayStart = new Date(today);
+    todayStart.setHours(0, 0, 0, 0);
+    
+    // האם יום ההולדת היה ב-7 הימים האחרונים (כולל היום)?
+    const diffDays = Math.floor((todayStart - bdayThisYear) / (1000 * 60 * 60 * 24));
+    
+    if (diffDays >= 0 && diffDays <= 7) {
+      // בודק שלא הוצג השנה (localStorage)
+      const lastShownKey = `poker_bday_shown_${currentUser}_${today.getFullYear()}`;
+      const alreadyShown = window.localStorage.getItem(lastShownKey);
+      if (!alreadyShown) {
+        setBirthdayPopup({ name: currentUser, daysLate: diffDays });
+        setBirthdayShownToday(true);
+        try { window.localStorage.setItem(lastShownKey, '1'); } catch {}
+      }
+    }
+  }, [loading, currentUser, birthdays, birthdayShownToday]);
   
   // רשימת שחקנים ממוינת לפי מספר מפגשים בכל ההיסטוריה (מהפעיל ביותר לפחות פעיל)
   const sortedPlayers = useMemo(() => {
@@ -8792,6 +9700,7 @@ export default function PokerApp() {
     { id: 'dashboard', label: 'דשבורד', icon: LayoutDashboard },
     { id: 'table', label: 'טבלה', icon: Table },
     { id: 'periodic', label: 'תקופות', icon: Calendar },
+    { id: 'champions', label: '🏆 MVP', icon: Trophy },
     { id: 'charts', label: 'תובנות', icon: BarChart3 },
     { id: 'hosting', label: 'אירוחים', icon: Calendar },
     { id: 'gallery', label: 'גלריה', icon: ImageIcon },
@@ -8905,26 +9814,102 @@ export default function PokerApp() {
 
         {/* Content */}
         {tab === 'dashboard' && (
-          <DashboardCarousel 
-            currentUser={currentUser} 
-            sessions={sessions} 
-            allSessions={allSessions}
-            stats={stats} 
-            hostingSchedule={hostingSchedule}
-            onGoToHosting={() => setTab('hosting')}
-            onFullscreenToggle={() => setChartFullscreen(true)}
-            selectedChartPlayers={selectedChartPlayers}
-            setSelectedChartPlayers={setSelectedChartPlayers}
-            isMobile={isMobile}
-            paymentReminders={paymentReminders}
-            phones={phones}
-            onUpdateReminders={handleUpdateReminders}
-          />
+          <>
+            {/* 🎂 כרטיס יום הולדת לחוגג היום (לכל מי שזה לא הוא) */}
+            {(() => {
+              const today = new Date();
+              const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}`;
+              const birthdayPerson = Object.entries(birthdays).find(([n, d]) => d === todayStr && n !== currentUser);
+              if (!birthdayPerson) return null;
+              const [bdayName] = birthdayPerson;
+              const bdayPhone = phones[bdayName]?.phone;
+              
+              const greetings = [
+                `${bdayName}, יום הולדת שמח אח! 🎉🎂 שתהיה לך שנה מלאה בניצחונות, צ'יפים, ופלאשים בריבר 🃏`,
+                `מזל טוב ${bdayName}! 🥳 שכל הקלפים יעבדו לטובתך השנה - הן בפוקר והן בחיים! 🍀`,
+                `${bdayName} יקר 🎁 יום הולדת שמח! מאחל לך שנה של אול-אינים מנצחים, שתחזור הביתה תמיד עם ערמה 🎊`,
+                `יומולדת שמח ${bdayName}! 🎈 שהשנה הזאת תהיה הכי טובה - אתה האלוף שלנו 🏆`,
+              ];
+              
+              const sendToGroup = async () => {
+                const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+                
+                // ניסיון לשלוח דרך Web Share API (פותח את ה-share sheet של המכשיר - שם בוחרים את קבוצת ווטסאפ)
+                if (navigator.share) {
+                  try {
+                    await navigator.share({ text: greeting });
+                    return;
+                  } catch (e) {
+                    // המשתמש סגר את ה-share sheet או שהמכשיר לא תומך
+                  }
+                }
+                
+                // Fallback - העתקה ללוח + הודעה
+                try {
+                  await navigator.clipboard.writeText(greeting);
+                  alert('✅ הברכה הועתקה!\n\nעכשיו תוכל לפתוח את קבוצת הוואטסאפ ולהדביק (לחיצה ארוכה → הדבק).');
+                } catch (e) {
+                  // Fallback אחרון - WhatsApp web ללא נמען
+                  const text = encodeURIComponent(greeting);
+                  window.open(`https://wa.me/?text=${text}`, '_blank');
+                }
+              };
+              
+              return (
+                <div className="mb-3 rounded-2xl p-4 relative overflow-hidden" style={{
+                  background: 'linear-gradient(135deg, rgba(251,191,36,0.2) 0%, rgba(146,64,14,0.3) 50%, rgba(190,24,93,0.2) 100%)',
+                  border: '2px solid rgba(251,191,36,0.5)',
+                  boxShadow: '0 0 20px rgba(251,191,36,0.2)',
+                }}>
+                  <div className="absolute top-2 right-3 text-xl animate-bounce" style={{animationDelay: '0s'}}>🎉</div>
+                  <div className="absolute top-3 left-4 text-lg animate-bounce" style={{animationDelay: '0.5s'}}>🎊</div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-4xl">🎂</div>
+                    <div className="flex-1">
+                      <div className="text-xs text-amber-300 font-bold tracking-widest mb-0.5">היום יום הולדת!</div>
+                      <div className="text-lg font-extrabold text-amber-100">
+                        ל-{bdayName} יש יום הולדת היום 🥳
+                      </div>
+                      <div className="text-xs text-stone-300 mt-0.5">אל תשכח לברך אותו!</div>
+                    </div>
+                  </div>
+                  <button onClick={sendToGroup}
+                    className="w-full mt-3 rounded-lg py-2.5 font-bold text-white text-sm transition hover:scale-[1.02] flex items-center justify-center gap-2"
+                    style={{
+                      background: 'linear-gradient(135deg, #25d366 0%, #128c7e 100%)',
+                      boxShadow: '0 2px 8px rgba(37,211,102,0.4)',
+                    }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="white">
+                      <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.711.307 1.265.49 1.697.628.713.226 1.362.194 1.875.118.572-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/>
+                    </svg>
+                    שלח ברכה לקבוצה
+                  </button>
+                </div>
+              );
+            })()}
+            
+            <DashboardCarousel 
+              currentUser={currentUser} 
+              sessions={sessions} 
+              allSessions={allSessions}
+              stats={stats} 
+              hostingSchedule={hostingSchedule}
+              onGoToHosting={() => setTab('hosting')}
+              onFullscreenToggle={() => setChartFullscreen(true)}
+              selectedChartPlayers={selectedChartPlayers}
+              setSelectedChartPlayers={setSelectedChartPlayers}
+              isMobile={isMobile}
+              paymentReminders={paymentReminders}
+              phones={phones}
+              onUpdateReminders={handleUpdateReminders}
+            />
+          </>
         )}
 
         {tab === 'table' && <MainLeaderboard stats={stats} sessions={sessions} />}
 
         {tab === 'periodic' && <PeriodicTables allSessions={allSessions} players={players} />}
+        {tab === 'champions' && <ChampionsTab allSessions={allSessions} hostingSchedule={hostingSchedule} userQuotes={userQuotes} quoteLikes={quoteLikes} />}
 
         {tab === 'charts' && (
           <div className="space-y-3">
@@ -8986,7 +9971,7 @@ export default function PokerApp() {
           {sessions.length} מפגשים • {stats.length} שחקנים • עונת {selectedSeason} • 
           <span className="text-amber-600/60"> BARBUR AI</span>
           <div className="mt-2 text-[11px] text-stone-100 tracking-normal normal-case font-mono">
-            {APP_VERSION} • {APP_BUILD_TIME} • {APP_NOTES}
+            {isAdmin ? `${APP_VERSION} • ${APP_BUILD_TIME} • ${APP_NOTES}` : APP_VERSION}
           </div>
         </footer>
       </div>
@@ -9233,6 +10218,21 @@ export default function PokerApp() {
           const newPlayers = [...players, name];
           setPlayers(newPlayers);
           await persistSessions(allSessions, newPlayers, hostingSchedule);
+        }}
+        birthdays={birthdays}
+        onSaveBirthday={async (name, dateOrNull) => {
+          const updated = { ...birthdays };
+          if (dateOrNull) {
+            updated[name] = dateOrNull;
+          } else {
+            delete updated[name];
+          }
+          setBirthdays(updated);
+          try {
+            await saveState(updated, BIRTHDAYS_KEY);
+          } catch (e) {
+            console.error('Failed to save birthday:', e);
+          }
         }} />
 
       {/* 🆕 מודל ניהול גיבויים */}
@@ -9245,10 +10245,19 @@ export default function PokerApp() {
         onRestore={handleRestoreBackup}
         onUploadFile={handleUploadBackupFile}
         onRefresh={loadBackupsList} />
+      
+      {/* 🎂 פופאפ יום הולדת */}
+      {birthdayPopup && (
+        <BirthdayPopup 
+          name={birthdayPopup.name}
+          daysLate={birthdayPopup.daysLate || 0}
+          onClose={() => setBirthdayPopup(null)} />
+      )}
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=Assistant:wght@300;400;500;600;700;800&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=Assistant:wght@300;400;500;600;700;800&family=Cinzel:wght@600;800&display=swap');
         * { font-family: 'Heebo', 'Assistant', sans-serif !important; }
+        .font-cinzel, [style*="Cinzel"], svg text { font-family: 'Cinzel', serif !important; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
