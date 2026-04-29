@@ -9,9 +9,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.27.2';
-const APP_BUILD_TIME = '29/04/2026 07:51';
-const APP_NOTES = '🎂 ברכה לקבוצה + יום הולדת באיחור עד שבוע';
+const APP_VERSION = 'v2.27.5';
+const APP_BUILD_TIME = '29/04/2026 08:13';
+const APP_NOTES = '🕐 חיווי כניסה אחרונה לכל משתמש';
 
 
 // ===== הרשאות מנהל =====
@@ -20,6 +20,7 @@ const ADMIN_NAMES = ['רון', 'גילי']; // ברירת מחדל - ניתן ל
 const ADMIN_NAMES_KEY = 'poker_admin_names_v1'; // 🆕 רשימת מנהלים שמורה ב-Firebase
 const HIDDEN_PLAYERS_KEY = 'poker_hidden_players_v1'; // 🆕 שחקנים מוסתרים מרשימת הפעילים
 const BIRTHDAYS_KEY = 'poker_birthdays_v1'; // 🆕 ימי הולדת של שחקנים
+const LAST_LOGIN_KEY = 'poker_last_login_v1'; // 🆕 כניסה אחרונה של כל משתמש
 
 // 🎂 ימי הולדת שחולצו מההיסטוריה של הקבוצה
 const DEFAULT_BIRTHDAYS = {
@@ -6415,7 +6416,7 @@ const aggregateByPeriod = (sessions, players, keyFn) => {
 };
 
 // ===== 🏆 אלופים - חישוב MVP חודשי, רבעוני, ושנתי =====
-const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quoteLikes = {} }) => {
+const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quoteLikes = {}, allQuotes = [], deletedQuoteIds = [] }) => {
   const HEBREW_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
   
   // זיהוי כל השנים הזמינות
@@ -6568,13 +6569,22 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
   const popularityChampions = useMemo(() => {
     const yearSessions = allSessions.filter(s => (s.season || new Date(s.date).getFullYear()) === currentYear);
     
-    // 1. הכי הרבה ציטוטים השנה
-    const allQuotes = userQuotes || [];
+    // 1. הכי הרבה ציטוטים השנה הנוכחית
+    const combinedQuotes = [...allQuotes, ...userQuotes].filter(q => !deletedQuoteIds.includes(q.id));
     const quoteCounts = {};
-    allQuotes.forEach(q => {
-      if (!q.date) return;
-      const d = new Date(q.date);
-      if (d.getFullYear() !== currentYear) return;
+    combinedQuotes.forEach(q => {
+      // שנת הציטוט - תומך ב-DD.MM.YYYY (פורמט הציטוטים) וגם createdAt
+      let year = null;
+      if (q.date && typeof q.date === 'string') {
+        const parts = q.date.split('.');
+        if (parts.length === 3) {
+          year = parseInt(parts[2]);
+        }
+      }
+      if (!year && q.createdAt) {
+        year = new Date(q.createdAt).getFullYear();
+      }
+      if (year !== currentYear) return;
       const quoter = q.quoted || q.who;
       if (quoter) quoteCounts[quoter] = (quoteCounts[quoter] || 0) + 1;
     });
@@ -6607,7 +6617,7 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
       topHost: topHost ? { name: topHost[0], count: topHost[1] } : null,
       topAttender: topAttender ? { name: topAttender[0], count: topAttender[1] } : null,
     };
-  }, [allSessions, userQuotes, hostingSchedule, currentYear]);
+  }, [allSessions, userQuotes, allQuotes, deletedQuoteIds, hostingSchedule, currentYear]);
   
   // 📈 השחקן המשתפר - השוואת רווח השנה (מצטבר עד היום) מול רווח באותה תקופה אשתקד
   const mostImproved = useMemo(() => {
@@ -8169,7 +8179,47 @@ const BackupsModal = ({ isOpen, onClose, backupsList, onCreateBackup, onDownload
 
 
 // ===== מודל מנהל - ניהול פרטי תשלום של כל השחקנים =====
-const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlayers = [], onToggleHidden, onAddPlayer, birthdays = {}, onSaveBirthday }) => {
+const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlayers = [], onToggleHidden, onAddPlayer, birthdays = {}, onSaveBirthday, lastLogins = {} }) => {
+  // 🆕 helper - פורמט כניסה אחרונה: "אתמול (28/04)" + צבע לפי פעילות
+  const formatLastLogin = (timestamp) => {
+    if (!timestamp) return { text: 'טרם נכנס', color: 'text-stone-600 bg-stone-900/30 border-stone-800/40' };
+    const now = new Date();
+    const then = new Date(timestamp);
+    const diffMs = now - then;
+    const diffMin = Math.floor(diffMs / (1000 * 60));
+    const diffHour = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHour / 24);
+    
+    const dateStr = `${String(then.getDate()).padStart(2, '0')}/${String(then.getMonth() + 1).padStart(2, '0')}`;
+    
+    let relText, color;
+    if (diffMin < 5) {
+      relText = 'עכשיו';
+      color = 'text-emerald-300 bg-emerald-950/40 border-emerald-700/40';
+    } else if (diffMin < 60) {
+      relText = `לפני ${diffMin} דק'`;
+      color = 'text-emerald-300 bg-emerald-950/40 border-emerald-700/40';
+    } else if (diffHour < 24) {
+      relText = `לפני ${diffHour} שע'`;
+      color = 'text-emerald-300 bg-emerald-950/40 border-emerald-700/40';
+    } else if (diffDay === 1) {
+      relText = 'אתמול';
+      color = 'text-emerald-300 bg-emerald-950/40 border-emerald-700/40';
+    } else if (diffDay < 7) {
+      relText = `לפני ${diffDay} ימים`;
+      color = 'text-emerald-300 bg-emerald-950/40 border-emerald-700/40';
+    } else if (diffDay < 30) {
+      relText = `לפני ${diffDay} ימים`;
+      color = 'text-amber-300 bg-amber-950/40 border-amber-700/40';
+    } else {
+      const months = Math.floor(diffDay / 30);
+      relText = `לפני ${months} חוד'`;
+      color = 'text-rose-300 bg-rose-950/40 border-rose-700/40';
+    }
+    
+    return { text: `${relText} (${dateStr})`, color };
+  };
+  
   const [editingPlayer, setEditingPlayer] = useState(null);
   const [phone, setPhone] = useState('');
   const [app, setApp] = useState('both');
@@ -8386,6 +8436,15 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlay
                     ) : (
                       <div className="text-xs text-amber-400">⚠️ חסר טלפון</div>
                     )}
+                    {/* 🆕 חיווי כניסה אחרונה */}
+                    {(() => {
+                      const login = formatLastLogin(lastLogins[name]);
+                      return (
+                        <div className={`text-[10px] inline-block rounded px-1.5 py-0.5 mt-1 border ${login.color}`}>
+                          🕐 {login.text}
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-1">
                     {/* 🆕 כפתור הסתרה/הצגה */}
@@ -8799,6 +8858,8 @@ export default function PokerApp() {
   // 🆕 ימי הולדת של שחקנים {שם: 'DD/MM'}
   const [birthdays, setBirthdays] = useState(DEFAULT_BIRTHDAYS);
   const [birthdayPopup, setBirthdayPopup] = useState(null); // { name, age } או null
+  // 🆕 כניסה אחרונה לכל משתמש {שם: timestamp ISO}
+  const [lastLogins, setLastLogins] = useState({});
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState('dashboard');
@@ -9043,6 +9104,12 @@ export default function PokerApp() {
         setBirthdays({ ...DEFAULT_BIRTHDAYS, ...savedBirthdays });
       }
       
+      // 🆕 טעינת כניסות אחרונות
+      const savedLogins = await loadState(LAST_LOGIN_KEY);
+      if (savedLogins && typeof savedLogins === 'object') {
+        setLastLogins(savedLogins);
+      }
+      
       const savedQuotes = await loadState(QUOTES_STORAGE_KEY);
       if (savedQuotes?.deletedIds) setDeletedQuoteIds(savedQuotes.deletedIds);
       if (savedQuotes?.likes) setQuoteLikes(savedQuotes.likes);
@@ -9083,6 +9150,12 @@ export default function PokerApp() {
         if (savedUser) {
           setCurrentUser(savedUser);
           setShowSplash(false); // אם כבר נכנסת בעבר, מדלגים על הספלאש
+          // 🆕 עדכון זמן כניסה אחרון - לטעינה אוטומטית
+          const now = new Date().toISOString();
+          const baseLogins = (savedLogins && typeof savedLogins === 'object') ? savedLogins : {};
+          const updatedLogins = { ...baseLogins, [savedUser]: now };
+          setLastLogins(updatedLogins);
+          try { await saveState(updatedLogins, LAST_LOGIN_KEY); } catch {}
         }
         const savedAdmin = window.localStorage.getItem('poker_admin_name');
         if (savedAdmin) setAdminName(savedAdmin);
@@ -9111,7 +9184,7 @@ export default function PokerApp() {
   // 🎂 בדיקה אם היום יום הולדת של המשתמש המחובר (או בתוך 7 ימים אחרי)
   const [birthdayShownToday, setBirthdayShownToday] = useState(false);
   useEffect(() => {
-    if (!loading || !currentUser || birthdayShownToday) return;
+    if (loading || !currentUser || birthdayShownToday) return;
     const userBday = birthdays[currentUser];
     if (!userBday) return;
     
@@ -9495,12 +9568,21 @@ export default function PokerApp() {
     await persistSessions(allSessions, players, newSchedule);
   };
 
-  const handleUserSelect = (name) => {
+  const handleUserSelect = async (name) => {
     setCurrentUser(name);
     try { window.localStorage.setItem('poker_user_name', name); } catch {}
     // 🆕 אם אין למשתמש טלפון - הצג מסך הזדהות
     if (!phones[name] || !phones[name].phone) {
       setPhoneSetupOpen(true);
+    }
+    // 🆕 שמור זמן כניסה אחרון
+    const now = new Date().toISOString();
+    const updated = { ...lastLogins, [name]: now };
+    setLastLogins(updated);
+    try {
+      await saveState(updated, LAST_LOGIN_KEY);
+    } catch (e) {
+      console.error('Failed to save last login:', e);
     }
   };
 
@@ -9909,7 +9991,7 @@ export default function PokerApp() {
         {tab === 'table' && <MainLeaderboard stats={stats} sessions={sessions} />}
 
         {tab === 'periodic' && <PeriodicTables allSessions={allSessions} players={players} />}
-        {tab === 'champions' && <ChampionsTab allSessions={allSessions} hostingSchedule={hostingSchedule} userQuotes={userQuotes} quoteLikes={quoteLikes} />}
+        {tab === 'champions' && <ChampionsTab allSessions={allSessions} hostingSchedule={hostingSchedule} userQuotes={userQuotes} quoteLikes={quoteLikes} allQuotes={ALL_QUOTES} deletedQuoteIds={deletedQuoteIds} />}
 
         {tab === 'charts' && (
           <div className="space-y-3">
@@ -10203,6 +10285,7 @@ export default function PokerApp() {
         phones={phones}
         onSave={handleSavePhone}
         hiddenPlayers={hiddenPlayers}
+        lastLogins={lastLogins}
         onToggleHidden={async (name) => {
           const newHidden = hiddenPlayers.includes(name)
             ? hiddenPlayers.filter(n => n !== name)
