@@ -7,21 +7,53 @@ import BARBUR_LOGO from './assets/barbur-logo.webp';
 import SWAN_IMG from './assets/swan.png';
 import { loadState as fbLoadState, saveState as fbSaveState } from './firebase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
+import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.28.4';
-const APP_BUILD_TIME = '29/04/2026 10:49';
-const APP_NOTES = 'תמונת אלוף השנה בתוך הגביע + "טרם נקבע" לשנה לא גמורה + הקטנת padding ב-MVP חודשי/רבעוני/חביב הקהל';
+const APP_VERSION = 'v2.31.1';
+const APP_BUILD_TIME = '29/04/2026 17:30';
+const APP_NOTES = '🔐 סיסמת סופר אדמין נשמרת ב-Firebase (לא בקוד). הגדרה ראשונית בכניסה ראשונה + כפתור "שנה סיסמה" בתפריט.';
 
 
 // ===== הרשאות מנהל =====
-const ADMIN_PASSWORD = 'barbur2026'; // סיסמה זמנית - להחליף בסיסמה האמיתית
+const ADMIN_PASSWORD = 'barbur2026'; // סיסמת אדמין רגיל
+// 🆕 סיסמת סופר אדמין נשמרת ב-Firebase (לא בקוד) - hash בלבד
+// בכניסה ראשונה של סופר אדמין - יוצג מסך הגדרת סיסמה
+const SUPER_ADMIN_PASSWORD_KEY = 'poker_super_admin_password_v1';
 const ADMIN_NAMES = ['רון', 'גילי']; // ברירת מחדל - ניתן לערוך מהאפליקציה
+const SUPER_ADMINS = ['רון']; // 👑 סופר אדמינים קבועים - לא ניתן לשינוי דרך ה-UI
 const ADMIN_NAMES_KEY = 'poker_admin_names_v1'; // 🆕 רשימת מנהלים שמורה ב-Firebase
+const ADMIN_PERMISSIONS_KEY = 'poker_admin_permissions_v1'; // 🆕 הרשאות לאדמינים רגילים
 const HIDDEN_PLAYERS_KEY = 'poker_hidden_players_v1'; // 🆕 שחקנים מוסתרים מרשימת הפעילים
 const BIRTHDAYS_KEY = 'poker_birthdays_v1'; // 🆕 ימי הולדת של שחקנים
 const LAST_LOGIN_KEY = 'poker_last_login_v1'; // 🆕 כניסה אחרונה של כל משתמש
+
+// 🔐 רשימת כל הפיצ'רים האדמיניים - עם ברירות מחדל לאדמין רגיל
+// סופר אדמין מקבל הכל אוטומטית. אדמין רגיל מקבל רק מה שמופיע פה כ-true.
+const PERMISSIONS_REGISTRY = [
+  { key: 'liveSession',       label: '🎰 עדכון ערב בלייב',                  defaultEnabled: true,  superOnly: false },
+  { key: 'photoSession',      label: '📸 עדכון ערב בתמונה',                 defaultEnabled: true,  superOnly: false },
+  { key: 'hostingEdit',       label: '📅 עריכת לוח אירוחים',                defaultEnabled: true,  superOnly: false },
+  { key: 'quotesDelete',      label: '📜 מחיקת ציטוטים מהגלריה',            defaultEnabled: false, superOnly: false },
+  { key: 'managePlayers',     label: '👥 ניהול משתמשים (טלפונים, הסתרה)',     defaultEnabled: false, superOnly: false },
+  { key: 'backupRestore',     label: '💾 גיבוי ושחזור נתונים',              defaultEnabled: false, superOnly: false },
+  { key: 'deviceLocks',       label: '🔒 ניהול נעילות מכשירים',             defaultEnabled: false, superOnly: false },
+  { key: 'impersonate',       label: '🎭 התחזות למשתמש אחר',                defaultEnabled: false, superOnly: false },
+  { key: 'registrationToggle',label: '📝 הפעלת/כיבוי טאב הרישום',           defaultEnabled: false, superOnly: false },
+  { key: 'deleteSession',     label: '🗑️ מחיקת מפגשים מההיסטוריה',         defaultEnabled: false, superOnly: false },
+  { key: 'resetData',         label: '⚠️ איפוס כל הנתונים',                 defaultEnabled: false, superOnly: true  },
+  { key: 'manageAdmins',      label: '🔐 ניהול מנהלים (הוספה/הסרה)',         defaultEnabled: false, superOnly: true  },
+  { key: 'managePermissions', label: '⚙️ ניהול הרשאות (המסך הזה)',          defaultEnabled: false, superOnly: true  },
+];
+
+// יוצר את ברירת המחדל של ההרשאות לאדמין רגיל
+const getDefaultPermissions = () => {
+  const perms = {};
+  PERMISSIONS_REGISTRY.forEach(p => {
+    perms[p.key] = p.superOnly ? false : p.defaultEnabled;
+  });
+  return perms;
+};
 
 // 🎂 ימי הולדת שחולצו מההיסטוריה של הקבוצה
 const DEFAULT_BIRTHDAYS = {
@@ -83,6 +115,45 @@ const ALL_QUOTES = QUOTES_DATA;
 const STORAGE_KEY = 'poker_group_state_v4';
 const QUOTES_STORAGE_KEY = 'poker_quotes_state_v1';
 const GALLERY_STORAGE_KEY = 'poker_gallery_state_v1';
+// 🆕 רישום למפגש הבא - מצב מסונכרן ב-Firebase
+const REGISTRATION_KEY = 'poker_next_session_registration_v1';
+// 🔒 הפעלת/כיבוי טאב הרישום (אדמין בלבד) - גלובלי לכולם
+const REGISTRATION_ENABLED_KEY = 'poker_registration_feature_enabled_v1';
+// 🔐 נעילת מכשיר לכל משתמש - {playerName: {deviceId, lockedAt, userAgent}}
+const DEVICE_LOCKS_KEY = 'poker_device_locks_v1';
+// 🆔 מזהה ייחודי של המכשיר הנוכחי (נוצר פעם אחת ונשמר ב-localStorage)
+const DEVICE_ID_KEY = 'poker_device_id_v1';
+
+// ===== ניהול Device ID =====
+// יוצר מזהה ייחודי לכל מכשיר (נשמר בקובץ localStorage לכל החיים)
+// 🔐 hashing פשוט לסיסמה (SHA-256) - לא חשוף ב-Firebase כטקסט גלוי
+const hashPassword = async (password) => {
+  if (!password) return '';
+  try {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password + 'barbur_poker_salt_2026'); // salt לבטיחות
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch {
+    return '';
+  }
+};
+
+const getOrCreateDeviceId = () => {
+  try {
+    let id = window.localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      // יצירת UUID v4 בסיסי
+      id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 11);
+      window.localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    // אם localStorage חסום - נחזיר ID זמני (לא יישמר)
+    return 'dev_temp_' + Math.random().toString(36).slice(2, 11);
+  }
+};
 // 🆕 מפתחות לגיבויים
 const BACKUPS_INDEX_KEY = 'poker_backups_index_v1'; // רשימת מפתחות גיבויים
 const BACKUP_KEY_PREFIX = 'poker_backup_'; // פרפיקס לכל גיבוי בודד
@@ -591,18 +662,130 @@ const ManageAdminsModal = ({ isOpen, onClose, adminNames, currentAdminName, allP
   );
 };
 
-const AdminLoginModal = ({ isOpen, onClose, onLogin, currentUser }) => {
+const AdminLoginModal = ({ isOpen, onClose, onLogin, currentUser, superAdminPasswordHash, onSetSuperAdminPassword }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  // 🆕 מצב הגדרת סיסמה (פעם ראשונה לסופר אדמין)
+  const [setupMode, setSetupMode] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const handleSubmit = () => {
-    if (password !== ADMIN_PASSWORD) { setError('סיסמה שגויה'); return; }
-    onLogin(currentUser);
-    setPassword(''); setError('');
-    onClose();
+  // האם המשתמש הנוכחי הוא סופר אדמין פוטנציאלי וטרם הוגדרה סיסמה?
+  const isSuperAdminCandidate = SUPER_ADMINS.includes(currentUser);
+  const needsSetup = isSuperAdminCandidate && !superAdminPasswordHash;
+  
+  // אם הוא סופר אדמין וטרם הוגדרה סיסמה - מציג מסך הגדרה
+  useEffect(() => {
+    if (isOpen) {
+      setSetupMode(needsSetup);
+      setPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setError('');
+    }
+  }, [isOpen, needsSetup]);
+
+  const handleSubmit = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError('');
+    
+    try {
+      // 👑 אם המשתמש הוא סופר אדמין פוטנציאלי - בדיקת סיסמת סופר אדמין מול ה-hash
+      if (isSuperAdminCandidate && superAdminPasswordHash) {
+        const inputHash = await hashPassword(password);
+        if (inputHash === superAdminPasswordHash) {
+          onLogin(currentUser, 'super');
+          setPassword('');
+          onClose();
+          setBusy(false);
+          return;
+        }
+      }
+      // 🔧 סיסמה רגילה (גם סופר אדמין יכול להיכנס כאדמין רגיל אם רוצה)
+      if (password === ADMIN_PASSWORD) {
+        onLogin(currentUser, 'admin');
+        setPassword('');
+        onClose();
+        setBusy(false);
+        return;
+      }
+      setError('סיסמה שגויה');
+    } catch (e) {
+      setError('שגיאה בכניסה');
+    }
+    setBusy(false);
+  };
+  
+  // 🆕 הגדרת סיסמה ראשונית לסופר אדמין
+  const handleSetupSubmit = async () => {
+    if (busy) return;
+    setError('');
+    if (newPassword.length < 6) {
+      setError('סיסמה חייבת לכלול לפחות 6 תווים');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('הסיסמאות לא תואמות');
+      return;
+    }
+    setBusy(true);
+    try {
+      const hash = await hashPassword(newPassword);
+      await onSetSuperAdminPassword(hash);
+      // אחרי הגדרה - נכנס ישירות כסופר אדמין
+      onLogin(currentUser, 'super');
+      setNewPassword('');
+      setConfirmPassword('');
+      onClose();
+    } catch (e) {
+      setError('שגיאה בשמירת הסיסמה');
+    }
+    setBusy(false);
   };
 
   if (!isOpen) return null;
+
+  // 🆕 מסך הגדרת סיסמה ראשונית (רק לסופר אדמין שעוד לא הגדיר)
+  if (setupMode) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
+        <div className="relative w-full max-w-sm rounded-2xl border-2 border-amber-700 bg-stone-950 p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">👑</span>
+              <h2 className="text-xl font-bold text-amber-200">הגדרת סיסמת סופר אדמין</h2>
+            </div>
+            <button onClick={onClose} className="text-stone-500 hover:text-white"><X className="h-5 w-5" /></button>
+          </div>
+          <div className="space-y-3">
+            <div className="rounded-lg bg-amber-950/30 border border-amber-800/50 p-3 text-xs text-amber-200 leading-relaxed">
+              שלום <span className="font-bold">{currentUser}</span> 👑<br/>
+              זוהי הכניסה הראשונה שלך כסופר אדמין. בחר סיסמה אישית - היא תישמר מוצפנת ב-Firebase ולא בקוד.<br/>
+              <span className="text-amber-400 font-bold">חשוב: שמור את הסיסמה במקום בטוח!</span>
+            </div>
+            <div>
+              <label className="block text-xs text-stone-400 mb-1">סיסמה חדשה (לפחות 6 תווים)</label>
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} autoFocus
+                className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white focus:border-amber-600 focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs text-stone-400 mb-1">אימות סיסמה</label>
+              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSetupSubmit()}
+                className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white focus:border-amber-600 focus:outline-none" />
+            </div>
+            {error && <div className="text-xs text-rose-400 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{error}</div>}
+            <button onClick={handleSetupSubmit} disabled={busy}
+              className="w-full rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 px-4 py-3 font-bold text-white hover:from-amber-500 hover:to-amber-600 transition disabled:opacity-50">
+              {busy ? 'שומר...' : '👑 קבע סיסמה והתחבר'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={onClose}>
@@ -618,6 +801,9 @@ const AdminLoginModal = ({ isOpen, onClose, onLogin, currentUser }) => {
           <div className="rounded-lg bg-amber-950/30 border border-amber-800/50 p-3">
             <div className="text-xs text-amber-400 mb-1">המערכת תזהה אותך כמנהל</div>
             <div className="text-base font-bold text-amber-200">{currentUser}</div>
+            {isSuperAdminCandidate && (
+              <div className="text-xs text-amber-400 mt-1">👑 סופר אדמין - השתמש בסיסמה האישית שלך</div>
+            )}
           </div>
           <div>
             <label className="block text-xs text-stone-400 mb-1">סיסמת מנהל</label>
@@ -626,9 +812,9 @@ const AdminLoginModal = ({ isOpen, onClose, onLogin, currentUser }) => {
               className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white focus:border-amber-600 focus:outline-none" />
           </div>
           {error && <div className="text-xs text-rose-400 flex items-center gap-1"><AlertCircle className="h-3 w-3" />{error}</div>}
-          <button onClick={handleSubmit}
-            className="w-full rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 px-4 py-3 font-bold text-white hover:from-amber-500 hover:to-amber-600 transition">
-            הפוך למנהל
+          <button onClick={handleSubmit} disabled={busy}
+            className="w-full rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 px-4 py-3 font-bold text-white hover:from-amber-500 hover:to-amber-600 transition disabled:opacity-50">
+            {busy ? 'בודק...' : 'הפוך למנהל'}
           </button>
           <div className="text-xs text-stone-500 text-center">תיזכר במכשיר הזה</div>
         </div>
@@ -1858,7 +2044,7 @@ const QuoteCard = ({ quote, likeCount, onLike, onDelete }) => {
   );
 };
 // ===== מסך בחירת שם משתמש =====
-const UserSelectScreen = ({ players, onSelect }) => {
+const UserSelectScreen = ({ players, onSelect, deviceLocks = {}, currentDeviceId = '', impersonating = null, onCancelImpersonate = () => {} }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const filteredPlayers = useMemo(() => {
     if (!searchTerm) return players;
@@ -1875,9 +2061,21 @@ const UserSelectScreen = ({ players, onSelect }) => {
 
       <div className="relative z-10 w-full max-w-md">
         <div className="text-center mb-8">
-          <div className="text-6xl mb-3">♠</div>
-          <h2 className="text-3xl font-extrabold text-amber-200 mb-2">מי אתה?</h2>
-          <p className="text-stone-400 text-sm">בחר את שמך מהרשימה</p>
+          <div className="text-6xl mb-3">{impersonating ? '🎭' : '♠'}</div>
+          <h2 className="text-3xl font-extrabold text-amber-200 mb-2">
+            {impersonating ? 'בחר משתמש להתחזות' : 'מי אתה?'}
+          </h2>
+          <p className="text-stone-400 text-sm">
+            {impersonating ? `מתחזה כ-${impersonating} (לבדיקות בלבד)` : 'בחר את שמך מהרשימה'}
+          </p>
+          {impersonating && (
+            <button
+              onClick={onCancelImpersonate}
+              className="mt-3 rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 px-4 py-2 text-sm text-stone-200 font-bold"
+            >
+              ← חזרה ל-{impersonating}
+            </button>
+          )}
         </div>
 
         <div className="rounded-2xl border border-amber-900/50 bg-stone-950/90 backdrop-blur shadow-2xl">
@@ -1890,21 +2088,53 @@ const UserSelectScreen = ({ players, onSelect }) => {
             </div>
           </div>
           <div className="max-h-96 overflow-y-auto p-2">
-            {filteredPlayers.map(name => (
-              <button key={name} onClick={() => onSelect(name)}
-                className="w-full text-right rounded-lg px-4 py-3 hover:bg-amber-950/30 transition flex items-center justify-between group">
-                <span className="text-stone-100 font-bold text-base">{name}</span>
-                <span className="text-stone-600 group-hover:text-amber-400 text-sm">→</span>
-              </button>
-            ))}
+            {filteredPlayers.map(name => {
+              // 🔐 בדיקת נעילה
+              const lock = deviceLocks[name];
+              const isLockedToOther = lock && lock.deviceId !== currentDeviceId;
+              const isLockedToMe = lock && lock.deviceId === currentDeviceId;
+              return (
+                <button key={name} onClick={() => onSelect(name)}
+                  className={`w-full text-right rounded-lg px-4 py-3 transition flex items-center justify-between group ${
+                    impersonating 
+                      ? 'hover:bg-purple-950/40' 
+                      : isLockedToOther 
+                        ? 'opacity-50 hover:bg-red-950/20' 
+                        : 'hover:bg-amber-950/30'
+                  }`}>
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {/* 🔐 אייקון נעילה */}
+                    {!impersonating && isLockedToOther && (
+                      <Lock className="h-4 w-4 text-red-400/70 shrink-0" />
+                    )}
+                    {!impersonating && isLockedToMe && (
+                      <Check className="h-4 w-4 text-emerald-400/80 shrink-0" />
+                    )}
+                    <span className={`font-bold text-base truncate ${
+                      isLockedToOther ? 'text-stone-400' : 'text-stone-100'
+                    }`}>
+                      {name}
+                    </span>
+                  </div>
+                  <span className="text-stone-600 group-hover:text-amber-400 text-sm shrink-0">→</span>
+                </button>
+              );
+            })}
             {filteredPlayers.length === 0 && (
               <div className="text-center py-8 text-stone-500 text-sm">אין שחקנים שמתאימים לחיפוש</div>
             )}
           </div>
         </div>
 
-        <div className="mt-6 text-center text-xs text-stone-500">
-          הבחירה תיזכר בדפדפן הזה. תוכל להחליף בכל זמן מהראש של האפליקציה.
+        <div className="mt-6 text-center text-xs text-stone-500 leading-relaxed">
+          {impersonating ? (
+            <>🎭 מצב התחזות - לא יישמר בכניסה הבאה</>
+          ) : (
+            <>
+              🔒 כל מכשיר נעול למשתמש אחד.<br/>
+              <Lock className="inline h-3 w-3" /> = שם תפוס במכשיר אחר
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -2402,6 +2632,662 @@ const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
     </div>
   );
 };
+
+// ===== מודל ניהול הרשאות (סופר אדמין בלבד) =====
+const PermissionsManager = ({ isOpen, onClose, permissions, onUpdate, adminNamesList }) => {
+  const [localPerms, setLocalPerms] = useState(permissions);
+  const [saving, setSaving] = useState(false);
+  
+  useEffect(() => {
+    if (isOpen) setLocalPerms(permissions);
+  }, [isOpen, permissions]);
+  
+  if (!isOpen) return null;
+  
+  const handleToggle = (key) => {
+    setLocalPerms(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+  
+  const handleSave = async () => {
+    setSaving(true);
+    await onUpdate(localPerms);
+    setSaving(false);
+    onClose();
+  };
+  
+  const handleResetDefaults = () => {
+    if (!confirm('להחזיר את כל ההרשאות לברירות המחדל?')) return;
+    setLocalPerms(getDefaultPermissions());
+  };
+  
+  // אדמינים רגילים (לא סופר)
+  const regularAdmins = adminNamesList.filter(a => !SUPER_ADMINS.includes(a));
+  
+  // האם נעשו שינויים
+  const hasChanges = Object.keys(localPerms).some(k => localPerms[k] !== permissions[k]);
+  
+  return (
+    <div dir="rtl" className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-stone-950 rounded-2xl border-2 border-amber-700 w-full max-w-2xl my-8" onClick={e => e.stopPropagation()}>
+        {/* כותרת */}
+        <div className="flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-amber-950/40 to-stone-950">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">⚙️</span>
+            <div>
+              <h2 className="text-lg font-extrabold text-amber-200">ניהול הרשאות</h2>
+              <div className="text-xs text-stone-400">סופר אדמין בלבד 👑</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-white p-1">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        
+        {/* הסבר */}
+        <div className="px-4 py-3 bg-stone-900/50 border-b border-stone-800">
+          <div className="text-xs text-stone-300 leading-relaxed mb-2">
+            <span className="text-amber-400 font-bold">👑 סופר אדמין</span> (אתה) - גישה מלאה לכל הפיצ'רים, תמיד.
+          </div>
+          <div className="text-xs text-stone-300 leading-relaxed">
+            <span className="text-blue-400 font-bold">🔧 אדמין רגיל</span> ({regularAdmins.length > 0 ? regularAdmins.join(', ') : 'אין'}) - רק לפיצ'רים שמסומנים פה.
+          </div>
+        </div>
+        
+        {/* רשימת פיצ'רים */}
+        <div className="p-3 max-h-96 overflow-y-auto">
+          <div className="space-y-1.5">
+            {PERMISSIONS_REGISTRY.map(feature => {
+              const isEnabled = !!localPerms[feature.key];
+              const isLocked = feature.superOnly;
+              return (
+                <button
+                  key={feature.key}
+                  onClick={() => !isLocked && handleToggle(feature.key)}
+                  disabled={isLocked}
+                  className={`w-full text-right rounded-lg px-3 py-2.5 flex items-center justify-between gap-3 transition ${
+                    isLocked
+                      ? 'bg-stone-900/40 border border-stone-800 cursor-not-allowed'
+                      : isEnabled
+                        ? 'bg-emerald-950/30 border border-emerald-700 hover:bg-emerald-950/50'
+                        : 'bg-stone-900 border border-stone-800 hover:bg-stone-800'
+                  }`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className={`text-sm font-bold ${isLocked ? 'text-stone-500' : 'text-stone-100'}`}>
+                      {feature.label}
+                    </div>
+                    {isLocked && (
+                      <div className="text-[10px] text-amber-500 mt-0.5">🔒 ננעל לסופר אדמין בלבד</div>
+                    )}
+                  </div>
+                  <div className={`shrink-0 w-12 h-6 rounded-full border-2 transition relative ${
+                    isLocked
+                      ? 'bg-stone-800 border-stone-700'
+                      : isEnabled
+                        ? 'bg-emerald-600 border-emerald-500'
+                        : 'bg-stone-800 border-stone-600'
+                  }`}>
+                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all ${
+                      isEnabled ? 'right-0.5' : 'right-6'
+                    }`} />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        
+        {/* כפתורים */}
+        <div className="flex gap-2 p-4 border-t border-stone-800 bg-stone-900/30">
+          <button
+            onClick={handleResetDefaults}
+            className="rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 px-3 py-2 text-xs text-stone-300 font-bold"
+          >
+            ↺ ברירות מחדל
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={onClose}
+            className="rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 px-4 py-2 text-sm text-stone-300 font-bold"
+          >
+            ביטול
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!hasChanges || saving}
+            className="rounded-lg bg-amber-600 hover:bg-amber-500 disabled:bg-stone-800 disabled:opacity-40 px-5 py-2 text-sm text-white font-bold transition"
+          >
+            {saving ? 'שומר...' : 'שמור'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ===== מודל ניהול נעילות מכשירים (אדמין בלבד) =====
+const DeviceLocksManager = ({ isOpen, onClose, deviceLocks, currentDeviceId, onRelease, players }) => {
+  const [search, setSearch] = useState('');
+  
+  if (!isOpen) return null;
+  
+  // מיון: מכשיר נוכחי בראש, אחר כך לפי תאריך נעילה (חדש -> ישן)
+  const sortedLocks = Object.entries(deviceLocks)
+    .filter(([name]) => !search || name.toLowerCase().includes(search.toLowerCase()))
+    .sort(([nameA, lockA], [nameB, lockB]) => {
+      if (lockA.deviceId === currentDeviceId) return -1;
+      if (lockB.deviceId === currentDeviceId) return 1;
+      return new Date(lockB.lockedAt || 0) - new Date(lockA.lockedAt || 0);
+    });
+  
+  // משתמשים ללא נעילה
+  const unlockedPlayers = players.filter(p => !deviceLocks[p]);
+  
+  // זיהוי דפדפן/מכשיר
+  const detectDevice = (ua) => {
+    if (!ua) return '?';
+    if (/iPhone/.test(ua)) return '📱 iPhone';
+    if (/iPad/.test(ua)) return '📱 iPad';
+    if (/Android/.test(ua)) return '📱 Android';
+    if (/Mac/.test(ua)) return '💻 Mac';
+    if (/Windows/.test(ua)) return '💻 Windows';
+    return '🌐 דפדפן';
+  };
+  
+  return (
+    <div dir="rtl" className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-stone-950 rounded-2xl border-2 border-rose-800 w-full max-w-2xl my-8" onClick={e => e.stopPropagation()}>
+        {/* כותרת */}
+        <div className="flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-rose-950/40 to-stone-950">
+          <div className="flex items-center gap-2">
+            <Lock className="h-5 w-5 text-rose-400" />
+            <h2 className="text-lg font-extrabold text-rose-200">🔒 ניהול נעילות מכשירים</h2>
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-white p-1">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        
+        {/* הסבר */}
+        <div className="px-4 py-3 bg-stone-900/50 border-b border-stone-800">
+          <div className="text-xs text-stone-400 leading-relaxed">
+            כל מכשיר נעול למשתמש אחד. אם משתמש מחליף טלפון או מנקה דפדפן - שחרר את הנעילה כדי שיוכל להירשם שוב במכשיר חדש.
+          </div>
+        </div>
+        
+        {/* חיפוש */}
+        <div className="p-4 border-b border-stone-800">
+          <div className="relative">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="חיפוש משתמש..."
+              className="w-full rounded-lg border border-stone-700 bg-stone-900 pr-10 pl-4 py-2 text-sm text-white focus:outline-none focus:border-rose-600"
+            />
+          </div>
+        </div>
+        
+        {/* רשימת נעילות */}
+        <div className="p-3 max-h-96 overflow-y-auto">
+          {sortedLocks.length === 0 ? (
+            <div className="text-center py-8 text-stone-500 text-sm">
+              {search ? 'לא נמצאו תוצאות' : 'עדיין אין נעילות פעילות'}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {sortedLocks.map(([name, lock]) => {
+                const isCurrentDevice = lock.deviceId === currentDeviceId;
+                return (
+                  <div key={name}
+                    className={`rounded-lg border p-3 ${
+                      isCurrentDevice 
+                        ? 'bg-emerald-950/30 border-emerald-800' 
+                        : 'bg-stone-900 border-stone-800'
+                    }`}>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="font-bold text-stone-100">{name}</div>
+                      {isCurrentDevice && (
+                        <span className="text-xs text-emerald-400 font-bold">📍 המכשיר הזה</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-stone-400 flex flex-wrap gap-x-3 gap-y-1 mb-2">
+                      <span>{detectDevice(lock.userAgent)}</span>
+                      <span>נעול מ-{lock.lockedAt ? new Date(lock.lockedAt).toLocaleDateString('he-IL') : '?'}</span>
+                      {lock.autoLocked && <span className="text-amber-500">(הצמדה אוטומטית)</span>}
+                    </div>
+                    <div className="text-[10px] text-stone-600 font-mono mb-2 truncate" dir="ltr">
+                      {lock.deviceId}
+                    </div>
+                    {!isCurrentDevice && (
+                      <button
+                        onClick={() => onRelease(name)}
+                        className="w-full rounded-md bg-red-900/40 hover:bg-red-900/70 border border-red-800 py-1.5 text-xs text-red-200 font-bold transition"
+                      >
+                        🔓 שחרר נעילה
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        
+        {/* משתמשים ללא נעילה */}
+        {!search && unlockedPlayers.length > 0 && (
+          <div className="border-t border-stone-800">
+            <div className="px-4 py-2 bg-stone-900/50 text-xs text-stone-500 font-bold tracking-widest">
+              ללא נעילה ({unlockedPlayers.length})
+            </div>
+            <div className="px-4 py-2 text-xs text-stone-400 leading-relaxed">
+              {unlockedPlayers.join(' • ')}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// המארח של המפגש הבא רשום אוטומטית במקום #1
+// שחקנים אחרים לוחצים "אני בא" כדי להירשם למקומות 2-11 או לסטנד ביי (12+)
+// הרישום נפתח ב-12:00 בצהריים למחרת המפגש האחרון
+const RegistrationTab = ({ 
+  hostingSchedule, 
+  sessions,
+  currentUser, 
+  isAdmin, 
+  registration, 
+  onUpdate, 
+  players 
+}) => {
+  const MAX_SLOTS = 11; // מספר מקומות רשמיים
+  
+  // 🗓️ זיהוי המפגש הבא מ-hostingSchedule
+  const today = getTodayIsrael();
+  const nextSession = useMemo(() => {
+    if (!hostingSchedule || !Array.isArray(hostingSchedule)) return null;
+    return hostingSchedule
+      .filter(h => h.date >= today && h.host)
+      .sort((a, b) => a.date.localeCompare(b.date))[0] || null;
+  }, [hostingSchedule, today]);
+  
+  // 🕐 חישוב מצב פתיחה: 
+  // - הרשימה מתאפסת ב-10:00 בבוקר למחרת המפגש האחרון
+  // - הרישום נפתח ב-12:00 בצהריים למחרת המפגש האחרון  
+  const lastSessionDate = useMemo(() => {
+    if (!sessions || sessions.length === 0) return null;
+    const sorted = [...sessions].sort((a, b) => b.date.localeCompare(a.date));
+    return sorted[0]?.date || null;
+  }, [sessions]);
+  
+  // האם הרישום נפתח (אחרי 12:00 ביום שלמחרת המפגש האחרון, ולפני המפגש הבא)
+  const registrationOpenInfo = useMemo(() => {
+    if (!nextSession) return { isOpen: false, opensAt: null, reason: 'אין מפגש מתוכנן' };
+    
+    const now = new Date();
+    const nextDate = new Date(nextSession.date + 'T00:00:00');
+    
+    // אם המפגש כבר עבר - סגור
+    if (now > new Date(nextSession.date + 'T23:59:59')) {
+      return { isOpen: false, opensAt: null, reason: 'המפגש הסתיים' };
+    }
+    
+    // הרישום נפתח 12:00 ביום אחרי המפגש הקודם
+    let opensAt;
+    if (lastSessionDate && lastSessionDate < nextSession.date) {
+      const lastDate = new Date(lastSessionDate + 'T00:00:00');
+      opensAt = new Date(lastDate);
+      opensAt.setDate(opensAt.getDate() + 1);
+      opensAt.setHours(12, 0, 0, 0);
+    } else {
+      // אין מפגש קודם - פתוח מיד
+      opensAt = new Date(now.getTime() - 1000);
+    }
+    
+    if (now < opensAt) {
+      return { isOpen: false, opensAt, reason: 'הרישום עדיין לא נפתח' };
+    }
+    
+    return { isOpen: true, opensAt, reason: null };
+  }, [nextSession, lastSessionDate]);
+  
+  // 🔄 איפוס אוטומטי: אם המפגש האחרון השתנה ועברה השעה 10:00 למחרת
+  // הרשימה הנוכחית של ה-registration שייכת למפגש שכבר עבר -> ננקה
+  useEffect(() => {
+    if (!nextSession || !registration) return;
+    
+    // אם ה-registration מתייחס למפגש שכבר עבר - אפס
+    if (registration.sessionDate && registration.sessionDate !== nextSession.date) {
+      // בדיקה: האם השעה כבר אחרי 10:00 בבוקר ביום אחרי הסשן הישן
+      const oldDate = new Date(registration.sessionDate + 'T00:00:00');
+      const resetAt = new Date(oldDate);
+      resetAt.setDate(resetAt.getDate() + 1);
+      resetAt.setHours(10, 0, 0, 0);
+      
+      const now = new Date();
+      if (now >= resetAt) {
+        // איפוס + אכלוס מארח חדש אוטומטית
+        const fresh = {
+          sessionDate: nextSession.date,
+          host: nextSession.host,
+          entries: [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }],
+          resetAt: new Date().toISOString(),
+        };
+        onUpdate(fresh);
+      }
+    } else if (!registration.sessionDate || !registration.entries) {
+      // אין registration כלל - אתחל
+      const fresh = {
+        sessionDate: nextSession.date,
+        host: nextSession.host,
+        entries: [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }],
+        resetAt: new Date().toISOString(),
+      };
+      onUpdate(fresh);
+    }
+  }, [nextSession, registration, onUpdate]);
+  
+  // 📋 רשימת רשומים מסודרת לפי סדר ההצטרפות
+  const entries = registration?.entries || [];
+  const myEntry = entries.find(e => e.name === currentUser);
+  const myPosition = myEntry ? entries.indexOf(myEntry) + 1 : null;
+  const myStatus = myPosition ? (myPosition <= MAX_SLOTS ? 'registered' : 'standby') : null;
+  
+  // ➕ פעולה: אני בא
+  const handleJoin = async () => {
+    if (!currentUser) return;
+    if (entries.some(e => e.name === currentUser)) return; // כבר רשום
+    
+    const newEntries = [...entries, { 
+      name: currentUser, 
+      addedAt: new Date().toISOString(),
+      isHost: false 
+    }];
+    await onUpdate({ ...registration, entries: newEntries });
+  };
+  
+  // ➖ פעולה: ביטול (השחקן עצמו או אדמין)
+  const handleLeave = async (name) => {
+    if (!name) return;
+    // אדמין לא יכול להסיר את המארח (הוא שורש המפגש)
+    const entry = entries.find(e => e.name === name);
+    if (entry?.isHost) {
+      alert('לא ניתן להסיר את המארח. אם המארח לא יכול - שנה את לוח האירוחים.');
+      return;
+    }
+    const newEntries = entries.filter(e => e.name !== name);
+    await onUpdate({ ...registration, entries: newEntries });
+  };
+  
+  // ➕ אדמין: הוספת שחקן ידנית
+  const [adminAddOpen, setAdminAddOpen] = useState(false);
+  const [adminAddSearch, setAdminAddSearch] = useState('');
+  const handleAdminAdd = async (name) => {
+    if (entries.some(e => e.name === name)) return;
+    const newEntries = [...entries, {
+      name,
+      addedAt: new Date().toISOString(),
+      isHost: false,
+      addedByAdmin: true,
+    }];
+    await onUpdate({ ...registration, entries: newEntries });
+    setAdminAddOpen(false);
+    setAdminAddSearch('');
+  };
+  
+  const availableForAdmin = useMemo(() => {
+    const taken = new Set(entries.map(e => e.name));
+    return players.filter(p => !taken.has(p));
+  }, [players, entries]);
+  
+  // 🎨 רינדור
+  if (!nextSession) {
+    return (
+      <div className="rounded-2xl border border-stone-700 bg-stone-900/50 p-8 text-center text-stone-400">
+        <ClipboardList className="h-12 w-12 mx-auto mb-3 text-stone-600" />
+        <div className="text-lg font-bold mb-2">אין מפגש מתוכנן</div>
+        <div className="text-sm text-stone-500">רישום ייפתח ברגע שיוגדר מפגש בלוח האירוחים</div>
+      </div>
+    );
+  }
+  
+  const sessionDateFormatted = new Date(nextSession.date + 'T00:00:00').toLocaleDateString('he-IL', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
+  });
+  
+  const opensAtFormatted = registrationOpenInfo.opensAt ? 
+    registrationOpenInfo.opensAt.toLocaleDateString('he-IL', {
+      weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit'
+    }) : null;
+  
+  return (
+    <div className="space-y-4">
+      {/* 🏆 כותרת המפגש */}
+      <div className="rounded-2xl overflow-hidden border-2 border-amber-700 bg-gradient-to-br from-amber-950/60 via-stone-900 to-stone-950">
+        <div className="p-5 border-b border-amber-900/40">
+          <div className="flex items-center gap-2 mb-2">
+            <ClipboardList className="h-5 w-5 text-amber-400" />
+            <div className="text-xs text-amber-400 font-bold tracking-widest">REGISTRATION</div>
+          </div>
+          <div className="text-2xl font-extrabold text-amber-200 mb-1">המפגש הבא</div>
+          <div className="text-base text-stone-300">{sessionDateFormatted}</div>
+          <div className="text-sm text-stone-400 mt-1">
+            מארח: <span className="font-bold text-amber-300">{nextSession.host}</span>
+          </div>
+        </div>
+        
+        {/* מצב הרישום */}
+        {!registrationOpenInfo.isOpen ? (
+          <div className="p-4 bg-stone-900/60 border-t border-stone-800">
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="h-4 w-4 text-stone-500" />
+              <span className="text-stone-400">{registrationOpenInfo.reason}</span>
+            </div>
+            {opensAtFormatted && (
+              <div className="text-xs text-stone-500 mt-1">
+                ⏰ הרישום נפתח: <span className="text-amber-400 font-bold">{opensAtFormatted}</span>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 bg-emerald-950/30 border-t border-emerald-900/40">
+            <div className="flex items-center gap-2 text-sm text-emerald-300 font-bold">
+              <Check className="h-4 w-4" />
+              <span>הרישום פתוח</span>
+              <span className="text-stone-400 font-normal mr-auto">
+                {entries.length} / {MAX_SLOTS} {entries.length > MAX_SLOTS ? `(+${entries.length - MAX_SLOTS} סטנד-ביי)` : ''}
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* כפתור "אני בא" / "ביטול" - לעצמי */}
+      {registrationOpenInfo.isOpen && currentUser && (
+        <div>
+          {!myEntry ? (
+            <button
+              onClick={handleJoin}
+              className="w-full rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 text-white font-extrabold text-lg py-4 shadow-lg shadow-emerald-900/30 border border-emerald-500/40 flex items-center justify-center gap-2 transition active:scale-95"
+            >
+              <UserPlus className="h-5 w-5" />
+              אני בא 🎰
+            </button>
+          ) : (
+            <div className={`rounded-xl border-2 p-4 ${
+              myStatus === 'registered' 
+                ? 'bg-emerald-950/40 border-emerald-700' 
+                : 'bg-amber-950/40 border-amber-700'
+            }`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs text-stone-400 mb-0.5">סטטוס שלך</div>
+                  <div className={`text-base font-extrabold ${
+                    myStatus === 'registered' ? 'text-emerald-300' : 'text-amber-300'
+                  }`}>
+                    {myStatus === 'registered' 
+                      ? `✓ רשום במקום #${myPosition}` 
+                      : `⏳ סטנד-ביי #${myPosition - MAX_SLOTS}`}
+                  </div>
+                </div>
+                {!myEntry.isHost && (
+                  <button
+                    onClick={() => handleLeave(currentUser)}
+                    className="rounded-lg bg-red-900/60 hover:bg-red-800 border border-red-700 px-3 py-2 text-sm text-red-200 font-bold flex items-center gap-1.5"
+                  >
+                    <UserMinus className="h-4 w-4" />
+                    ביטול
+                  </button>
+                )}
+                {myEntry.isHost && (
+                  <div className="text-xs text-amber-500 italic">המארח 🏠</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* רשימת רשומים */}
+      <div className="rounded-2xl border border-stone-700 bg-stone-900/50 overflow-hidden">
+        <div className="px-4 py-3 bg-stone-900 border-b border-stone-800 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="h-4 w-4 text-amber-400" />
+            <div className="text-sm font-bold text-stone-200">רשימת נרשמים</div>
+          </div>
+          {isAdmin && registrationOpenInfo.isOpen && (
+            <button
+              onClick={() => setAdminAddOpen(!adminAddOpen)}
+              className="text-xs rounded-md bg-amber-900/40 hover:bg-amber-900/60 border border-amber-800 px-2 py-1 text-amber-300 font-bold flex items-center gap-1"
+            >
+              <Plus className="h-3 w-3" /> אדמין
+            </button>
+          )}
+        </div>
+        
+        {/* פאנל אדמין להוספה ידנית */}
+        {adminAddOpen && isAdmin && (
+          <div className="p-3 bg-amber-950/20 border-b border-amber-900/40">
+            <div className="text-xs text-amber-300 mb-2">בחר שחקן להוספה (כאדמין):</div>
+            <div className="relative mb-2">
+              <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
+              <input
+                type="text"
+                value={adminAddSearch}
+                onChange={e => setAdminAddSearch(e.target.value)}
+                placeholder="חיפוש..."
+                className="w-full rounded-md border border-stone-700 bg-stone-950 pr-8 pl-2 py-1.5 text-sm text-white placeholder-stone-500 focus:outline-none focus:border-amber-600"
+              />
+            </div>
+            <div className="grid grid-cols-3 md:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto">
+              {availableForAdmin
+                .filter(p => !adminAddSearch || p.toLowerCase().includes(adminAddSearch.toLowerCase()))
+                .map(p => (
+                  <button key={p} onClick={() => handleAdminAdd(p)}
+                    className="rounded-md px-2 py-1.5 text-sm bg-stone-800 text-stone-200 hover:bg-amber-700 hover:text-white transition">
+                    {p}
+                  </button>
+                ))}
+            </div>
+          </div>
+        )}
+        
+        {/* רשומים רשמיים (1-11) */}
+        {entries.length === 0 ? (
+          <div className="p-6 text-center text-stone-500 text-sm">
+            עדיין אין רשומים
+          </div>
+        ) : (
+          <div className="divide-y divide-stone-800">
+            {entries.slice(0, MAX_SLOTS).map((entry, idx) => {
+              const position = idx + 1;
+              const isMe = entry.name === currentUser;
+              return (
+                <div key={entry.name} 
+                  className={`flex items-center gap-3 px-4 py-2.5 ${isMe ? 'bg-emerald-950/20' : ''}`}>
+                  <div className="w-8 h-8 rounded-full bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center shrink-0">
+                    {position}
+                  </div>
+                  {PLAYER_AVATARS[entry.name] && (
+                    <PlayerAvatar name={entry.name} size={36} />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-stone-100 truncate">
+                      {entry.name}
+                      {entry.isHost && <span className="text-amber-400 mr-1.5">🏠</span>}
+                      {isMe && <span className="text-emerald-400 text-xs mr-1.5">(אני)</span>}
+                    </div>
+                  </div>
+                  {(isAdmin || isMe) && !entry.isHost && (
+                    <button
+                      onClick={() => handleLeave(entry.name)}
+                      className="text-stone-500 hover:text-red-400 p-1"
+                      title="הסר"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+            
+            {/* סטנד ביי (12+) */}
+            {entries.length > MAX_SLOTS && (
+              <>
+                <div className="px-4 py-2 bg-amber-950/20 border-y border-amber-900/40">
+                  <div className="text-xs font-bold text-amber-400 tracking-widest">סטנד ביי</div>
+                </div>
+                {entries.slice(MAX_SLOTS).map((entry, idx) => {
+                  const standbyPos = idx + 1;
+                  const isMe = entry.name === currentUser;
+                  return (
+                    <div key={entry.name}
+                      className={`flex items-center gap-3 px-4 py-2.5 ${isMe ? 'bg-amber-950/20' : 'bg-stone-900/30'}`}>
+                      <div className="w-8 h-8 rounded-full bg-amber-900/60 text-amber-300 font-extrabold text-xs flex items-center justify-center shrink-0">
+                        SB-{standbyPos}
+                      </div>
+                      {PLAYER_AVATARS[entry.name] && (
+                        <PlayerAvatar name={entry.name} size={36} />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-bold text-stone-300 truncate">
+                          {entry.name}
+                          {isMe && <span className="text-amber-400 text-xs mr-1.5">(אני)</span>}
+                        </div>
+                      </div>
+                      {(isAdmin || isMe) && (
+                        <button
+                          onClick={() => handleLeave(entry.name)}
+                          className="text-stone-500 hover:text-red-400 p-1"
+                          title="הסר"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      
+      {/* הסבר */}
+      <div className="rounded-xl bg-stone-900/40 border border-stone-800 p-3 text-xs text-stone-400 leading-relaxed">
+        <div className="font-bold text-stone-300 mb-1">📜 כללי הרישום</div>
+        <div>• {MAX_SLOTS} מקומות רשמיים • כל הקודם זוכה</div>
+        <div>• מקום 12 ומעלה - סטנד ביי, יעלה אוטומטית אם מישהו יבטל</div>
+        <div>• הרישום נפתח ב-12:00 בצהריים למחרת המפגש הקודם</div>
+      </div>
+    </div>
+  );
+};
+
 
 // ===== באנר 3 המארחים הבאים בדשבורד =====
 const NextHostsBanner = ({ hostingSchedule, onSeeAll }) => {
@@ -5308,7 +6194,7 @@ const LiveBroadcastViewer = ({ broadcast, onClose, currentUser }) => {
   );
 };
 
-const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adminName }) => {
+const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adminName, registration }) => {
   const [sessionDate, setSessionDate] = useState(new Date().toISOString().split('T')[0]);
   const [host, setHost] = useState('');
   const [participants, setParticipants] = useState([]); // [{name, buyIns: 1}]
@@ -5683,6 +6569,13 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                       <div className="text-xs text-stone-400">בחר שחקנים (מספר אנשים בו זמנית):</div>
                       <div className="text-xs text-amber-400 font-bold">{pendingAdditions.length} נבחרו</div>
                     </div>
+                    {/* 🆕 הסבר סימונים - אם יש רישום פעיל */}
+                    {registration?.entries && registration.entries.length > 0 && (
+                      <div className="text-[10px] text-stone-500 mb-2 flex flex-wrap gap-x-3 gap-y-1">
+                        <span>⭐ רשום למפגש (להכניס קודם)</span>
+                        <span>⏳ סטנד-ביי</span>
+                      </div>
+                    )}
                     {/* 🆕 שדה חיפוש */}
                     <div className="relative mb-2">
                       <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
@@ -5695,22 +6588,44 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                       />
                     </div>
                     <div className="grid grid-cols-3 md:grid-cols-4 gap-1.5 max-h-60 overflow-y-auto">
-                      {availablePlayers
-                        .filter(p => !playerSearch || p.toLowerCase().includes(playerSearch.toLowerCase()))
-                        .map(p => {
-                        const isSelected = pendingAdditions.includes(p);
-                        return (
-                          <button key={p} onClick={() => togglePending(p)}
-                            className={`rounded-md px-2 py-2 text-sm transition flex items-center justify-center gap-1 ${
-                              isSelected
-                                ? 'bg-amber-700 text-white font-bold ring-2 ring-amber-400'
-                                : 'bg-stone-800 text-stone-200 hover:bg-stone-700'
-                            }`}>
-                            {isSelected && <Check className="h-3 w-3" />}
-                            {p}
-                          </button>
-                        );
-                      })}
+                      {(() => {
+                        // 🆕 שחקנים רשומים מראש (מתוך טאב הרישום)
+                        const registeredSet = new Set((registration?.entries || []).map(e => e.name));
+                        const filtered = availablePlayers
+                          .filter(p => !playerSearch || p.toLowerCase().includes(playerSearch.toLowerCase()));
+                        // מיון: רשומים קודם, אחרי זה לפי סדר א-ב המקורי
+                        const sorted = [...filtered].sort((a, b) => {
+                          const aReg = registeredSet.has(a);
+                          const bReg = registeredSet.has(b);
+                          if (aReg && !bReg) return -1;
+                          if (!aReg && bReg) return 1;
+                          return 0;
+                        });
+                        return sorted.map(p => {
+                          const isSelected = pendingAdditions.includes(p);
+                          const isRegistered = registeredSet.has(p);
+                          // מיקום ברשימת הרישום (1-11 רשמי, 12+ סטנד-ביי)
+                          const regIdx = isRegistered ? 
+                            (registration?.entries || []).findIndex(e => e.name === p) : -1;
+                          const isStandby = regIdx >= 11;
+                          return (
+                            <button key={p} onClick={() => togglePending(p)}
+                              className={`rounded-md px-2 py-2 text-sm transition flex items-center justify-center gap-1 relative ${
+                                isSelected
+                                  ? 'bg-amber-700 text-white font-bold ring-2 ring-amber-400'
+                                  : isRegistered
+                                    ? (isStandby
+                                        ? 'bg-amber-950/50 text-amber-200 ring-1 ring-amber-700 hover:bg-amber-900/60'
+                                        : 'bg-emerald-950/60 text-emerald-200 ring-1 ring-emerald-600 hover:bg-emerald-900/60')
+                                    : 'bg-stone-800 text-stone-200 hover:bg-stone-700'
+                              }`}>
+                              {isSelected ? <Check className="h-3 w-3" /> : 
+                                isRegistered ? (isStandby ? '⏳' : '⭐') : null}
+                              <span>{p}</span>
+                            </button>
+                          );
+                        });
+                      })()}
                     </div>
                     <div className="flex gap-2 mt-3">
                       <button onClick={() => { cancelAddPlayers(); setPlayerSearch(''); }} className="flex-1 rounded-lg border border-stone-700 bg-stone-800 py-2 text-xs text-stone-300">ביטול</button>
@@ -8986,6 +9901,14 @@ export default function PokerApp() {
   const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [adminName, setAdminName] = useState(null); // null = לא מחובר כמנהל
+  // 👑 רמת אדמין: 'super' (סופר אדמין) או 'admin' (אדמין רגיל) או null
+  const [adminRole, setAdminRole] = useState(null);
+  // ⚙️ הרשאות לאדמין רגיל - {liveSession: true, photoSession: true, ...}
+  const [adminPermissions, setAdminPermissions] = useState(getDefaultPermissions());
+  // 🔐 hash של סיסמת סופר אדמין (נשמר ב-Firebase, ריק אם טרם הוגדר)
+  const [superAdminPasswordHash, setSuperAdminPasswordHash] = useState('');
+  // 🔓 מסך ניהול הרשאות (רק לסופר אדמין)
+  const [permissionsManagerOpen, setPermissionsManagerOpen] = useState(false);
   // 🆕 רשימת המנהלים - נטענת מ-Firebase
   const [adminNamesList, setAdminNamesList] = useState(ADMIN_NAMES);
   const [manageAdminsOpen, setManageAdminsOpen] = useState(false);
@@ -8994,6 +9917,20 @@ export default function PokerApp() {
   // 🆕 ימי הולדת של שחקנים {שם: 'DD/MM'}
   const [birthdays, setBirthdays] = useState(DEFAULT_BIRTHDAYS);
   const [birthdayPopup, setBirthdayPopup] = useState(null); // { name, age } או null
+  // 🆕 רישום למפגש הבא - מסונכרן ב-Firebase
+  const [registration, setRegistration] = useState(null);
+  // 🔒 הפעלת/כיבוי הטאב גלובלית (אדמין)
+  const [registrationEnabled, setRegistrationEnabled] = useState(false);
+  // 🔐 נעילות מכשירים: {playerName: {deviceId, lockedAt, userAgent}}
+  const [deviceLocks, setDeviceLocks] = useState({});
+  // 🆔 מזהה המכשיר הנוכחי (קבוע)
+  const [deviceId] = useState(() => getOrCreateDeviceId());
+  // 🚫 הודעת חסימה - "השם תפוס במכשיר אחר"
+  const [lockBlockedName, setLockBlockedName] = useState(null);
+  // 🎭 התחזות לאדמין - שומר את האדמין האמיתי
+  const [impersonating, setImpersonating] = useState(null); // null או שם השחקן שמתחזים אליו
+  // 📋 פאנל אדמין לניהול נעילות
+  const [deviceLocksManagerOpen, setDeviceLocksManagerOpen] = useState(false);
   // 🆕 כניסה אחרונה לכל משתמש {שם: timestamp ISO}
   const [lastLogins, setLastLogins] = useState({});
   const [loading, setLoading] = useState(true);
@@ -9280,21 +10217,94 @@ export default function PokerApp() {
         }
       }
       
+      // 🆕 טעינת מצב הרישום למפגש הבא
+      try {
+        const savedReg = await loadState(REGISTRATION_KEY);
+        if (savedReg) setRegistration(savedReg);
+        const savedRegEnabled = await loadState(REGISTRATION_ENABLED_KEY);
+        if (savedRegEnabled?.enabled) setRegistrationEnabled(true);
+      } catch {}
+      
+      // 🔐 טעינת נעילות מכשירים
+      let currentLocks = {};
+      try {
+        const savedLocks = await loadState(DEVICE_LOCKS_KEY);
+        if (savedLocks && typeof savedLocks === 'object') {
+          currentLocks = savedLocks;
+          setDeviceLocks(savedLocks);
+        }
+      } catch {}
+      
       // טעינת המשתמש שנבחר בעבר
       try {
         const savedUser = window.localStorage.getItem('poker_user_name');
         if (savedUser) {
-          setCurrentUser(savedUser);
-          setShowSplash(false); // אם כבר נכנסת בעבר, מדלגים על הספלאש
-          // 🆕 עדכון זמן כניסה אחרון - לטעינה אוטומטית
-          const now = new Date().toISOString();
-          const baseLogins = (savedLogins && typeof savedLogins === 'object') ? savedLogins : {};
-          const updatedLogins = { ...baseLogins, [savedUser]: now };
-          setLastLogins(updatedLogins);
-          try { await saveState(updatedLogins, LAST_LOGIN_KEY); } catch {}
+          // 🔐 בדיקת נעילת מכשיר
+          const userLock = currentLocks[savedUser];
+          if (userLock && userLock.deviceId !== deviceId) {
+            // השם נעול במכשיר אחר! - לא מאפשרים כניסה
+            // נמחק את ה-localStorage המקומי כדי שלא ינסה שוב בלולאה
+            try { 
+              window.localStorage.removeItem('poker_user_name');
+              window.localStorage.removeItem('poker_admin_name');
+            } catch {}
+            setLockBlockedName(savedUser);
+            setShowSplash(false);
+          } else {
+            setCurrentUser(savedUser);
+            setShowSplash(false); // אם כבר נכנסת בעבר, מדלגים על הספלאש
+            
+            // 🔐 הצמדה אוטומטית למכשיר הנוכחי (אם עדיין לא נעול)
+            if (!userLock) {
+              const newLock = {
+                deviceId,
+                lockedAt: new Date().toISOString(),
+                userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent.slice(0, 200) : '',
+                autoLocked: true, // סימון - נעילה אוטומטית של משתמש קיים
+              };
+              const updatedLocks = { ...currentLocks, [savedUser]: newLock };
+              currentLocks = updatedLocks;
+              setDeviceLocks(updatedLocks);
+              try { await saveState(updatedLocks, DEVICE_LOCKS_KEY); } catch {}
+            }
+            
+            // 🆕 עדכון זמן כניסה אחרון - לטעינה אוטומטית
+            const now = new Date().toISOString();
+            const baseLogins = (savedLogins && typeof savedLogins === 'object') ? savedLogins : {};
+            const updatedLogins = { ...baseLogins, [savedUser]: now };
+            setLastLogins(updatedLogins);
+            try { await saveState(updatedLogins, LAST_LOGIN_KEY); } catch {}
+          }
         }
         const savedAdmin = window.localStorage.getItem('poker_admin_name');
-        if (savedAdmin) setAdminName(savedAdmin);
+        const savedRole = window.localStorage.getItem('poker_admin_role');
+        if (savedAdmin) {
+          setAdminName(savedAdmin);
+          // 👑 אם יש role שמור - השתמש בו, אחרת ברירת מחדל אדמין רגיל
+          // אם המשתמש הוא בסופר אדמינים והיה מחובר - שמירה על הרמה
+          if (savedRole === 'super' && SUPER_ADMINS.includes(savedAdmin)) {
+            setAdminRole('super');
+          } else {
+            setAdminRole('admin');
+          }
+        }
+      } catch {}
+      
+      // 🆕 טעינת הרשאות אדמין רגיל מ-Firebase
+      try {
+        const savedPerms = await loadState(ADMIN_PERMISSIONS_KEY);
+        if (savedPerms && typeof savedPerms === 'object') {
+          // איחוד עם ברירות מחדל - אם נוסף פיצ'ר חדש אחר-כך, יקבל ברירת מחדל
+          setAdminPermissions({ ...getDefaultPermissions(), ...savedPerms });
+        }
+      } catch {}
+      
+      // 🔐 טעינת hash סיסמת סופר אדמין מ-Firebase
+      try {
+        const savedHash = await loadState(SUPER_ADMIN_PASSWORD_KEY);
+        if (savedHash && typeof savedHash === 'object' && savedHash.hash) {
+          setSuperAdminPasswordHash(savedHash.hash);
+        }
       } catch {}
       
       setLoading(false);
@@ -9705,8 +10715,30 @@ export default function PokerApp() {
   };
 
   const handleUserSelect = async (name) => {
+    // 🔐 בדיקת נעילה - האם השם הזה כבר תפוס במכשיר אחר?
+    // (אם זה מכשיר זה - נמשיך כרגיל)
+    const existingLock = deviceLocks[name];
+    if (existingLock && existingLock.deviceId !== deviceId) {
+      setLockBlockedName(name);
+      return;
+    }
+    
     setCurrentUser(name);
     try { window.localStorage.setItem('poker_user_name', name); } catch {}
+    
+    // 🔐 נעילה אוטומטית של המכשיר לשם הזה
+    if (!existingLock) {
+      const newLock = {
+        deviceId,
+        lockedAt: new Date().toISOString(),
+        userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent.slice(0, 200) : '',
+        autoLocked: false, // נעילה רגילה - בחר את עצמו
+      };
+      const updatedLocks = { ...deviceLocks, [name]: newLock };
+      setDeviceLocks(updatedLocks);
+      try { await saveState(updatedLocks, DEVICE_LOCKS_KEY); } catch {}
+    }
+    
     // 🆕 אם אין למשתמש טלפון - הצג מסך הזדהות
     if (!phones[name] || !phones[name].phone) {
       setPhoneSetupOpen(true);
@@ -9722,14 +10754,51 @@ export default function PokerApp() {
     }
   };
 
+  // 🚫 החלפת משתמש - חסום למשתמשים רגילים (Device Lock)
+  // 🎭 לאדמינים עם הרשאת impersonate - מאפשר "התחזות" לבדיקות (לא משחרר את הנעילה)
   const handleSwitchUser = () => {
-    if (!confirm('להחליף משתמש?')) return;
+    // אם משתמש רגיל / אדמין ללא הרשאת התחזות - חסום
+    if (!can('impersonate') && currentUser) {
+      alert('🔒 לא ניתן להחליף משתמש. כל מכשיר נעול למשתמש שלו.\nאם החלפת טלפון או שיש בעיה, פנה לרון.');
+      return;
+    }
+    // אדמין עם הרשאה - פותח מסך בחירה כ"התחזות"
+    if (can('impersonate') && currentUser) {
+      const ok = confirm('🎭 התחזות כמשתמש אחר?\n(לבדיקות בלבד - הנעילה של המשתמש המקורי לא תשתחרר)');
+      if (!ok) return;
+      // שומר את האדמין האמיתי כדי לחזור אליו
+      setImpersonating(currentUser);
+      setCurrentUser(null);
+      // לא מוחקים את poker_user_name ולא משחררים נעילה
+      return;
+    }
+    // אם אין משתמש - פשוט פותח מסך בחירה
     setCurrentUser(null);
-    setAdminName(null);
-    try {
-      window.localStorage.removeItem('poker_user_name');
-      window.localStorage.removeItem('poker_admin_name');
-    } catch {}
+  };
+  
+  // 🎭 חזרה מהתחזות לאדמין המקורי
+  const handleStopImpersonating = () => {
+    if (!impersonating) return;
+    setCurrentUser(impersonating);
+    setImpersonating(null);
+  };
+  
+  // 🎭 בחירה במצב התחזות (אדמין בוחר משתמש אחר ללא נעילה)
+  const handleImpersonate = async (name) => {
+    setCurrentUser(name);
+    // לא נוגעים ב-localStorage ולא נועלים מכשיר
+    // לא שומרים זמן כניסה
+  };
+  
+  // 🔓 שחרור נעילת מכשיר (אדמין בלבד)
+  const handleReleaseLock = async (playerName) => {
+    if (!confirm(`לשחרר את הנעילה של "${playerName}"?\nהמשתמש יוכל להירשם שוב במכשיר אחר.`)) return;
+    const updatedLocks = { ...deviceLocks };
+    delete updatedLocks[playerName];
+    setDeviceLocks(updatedLocks);
+    try { await saveState(updatedLocks, DEVICE_LOCKS_KEY); } catch (e) {
+      console.error('Failed to save device locks:', e);
+    }
   };
 
   const isAdminEligible = currentUser && adminNamesList.includes(currentUser);
@@ -9798,6 +10867,42 @@ export default function PokerApp() {
     await persistSessions(updated, players);
   };
 
+  // 🆕 עדכון רישום למפגש הבא (כתיבה ל-Firebase)
+  const handleUpdateRegistration = async (newReg) => {
+    setRegistration(newReg);
+    try {
+      await saveState(newReg, REGISTRATION_KEY);
+    } catch (e) {
+      console.error('Failed to save registration:', e);
+    }
+  };
+
+  // 🔒 הפעלה/כיבוי הטאב גלובלית (אדמין בלבד)
+  const handleToggleRegistrationFeature = async () => {
+    const newVal = !registrationEnabled;
+    setRegistrationEnabled(newVal);
+    try {
+      await saveState({ enabled: newVal, toggledAt: new Date().toISOString(), toggledBy: adminName }, REGISTRATION_ENABLED_KEY);
+    } catch (e) {
+      console.error('Failed to toggle registration feature:', e);
+    }
+  };
+  
+  // 🔄 רענון אוטומטי של הרישום כל 20 שניות (סנכרון בין משתמשים)
+  useEffect(() => {
+    if (!registrationEnabled) return;
+    const interval = setInterval(async () => {
+      try {
+        const fresh = await loadState(REGISTRATION_KEY);
+        if (fresh) setRegistration(fresh);
+        const enabled = await loadState(REGISTRATION_ENABLED_KEY);
+        if (enabled) setRegistrationEnabled(!!enabled.enabled);
+      } catch {}
+    }, 20000);
+    return () => clearInterval(interval);
+  }, [registrationEnabled]);
+
+
   const handleReset = async () => {
     if (!confirm('לאפס את כל הנתונים לברירת המחדל? זה ימחק את כל השינויים!')) return;
     setAllSessions(ALL_INITIAL_SESSIONS); setPlayers(INITIAL_PLAYERS);
@@ -9826,10 +10931,49 @@ export default function PokerApp() {
     } catch (err) { alert('קובץ לא תקין'); }
   };
 
-  const handleAdminLogin = async (name) => {
+  const handleAdminLogin = async (name, role = 'admin') => {
     setAdminName(name);
-    // שמירה של שם המנהל באחסון המקומי של הדפדפן (לא במרכזי) כדי שיישאר מחובר
-    try { window.localStorage.setItem('poker_admin_name', name); } catch {}
+    setAdminRole(role);
+    // שמירה של שם המנהל ורמתו באחסון המקומי
+    try { 
+      window.localStorage.setItem('poker_admin_name', name);
+      window.localStorage.setItem('poker_admin_role', role);
+    } catch {}
+  };
+  
+  // 🔐 שמירת hash של סיסמת סופר אדמין ב-Firebase (פעם ראשונה / שינוי)
+  const handleSetSuperAdminPassword = async (hash) => {
+    setSuperAdminPasswordHash(hash);
+    await saveState({
+      hash,
+      updatedAt: new Date().toISOString(),
+      updatedBy: currentUser,
+    }, SUPER_ADMIN_PASSWORD_KEY);
+  };
+  
+  // 🔑 שינוי סיסמת סופר אדמין (מהאפליקציה)
+  const handleChangeSuperAdminPassword = async () => {
+    const oldPwd = prompt('הכנס את הסיסמה הנוכחית:');
+    if (!oldPwd) return;
+    const oldHash = await hashPassword(oldPwd);
+    if (oldHash !== superAdminPasswordHash) {
+      alert('❌ הסיסמה הנוכחית שגויה');
+      return;
+    }
+    const newPwd = prompt('הכנס סיסמה חדשה (לפחות 6 תווים):');
+    if (!newPwd) return;
+    if (newPwd.length < 6) {
+      alert('❌ סיסמה חייבת לכלול לפחות 6 תווים');
+      return;
+    }
+    const confirmPwd = prompt('אמת את הסיסמה החדשה:');
+    if (newPwd !== confirmPwd) {
+      alert('❌ הסיסמאות לא תואמות');
+      return;
+    }
+    const newHash = await hashPassword(newPwd);
+    await handleSetSuperAdminPassword(newHash);
+    alert('✅ הסיסמה עודכנה בהצלחה');
   };
 
   // 🆕 הוספת מנהל חדש לרשימה
@@ -9846,6 +10990,10 @@ export default function PokerApp() {
       alert('אי אפשר להסיר את המנהל היחיד - חייב להיות לפחות מנהל אחד');
       return;
     }
+    if (SUPER_ADMINS.includes(nameToRemove)) {
+      alert('אי אפשר להסיר סופר אדמין דרך כאן.');
+      return;
+    }
     if (nameToRemove === adminName) {
       const ok = window.confirm(`אתה עומד להסיר את עצמך (${nameToRemove}) מרשימת המנהלים. אחרי זה תצטרך מנהל אחר שיוסיף אותך חזרה. להמשיך?`);
       if (!ok) return;
@@ -9857,7 +11005,21 @@ export default function PokerApp() {
 
   const handleLogout = () => {
     setAdminName(null);
-    try { window.localStorage.removeItem('poker_admin_name'); } catch {}
+    setAdminRole(null);
+    try { 
+      window.localStorage.removeItem('poker_admin_name');
+      window.localStorage.removeItem('poker_admin_role');
+    } catch {}
+  };
+  
+  // 🆕 עדכון הרשאות לאדמין רגיל (סופר אדמין בלבד)
+  const handleUpdatePermissions = async (newPerms) => {
+    setAdminPermissions(newPerms);
+    try {
+      await saveState(newPerms, ADMIN_PERMISSIONS_KEY);
+    } catch (e) {
+      console.error('Failed to save permissions:', e);
+    }
   };
 
   // בדיקה אם יש שם מנהל שמור מקומית (נשמר בדפדפן)
@@ -9881,6 +11043,22 @@ export default function PokerApp() {
   };
 
   const isAdmin = !!adminName;
+  // 👑 האם המשתמש הנוכחי הוא סופר אדמין?
+  const isSuperAdmin = isAdmin && adminRole === 'super';
+  
+  // 🔐 פונקציה מרכזית לבדיקת הרשאה לפיצ'ר
+  // can('liveSession') -> true/false
+  const can = (featureKey) => {
+    if (!isAdmin) return false;
+    // סופר אדמין יכול הכל
+    if (isSuperAdmin) return true;
+    // אדמין רגיל - לפי הרשאות מוגדרות
+    const feature = PERMISSIONS_REGISTRY.find(p => p.key === featureKey);
+    if (!feature) return false; // פיצ'ר לא מוכר
+    if (feature.superOnly) return false; // פיצ'ר ננעל לסופר אדמין בלבד
+    return adminPermissions[featureKey] !== false; // ברירת מחדל: לפי adminPermissions
+  };
+  
   const latestDate = getLatestSessionDate(sessions);
 
   if (loading) {
@@ -9896,9 +11074,44 @@ export default function PokerApp() {
     return <SplashScreen onEnter={() => setShowSplash(false)} />;
   }
 
+  // 🔐 מסך חסימה - השם תפוס במכשיר אחר
+  if (lockBlockedName) {
+    return (
+      <div dir="rtl" className="min-h-screen flex items-center justify-center p-4" style={{
+        background: 'radial-gradient(ellipse at center, #0f5132 0%, #0a3520 50%, #041810 100%)',
+        fontFamily: 'Assistant, sans-serif'
+      }}>
+        <div className="max-w-md w-full rounded-2xl border-2 border-red-700 bg-stone-950/90 p-6 text-center">
+          <div className="text-6xl mb-4">🔒</div>
+          <div className="text-2xl font-extrabold text-red-300 mb-2">השם הזה תפוס</div>
+          <div className="text-base text-stone-200 mb-4">
+            <span className="font-bold text-amber-300">"{lockBlockedName}"</span> כבר נרשם במכשיר אחר
+          </div>
+          <div className="rounded-lg bg-stone-900 border border-stone-800 p-3 text-sm text-stone-300 mb-4 leading-relaxed">
+            כל מכשיר נעול למשתמש אחד.<br/>
+            אם זה אתה והחלפת טלפון - תפנה לרון או לגילי כדי לשחרר את הנעילה.
+          </div>
+          <button
+            onClick={() => setLockBlockedName(null)}
+            className="w-full rounded-xl bg-stone-700 hover:bg-stone-600 text-white font-bold py-3 transition"
+          >
+            חזרה
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   // מסך בחירת משתמש (אם עוד לא בחר)
   if (!currentUser) {
-    return <UserSelectScreen players={sortedActivePlayers} onSelect={handleUserSelect} />;
+    return <UserSelectScreen 
+      players={sortedActivePlayers} 
+      onSelect={impersonating ? handleImpersonate : handleUserSelect}
+      deviceLocks={deviceLocks}
+      currentDeviceId={deviceId}
+      impersonating={impersonating}
+      onCancelImpersonate={handleStopImpersonating}
+    />;
   }
 
   // מסך מלא לגרף
@@ -9921,9 +11134,12 @@ export default function PokerApp() {
     { id: 'champions', label: '🏆 MVP', icon: Trophy },
     { id: 'charts', label: 'תובנות', icon: BarChart3 },
     { id: 'hosting', label: 'אירוחים', icon: Calendar },
+    // 🆕 רישום למפגש הבא - גלוי אם הופעל גלובלית, או תמיד לאדמין
+    // 🆕 רישום למפגש הבא - גלוי אם הופעל גלובלית, או למי שיש לו הרשאת ניהול
+    ...((registrationEnabled || can('registrationToggle')) ? [{ id: 'registration', label: '📝 רישום למפגש', icon: ClipboardList }] : []),
     { id: 'gallery', label: 'גלריה', icon: ImageIcon },
-    // 🔒 היסטוריה - רק למנהלים
-    ...(isAdmin ? [{ id: 'history', label: 'היסטוריה', icon: History }] : []),
+    // 🔒 היסטוריה - רק למי שיש לו הרשאה למחוק מפגשים
+    ...(can('deleteSession') ? [{ id: 'history', label: 'היסטוריה', icon: History }] : []),
     { id: 'quotes', label: '🪶 אמרות כנף', icon: Quote },
   ];
 
@@ -9975,9 +11191,17 @@ export default function PokerApp() {
 
               {/* תגית המשתמש הנוכחי */}
               <button onClick={handleSwitchUser}
-                className="flex items-center gap-2 rounded-lg bg-stone-900/70 border border-stone-700 px-3 py-1.5 text-sm text-stone-200 hover:bg-stone-800 transition">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                <span>שלום, <span className="font-bold text-amber-300">{currentUser}</span></span>
+                className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition ${
+                  impersonating 
+                    ? 'bg-purple-900/40 border-purple-700 text-purple-100 hover:bg-purple-900/60' 
+                    : 'bg-stone-900/70 border-stone-700 text-stone-200 hover:bg-stone-800'
+                }`}
+                title={can('impersonate') ? (impersonating ? 'מתחזה - לחץ לחזור' : 'התחזה למשתמש אחר') : 'מכשיר נעול - לא ניתן להחליף'}>
+                <div className={`w-2 h-2 rounded-full ${impersonating ? 'bg-purple-400' : 'bg-emerald-400'}`} />
+                <span>
+                  {impersonating ? '🎭 ' : 'שלום, '}
+                  <span className="font-bold text-amber-300">{currentUser}</span>
+                </span>
               </button>
 
               <select value={selectedSeason} onChange={e => setSelectedSeason(Number(e.target.value))}
@@ -10158,7 +11382,52 @@ export default function PokerApp() {
             onUpdate={handleHostingUpdate} adminName={adminName} />
         )}
 
-        {tab === 'history' && isAdmin && <SessionHistory sessions={sessions} onDelete={handleDeleteSession} isAdmin={isAdmin} />}
+        {tab === 'registration' && (
+          <div className="space-y-4">
+            {/* 🔒 כפתור הפעלה/כיבוי - מי שיש לו הרשאת registrationToggle בלבד */}
+            {can('registrationToggle') && (
+              <div className={`rounded-xl p-3 border-2 ${
+                registrationEnabled 
+                  ? 'bg-emerald-950/30 border-emerald-700' 
+                  : 'bg-stone-900 border-amber-800/60'
+              }`}>
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-bold text-amber-400 mb-0.5">🔒 אדמין</div>
+                    <div className="text-sm text-stone-200">
+                      הפיצ'ר {registrationEnabled ? 
+                        <span className="text-emerald-300 font-bold">פעיל אצל כולם</span> : 
+                        <span className="text-stone-400 font-bold">מוסתר משאר המשתמשים</span>
+                      }
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleToggleRegistrationFeature}
+                    className={`rounded-lg px-4 py-2 text-sm font-bold transition ${
+                      registrationEnabled
+                        ? 'bg-stone-700 hover:bg-stone-600 text-stone-200'
+                        : 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                    }`}
+                  >
+                    {registrationEnabled ? 'כבה גלובלית' : 'הפעל לכולם'}
+                  </button>
+                </div>
+              </div>
+            )}
+            
+            <RegistrationTab
+              hostingSchedule={hostingSchedule}
+              sessions={allSessions}
+              currentUser={currentUser}
+              isAdmin={isAdmin}
+              registration={registration}
+              onUpdate={handleUpdateRegistration}
+              players={activePlayers}
+            />
+          </div>
+        )}
+
+        {tab === 'history' && can('deleteSession') && <SessionHistory sessions={sessions} onDelete={handleDeleteSession} isAdmin={isAdmin} />}
 
         {tab === 'gallery' && (
           <GalleryTab 
@@ -10220,18 +11489,40 @@ export default function PokerApp() {
               <div className="text-xs text-stone-500 mb-1">מחובר כ:</div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <span className="font-bold text-amber-300 text-lg">{currentUser}</span>
-                  {isAdmin && (
-                    <span className="rounded-md bg-emerald-950/50 border border-emerald-800/50 px-2 py-0.5 text-xs text-emerald-300 font-bold">
-                      מנהל
+                  <div className={`w-2 h-2 rounded-full ${impersonating ? 'bg-purple-400' : 'bg-emerald-400'}`} />
+                  <span className="font-bold text-amber-300 text-lg">
+                    {impersonating ? '🎭 ' : ''}{currentUser}
+                  </span>
+                  {isAdmin && !impersonating && (
+                    isSuperAdmin ? (
+                      <span className="rounded-md bg-amber-950/50 border border-amber-700/50 px-2 py-0.5 text-xs text-amber-300 font-bold flex items-center gap-1">
+                        👑 סופר אדמין
+                      </span>
+                    ) : (
+                      <span className="rounded-md bg-emerald-950/50 border border-emerald-800/50 px-2 py-0.5 text-xs text-emerald-300 font-bold">
+                        מנהל
+                      </span>
+                    )
+                  )}
+                  {impersonating && (
+                    <span className="rounded-md bg-purple-950/50 border border-purple-800/50 px-2 py-0.5 text-xs text-purple-300 font-bold">
+                      התחזות
                     </span>
                   )}
                 </div>
-                <button onClick={() => { setMenuOpen(false); handleSwitchUser(); }}
-                  className="text-xs text-stone-400 hover:text-amber-300 underline">
-                  החלף
-                </button>
+                {/* 🎭 רק לאדמינים שיש להם הרשאת התחזות - כפתור התחזות */}
+                {can('impersonate') && !impersonating && (
+                  <button onClick={() => { setMenuOpen(false); handleSwitchUser(); }}
+                    className="text-xs text-stone-400 hover:text-amber-300 underline">
+                    התחזה
+                  </button>
+                )}
+                {impersonating && (
+                  <button onClick={() => { setMenuOpen(false); handleStopImpersonating(); }}
+                    className="text-xs text-purple-300 hover:text-purple-200 underline font-bold">
+                    חזרה ל-{impersonating}
+                  </button>
+                )}
               </div>
               {/* 🆕 כפתור פרטי תשלום */}
               <button onClick={() => { setMenuOpen(false); setPhoneEditOpen(true); }}
@@ -10278,39 +11569,78 @@ export default function PokerApp() {
             {/* פעולות מנהל */}
             {isAdmin && (
               <div className="px-5 py-4 border-b border-stone-800 space-y-2">
-                <div className="text-xs text-stone-500 tracking-wider font-bold uppercase">עדכון ערב</div>
-                <button onClick={() => { setMenuOpen(false); setLiveModalOpen(true); }}
-                  className="relative w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-emerald-700/80 to-emerald-800/80 border border-emerald-700/50 px-4 py-3 text-white font-bold hover:from-emerald-600 hover:to-emerald-700 transition text-sm">
-                  <span className="text-xl">🎰</span>
-                  <span>עדכון ערב בלייב</span>
-                  {hasLiveSession && (
-                    <span className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
-                  )}
-                </button>
-                <button onClick={() => { setMenuOpen(false); setModalOpen(true); }}
-                  className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-blue-700/80 to-blue-800/80 border border-blue-700/50 px-4 py-3 text-white font-bold hover:from-blue-600 hover:to-blue-700 transition text-sm">
-                  <span className="text-xl">📸</span>
-                  <span>עדכון ערב בתמונה</span>
-                </button>
+                <div className="text-xs text-stone-500 tracking-wider font-bold uppercase flex items-center justify-between">
+                  <span>פעולות {isSuperAdmin ? 'סופר אדמין 👑' : 'מנהל'}</span>
+                  {isSuperAdmin && <span className="text-amber-400 text-[10px]">גישה מלאה</span>}
+                </div>
+                {can('liveSession') && (
+                  <button onClick={() => { setMenuOpen(false); setLiveModalOpen(true); }}
+                    className="relative w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-emerald-700/80 to-emerald-800/80 border border-emerald-700/50 px-4 py-3 text-white font-bold hover:from-emerald-600 hover:to-emerald-700 transition text-sm">
+                    <span className="text-xl">🎰</span>
+                    <span>עדכון ערב בלייב</span>
+                    {hasLiveSession && (
+                      <span className="absolute top-2 left-2 w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                    )}
+                  </button>
+                )}
+                {can('photoSession') && (
+                  <button onClick={() => { setMenuOpen(false); setModalOpen(true); }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-blue-700/80 to-blue-800/80 border border-blue-700/50 px-4 py-3 text-white font-bold hover:from-blue-600 hover:to-blue-700 transition text-sm">
+                    <span className="text-xl">📸</span>
+                    <span>עדכון ערב בתמונה</span>
+                  </button>
+                )}
                 {/* 🆕 כפתור ניהול משתמשים (טלפונים + הסתרה + הוספה) */}
-                <button onClick={() => { setMenuOpen(false); setAdminPhonesOpen(true); }}
-                  className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-purple-700/80 to-purple-800/80 border border-purple-700/50 px-4 py-3 text-white font-bold hover:from-purple-600 hover:to-purple-700 transition text-sm">
-                  <span className="text-xl">👥</span>
-                  <span>ניהול משתמשים</span>
-                </button>
+                {can('managePlayers') && (
+                  <button onClick={() => { setMenuOpen(false); setAdminPhonesOpen(true); }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-purple-700/80 to-purple-800/80 border border-purple-700/50 px-4 py-3 text-white font-bold hover:from-purple-600 hover:to-purple-700 transition text-sm">
+                    <span className="text-xl">👥</span>
+                    <span>ניהול משתמשים</span>
+                  </button>
+                )}
                 {/* 🆕 כפתור גיבוי ושחזור */}
-                <button onClick={() => { setMenuOpen(false); loadBackupsList(); setBackupsModalOpen(true); }}
-                  className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-cyan-700/80 to-cyan-800/80 border border-cyan-700/50 px-4 py-3 text-white font-bold hover:from-cyan-600 hover:to-cyan-700 transition text-sm">
-                  <span className="text-xl">💾</span>
-                  <span>גיבוי ושחזור</span>
-                </button>
-                {/* 🆕 כפתור ניהול מנהלים */}
-                <button onClick={() => { setMenuOpen(false); setManageAdminsOpen(true); }}
-                  className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-amber-700/80 to-amber-800/80 border border-amber-700/50 px-4 py-3 text-white font-bold hover:from-amber-600 hover:to-amber-700 transition text-sm">
-                  <span className="text-xl">🔐</span>
-                  <span>ניהול מנהלים</span>
-                  <span className="mr-auto text-xs bg-amber-950/50 rounded-full px-2 py-0.5">{adminNamesList.length}</span>
-                </button>
+                {can('backupRestore') && (
+                  <button onClick={() => { setMenuOpen(false); loadBackupsList(); setBackupsModalOpen(true); }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-cyan-700/80 to-cyan-800/80 border border-cyan-700/50 px-4 py-3 text-white font-bold hover:from-cyan-600 hover:to-cyan-700 transition text-sm">
+                    <span className="text-xl">💾</span>
+                    <span>גיבוי ושחזור</span>
+                  </button>
+                )}
+                {/* 🆕 כפתור ניהול מנהלים - רק לסופר אדמין */}
+                {can('manageAdmins') && (
+                  <button onClick={() => { setMenuOpen(false); setManageAdminsOpen(true); }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-amber-700/80 to-amber-800/80 border border-amber-700/50 px-4 py-3 text-white font-bold hover:from-amber-600 hover:to-amber-700 transition text-sm">
+                    <span className="text-xl">🔐</span>
+                    <span>ניהול מנהלים</span>
+                    <span className="mr-auto text-xs bg-amber-950/50 rounded-full px-2 py-0.5">{adminNamesList.length}</span>
+                  </button>
+                )}
+                {/* 🆕 כפתור ניהול נעילות מכשירים */}
+                {can('deviceLocks') && (
+                  <button onClick={() => { setMenuOpen(false); setDeviceLocksManagerOpen(true); }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-rose-700/80 to-rose-800/80 border border-rose-700/50 px-4 py-3 text-white font-bold hover:from-rose-600 hover:to-rose-700 transition text-sm">
+                    <span className="text-xl">🔒</span>
+                    <span>נעילות מכשירים</span>
+                    <span className="mr-auto text-xs bg-rose-950/50 rounded-full px-2 py-0.5">{Object.keys(deviceLocks).length}</span>
+                  </button>
+                )}
+                {/* 👑 ניהול הרשאות - רק לסופר אדמין */}
+                {can('managePermissions') && (
+                  <button onClick={() => { setMenuOpen(false); setPermissionsManagerOpen(true); }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-yellow-600 to-amber-700 border-2 border-amber-500/50 px-4 py-3 text-white font-bold hover:from-yellow-500 hover:to-amber-600 transition text-sm shadow-lg shadow-amber-900/30">
+                    <span className="text-xl">⚙️</span>
+                    <span>ניהול הרשאות</span>
+                    <span className="mr-auto text-xs bg-amber-950/60 rounded-full px-2 py-0.5">👑</span>
+                  </button>
+                )}
+                {/* 🔑 שינוי סיסמת סופר אדמין - רק לסופר אדמין */}
+                {isSuperAdmin && (
+                  <button onClick={() => { setMenuOpen(false); handleChangeSuperAdminPassword(); }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-stone-800 border border-stone-700 px-4 py-2.5 text-stone-200 font-bold hover:bg-stone-700 transition text-sm">
+                    <span className="text-base">🔑</span>
+                    <span>שנה סיסמת סופר אדמין</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -10365,7 +11695,26 @@ export default function PokerApp() {
         onSave={handleSaveSession} players={sortedPlayers} currentSeason={selectedSeason} adminName={currentUser} />
       
       <LiveSessionModal isOpen={liveModalOpen} onClose={() => setLiveModalOpen(false)}
-        onSave={handleSaveSession} players={sortedActivePlayers} currentSeason={selectedSeason} adminName={currentUser} />
+        onSave={handleSaveSession} players={sortedActivePlayers} currentSeason={selectedSeason} adminName={currentUser} registration={registration} />
+      
+      {/* 🔒 מודל ניהול נעילות מכשירים (אדמין בלבד) */}
+      <DeviceLocksManager
+        isOpen={deviceLocksManagerOpen}
+        onClose={() => setDeviceLocksManagerOpen(false)}
+        deviceLocks={deviceLocks}
+        currentDeviceId={deviceId}
+        onRelease={handleReleaseLock}
+        players={players}
+      />
+      
+      {/* ⚙️ מודל ניהול הרשאות (סופר אדמין בלבד) */}
+      <PermissionsManager
+        isOpen={permissionsManagerOpen}
+        onClose={() => setPermissionsManagerOpen(false)}
+        permissions={adminPermissions}
+        onUpdate={handleUpdatePermissions}
+        adminNamesList={adminNamesList}
+      />
       
       {/* 📡 צופה בשידור חי - מופיע אוטומטית כשיש ערב חי בשעות מתאימות */}
       {broadcastViewerOpen && liveBroadcast && (
@@ -10379,7 +11728,14 @@ export default function PokerApp() {
         />
       )}
       
-      <AdminLoginModal isOpen={loginOpen} onClose={() => setLoginOpen(false)} onLogin={handleAdminLogin} currentUser={currentUser} />
+      <AdminLoginModal 
+        isOpen={loginOpen} 
+        onClose={() => setLoginOpen(false)} 
+        onLogin={handleAdminLogin} 
+        currentUser={currentUser}
+        superAdminPasswordHash={superAdminPasswordHash}
+        onSetSuperAdminPassword={handleSetSuperAdminPassword}
+      />
       
       {/* 🆕 ניהול רשימת מנהלים */}
       <ManageAdminsModal 
