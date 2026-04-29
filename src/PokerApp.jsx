@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import SESSIONS_DATA from './data/sessions.json';
 import HOSTING_DATA from './data/hosting.json';
 import QUOTES_DATA from './data/quotes.json';
+import PLAYER_AVATARS from './data/avatars.json';
 import BARBUR_LOGO from './assets/barbur-logo.webp';
 import SWAN_IMG from './assets/swan.png';
 import { loadState as fbLoadState, saveState as fbSaveState } from './firebase';
@@ -9,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.27.5';
-const APP_BUILD_TIME = '29/04/2026 08:13';
-const APP_NOTES = '🕐 חיווי כניסה אחרונה לכל משתמש';
+const APP_VERSION = 'v2.28.0';
+const APP_BUILD_TIME = '29/04/2026 10:39';
+const APP_NOTES = '🖼️ תמונות שחקנים ב-MVP (11 תמונות)';
 
 
 // ===== הרשאות מנהל =====
@@ -159,6 +160,43 @@ const getTodayIsrael = () => {
   } catch (e) {
     return new Date().toISOString().split('T')[0];
   }
+};
+
+// 🖼️ אווטר שחקן - תמונה אמיתית או אות ראשונה עם רקע צבעוני
+const PlayerAvatar = ({ name, size = 40, className = '' }) => {
+  const avatar = PLAYER_AVATARS[name];
+  
+  if (avatar) {
+    return (
+      <img 
+        src={`data:image/jpeg;base64,${avatar}`}
+        alt={name}
+        className={`rounded-full object-cover ${className}`}
+        style={{ width: size, height: size, border: '2px solid rgba(251,191,36,0.6)' }}
+      />
+    );
+  }
+  
+  // אווטר עם אות - צבע אקראי לפי השם
+  const colors = ['#dc2626', '#2563eb', '#10b981', '#a855f7', '#f97316', '#ec4899', '#14b8a6', '#eab308', '#6366f1'];
+  const hash = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const color = colors[hash % colors.length];
+  const letter = name.charAt(0);
+  
+  return (
+    <div 
+      className={`rounded-full flex items-center justify-center font-bold text-white ${className}`}
+      style={{ 
+        width: size, 
+        height: size, 
+        backgroundColor: color, 
+        fontSize: size * 0.5,
+        border: '2px solid rgba(251,191,36,0.6)',
+      }}
+    >
+      {letter}
+    </div>
+  );
 };
 
 // 🔍 קומפוננט בחירה עם חיפוש - להחלפת <select> כשיש הרבה אפשרויות
@@ -6779,6 +6817,15 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                 </svg>
               </div>
               
+              {/* 🖼️ תמונת השחקן (כשיש - 1 שחקן בלבד באלוף השנה) */}
+              {yearChampionYears.length === 1 && PLAYER_AVATARS[yearChampion.name] && (
+                <div className="flex justify-center -mt-4 mb-1">
+                  <div style={{ filter: 'drop-shadow(0 0 15px rgba(251,191,36,0.6))' }}>
+                    <PlayerAvatar name={yearChampion.name} size={70} />
+                  </div>
+                </div>
+              )}
+              
               <div className="text-4xl font-extrabold mt-3" style={{
                 fontFamily: 'Cinzel, serif',
                 background: 'linear-gradient(180deg, #fef3c7 0%, #fbbf24 100%)',
@@ -6852,7 +6899,10 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                     <text x="30" y="35" textAnchor="middle" fontFamily="Cinzel,serif" fontSize="11" fontWeight="800" fill="#1e3a8a">Q{q.quarter}</text>
                   </svg>
                 </div>
-                <div className="text-base font-extrabold text-blue-100 mt-1 truncate">{q.name}</div>
+                <div className="text-base font-extrabold text-blue-100 mt-1 truncate flex items-center justify-center gap-1.5">
+                  {PLAYER_AVATARS[q.name] && <PlayerAvatar name={q.name} size={24} />}
+                  <span className="truncate">{q.name}</span>
+                </div>
                 <div className="text-[11px] text-blue-300 tabular-nums font-bold">{q.profit > 0 ? '+' : ''}{q.profit}₪</div>
                 <div className="text-[9px] text-stone-500">{q.sessions} מפגשים</div>
               </div>
@@ -6908,7 +6958,10 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
                       <text x="25" y="43" textAnchor="middle" fontFamily="Cinzel,serif" fontSize="13" fontWeight="800" fill="#451a03">★</text>
                     </svg>
                   </div>
-                  <div className="text-sm font-extrabold text-amber-100 mt-1 truncate">{m.name}</div>
+                  <div className="text-sm font-extrabold text-amber-100 mt-1 truncate flex items-center justify-center gap-1">
+                    {PLAYER_AVATARS[m.name] && <PlayerAvatar name={m.name} size={20} />}
+                    <span className="truncate">{m.name}</span>
+                  </div>
                   <div className="text-[11px] text-amber-300 tabular-nums font-bold">{m.profit > 0 ? '+' : ''}{m.profit}₪</div>
                   <div className="text-[9px] text-stone-500">{m.sessions} מפגשים</div>
                 </div>
@@ -6941,7 +6994,10 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
               }}>
                 <div className="text-[10px] text-pink-400 font-bold tracking-widest mb-1">מצוטט הכי הרבה</div>
                 <div className="text-3xl my-2">🪶</div>
-                <div className="text-base font-extrabold text-pink-100 truncate">{popularityChampions.topQuoted.name}</div>
+                <div className="text-base font-extrabold text-pink-100 truncate flex items-center justify-center gap-1.5">
+                  {PLAYER_AVATARS[popularityChampions.topQuoted.name] && <PlayerAvatar name={popularityChampions.topQuoted.name} size={24} />}
+                  <span className="truncate">{popularityChampions.topQuoted.name}</span>
+                </div>
                 <div className="text-[11px] text-pink-300 tabular-nums font-bold">{popularityChampions.topQuoted.count} ציטוטים</div>
               </div>
             )}
@@ -6954,7 +7010,10 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
               }}>
                 <div className="text-[10px] text-purple-400 font-bold tracking-widest mb-1">המארח של השנה</div>
                 <div className="text-3xl my-2">🏠</div>
-                <div className="text-base font-extrabold text-purple-100 truncate">{popularityChampions.topHost.name}</div>
+                <div className="text-base font-extrabold text-purple-100 truncate flex items-center justify-center gap-1.5">
+                  {PLAYER_AVATARS[popularityChampions.topHost.name] && <PlayerAvatar name={popularityChampions.topHost.name} size={24} />}
+                  <span className="truncate">{popularityChampions.topHost.name}</span>
+                </div>
                 <div className="text-[11px] text-purple-300 tabular-nums font-bold">{popularityChampions.topHost.count} אירוחים</div>
               </div>
             )}
@@ -6967,7 +7026,10 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
               }}>
                 <div className="text-[10px] text-teal-400 font-bold tracking-widest mb-1">המתמיד של השנה</div>
                 <div className="text-3xl my-2">🎯</div>
-                <div className="text-base font-extrabold text-teal-100 truncate">{popularityChampions.topAttender.name}</div>
+                <div className="text-base font-extrabold text-teal-100 truncate flex items-center justify-center gap-1.5">
+                  {PLAYER_AVATARS[popularityChampions.topAttender.name] && <PlayerAvatar name={popularityChampions.topAttender.name} size={24} />}
+                  <span className="truncate">{popularityChampions.topAttender.name}</span>
+                </div>
                 <div className="text-[11px] text-teal-300 tabular-nums font-bold">{popularityChampions.topAttender.count} מפגשים</div>
               </div>
             )}
@@ -6991,7 +7053,10 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
             border: '1px solid rgba(16,185,129,0.3)',
           }}>
             <div className="text-3xl mb-2">🚀</div>
-            <div className="text-2xl font-extrabold text-emerald-100">{mostImproved.name}</div>
+            <div className="flex items-center justify-center gap-2 mb-1">
+              {PLAYER_AVATARS[mostImproved.name] && <PlayerAvatar name={mostImproved.name} size={40} />}
+              <div className="text-2xl font-extrabold text-emerald-100">{mostImproved.name}</div>
+            </div>
             <div className="text-base text-emerald-300 font-bold tabular-nums mt-2">
               שיפור של +{mostImproved.improvement}₪
             </div>
