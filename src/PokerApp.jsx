@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.32.0';
-const APP_BUILD_TIME = '29/04/2026 21:00';
-const APP_NOTES = '📌 רישום ברזל - שחקנים מסומנים מצטרפים אוטומטית בצורה טבעית בזמן הרישום (סופר אדמין בלבד)';
+const APP_VERSION = 'v2.32.2';
+const APP_BUILD_TIME = '30/04/2026 10:00';
+const APP_NOTES = '🎨 טאב רישום למפגש - ראשון, רקע מיוחד, נקודה אדומה מהבהבת כשהרישום פתוח';
 
 
 // ===== הרשאות מנהל =====
@@ -11644,20 +11644,45 @@ export default function PokerApp() {
   }
 
   const tabs = [
+    // 🆕 רישום למפגש - ראשון (משמאל לדשבורד) - emoji בלבד, עיצוב מיוחד
+    ...((registrationEnabled || can('registrationToggle')) ? [{ 
+      id: 'registration', 
+      label: 'רישום למפגש', 
+      icon: null, 
+      emoji: '📝',
+      special: true,
+    }] : []),
     { id: 'dashboard', label: 'דשבורד', icon: LayoutDashboard },
     { id: 'table', label: 'טבלה', icon: Table },
     { id: 'periodic', label: 'תקופות', icon: Calendar },
     { id: 'champions', label: '🏆 MVP', icon: Trophy },
     { id: 'charts', label: 'תובנות', icon: BarChart3 },
     { id: 'hosting', label: 'אירוחים', icon: Calendar },
-    // 🆕 רישום למפגש הבא - גלוי אם הופעל גלובלית, או תמיד לאדמין
-    // 🆕 רישום למפגש הבא - גלוי אם הופעל גלובלית, או למי שיש לו הרשאת ניהול
-    ...((registrationEnabled || can('registrationToggle')) ? [{ id: 'registration', label: '📝 רישום למפגש', icon: ClipboardList }] : []),
     { id: 'gallery', label: 'גלריה', icon: ImageIcon },
     // 🔒 היסטוריה - רק למי שיש לו הרשאה למחוק מפגשים
     ...(can('deleteSession') ? [{ id: 'history', label: 'היסטוריה', icon: History }] : []),
     { id: 'quotes', label: '🪶 אמרות כנף', icon: Quote },
   ];
+  
+  // 🔴 האם הרישום פתוח עכשיו (לנקודה מהבהבת על הטאב)
+  const registrationOpenNow = (() => {
+    if (!registrationEnabled && !can('registrationToggle')) return false;
+    if (!hostingSchedule || !Array.isArray(hostingSchedule)) return false;
+    const today = getTodayIsrael();
+    const next = hostingSchedule.filter(h => h.date >= today && h.host).sort((a, b) => a.date.localeCompare(b.date))[0];
+    if (!next) return false;
+    const now = new Date();
+    if (now > new Date(next.date + 'T23:59:59')) return false;
+    const lastSorted = [...allSessions].sort((a, b) => b.date.localeCompare(a.date));
+    const lastDate = lastSorted[0]?.date;
+    if (lastDate && lastDate < next.date) {
+      const opensAt = new Date(lastDate + 'T00:00:00');
+      opensAt.setDate(opensAt.getDate() + 1);
+      opensAt.setHours(12, 0, 0, 0);
+      return now >= opensAt;
+    }
+    return true;
+  })();
 
   return (
     <div dir="rtl" className="min-h-screen relative overflow-x-hidden" 
@@ -11783,13 +11808,25 @@ export default function PokerApp() {
               {tabs.map(t => {
                 const Icon = t.icon;
                 const active = tab === t.id;
+                const isSpecial = t.special;
+                const showLiveDot = t.id === 'registration' && registrationOpenNow;
                 return (
                   <button key={t.id} onClick={() => setTab(t.id)}
-                    className={`flex-1 min-w-fit px-3 md:px-5 py-2.5 text-xs md:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 whitespace-nowrap ${
-                      active ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/50' : 'text-stone-400 hover:text-amber-200 hover:bg-stone-900/50'
+                    className={`relative flex-1 min-w-fit px-3 md:px-5 py-2.5 text-xs md:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 whitespace-nowrap ${
+                      active 
+                        ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/50' 
+                        : isSpecial
+                          ? 'bg-rose-950/40 border border-rose-900/60 text-rose-200 hover:bg-rose-950/70 hover:text-rose-100'
+                          : 'text-stone-400 hover:text-amber-200 hover:bg-stone-900/50'
                     }`}>
-                    <Icon className="h-4 w-4" />
+                    {Icon ? <Icon className="h-4 w-4" /> : <span className="text-base leading-none">{t.emoji}</span>}
                     {t.label}
+                    {showLiveDot && (
+                      <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -12215,15 +12252,25 @@ export default function PokerApp() {
               {tabs.map(t => {
                 const Icon = t.icon;
                 const active = tab === t.id;
+                const isSpecial = t.special;
+                const showLiveDot = t.id === 'registration' && registrationOpenNow;
                 return (
                   <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 rounded-lg px-4 py-3 text-right font-bold transition ${
+                    className={`relative w-full flex items-center gap-3 rounded-lg px-4 py-3 text-right font-bold transition ${
                       active 
                         ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/30' 
-                        : 'text-stone-300 hover:bg-stone-900 hover:text-amber-200'
+                        : isSpecial
+                          ? 'bg-rose-950/40 border border-rose-900/60 text-rose-200 hover:bg-rose-950/70'
+                          : 'text-stone-300 hover:bg-stone-900 hover:text-amber-200'
                     }`}>
-                    <Icon className="h-5 w-5" />
+                    {Icon ? <Icon className="h-5 w-5" /> : <span className="text-lg leading-none">{t.emoji}</span>}
                     <span>{t.label}</span>
+                    {showLiveDot && (
+                      <span className="relative flex h-2.5 w-2.5 mr-auto">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
+                      </span>
+                    )}
                   </button>
                 );
               })}
