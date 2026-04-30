@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.31.6';
-const APP_BUILD_TIME = '29/04/2026 19:00';
-const APP_NOTES = '🎭 באנר התחזות סגול בראש המסך עם כפתור ביטול גלוי תמיד';
+const APP_VERSION = 'v2.31.7';
+const APP_BUILD_TIME = '29/04/2026 19:15';
+const APP_NOTES = '👑 סופר אדמין יכול להיכנס מכמה מכשירים במקביל (פטור מנעילה)';
 
 
 // ===== הרשאות מנהל =====
@@ -10255,9 +10255,10 @@ export default function PokerApp() {
       try {
         const savedUser = window.localStorage.getItem('poker_user_name');
         if (savedUser) {
-          // 🔐 בדיקת נעילת מכשיר
+          // 🔐 בדיקת נעילת מכשיר - 👑 סופר אדמינים פטורים (יכולים להיכנס מכמה מכשירים)
           const userLock = currentLocks[savedUser];
-          if (userLock && userLock.deviceId !== deviceId) {
+          const isSuperAdminUser = SUPER_ADMINS.includes(savedUser);
+          if (userLock && userLock.deviceId !== deviceId && !isSuperAdminUser) {
             // השם נעול במכשיר אחר! - לא מאפשרים כניסה
             // נמחק את ה-localStorage המקומי כדי שלא ינסה שוב בלולאה
             try { 
@@ -10733,8 +10734,10 @@ export default function PokerApp() {
   const handleUserSelect = async (name) => {
     // 🔐 בדיקת נעילה - האם השם הזה כבר תפוס במכשיר אחר?
     // (אם זה מכשיר זה - נמשיך כרגיל)
+    // 👑 סופר אדמינים פטורים מנעילה - יכולים להיכנס מכמה מכשירים במקביל
     const existingLock = deviceLocks[name];
-    if (existingLock && existingLock.deviceId !== deviceId) {
+    const isSuperAdminUser = SUPER_ADMINS.includes(name);
+    if (existingLock && existingLock.deviceId !== deviceId && !isSuperAdminUser) {
       setLockBlockedName(name);
       return;
     }
