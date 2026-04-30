@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.31.10';
-const APP_BUILD_TIME = '29/04/2026 19:55';
-const APP_NOTES = '👑 הערות גרסה מלאות - סופר אדמין בלבד. כולם רואים רק מספר גרסה';
+const APP_VERSION = 'v2.32.0';
+const APP_BUILD_TIME = '29/04/2026 21:00';
+const APP_NOTES = '📌 רישום ברזל - שחקנים מסומנים מצטרפים אוטומטית בצורה טבעית בזמן הרישום (סופר אדמין בלבד)';
 
 
 // ===== הרשאות מנהל =====
@@ -119,6 +119,8 @@ const GALLERY_STORAGE_KEY = 'poker_gallery_state_v1';
 const REGISTRATION_KEY = 'poker_next_session_registration_v1';
 // 🔒 הפעלת/כיבוי טאב הרישום (אדמין בלבד) - גלובלי לכולם
 const REGISTRATION_ENABLED_KEY = 'poker_registration_feature_enabled_v1';
+// 📌 רישום ברזל - שחקנים שמסומנים מראש להצטרף אוטומטית (סופר אדמין בלבד)
+const IRON_REGISTRATION_KEY = 'poker_iron_registration_v1';
 // 🔐 נעילת מכשיר לכל משתמש - {playerName: {deviceId, lockedAt, userAgent}}
 const DEVICE_LOCKS_KEY = 'poker_device_locks_v1';
 // 🆔 מזהה ייחודי של המכשיר הנוכחי (נוצר פעם אחת ונשמר ב-localStorage)
@@ -3014,7 +3016,9 @@ const RegistrationTab = ({
   isSuperAdmin,
   registration, 
   onUpdate, 
-  players 
+  players,
+  ironRegistration,
+  onIronUpdate
 }) => {
   const MAX_SLOTS = 11; // מספר מקומות רשמיים
   
@@ -3090,6 +3094,10 @@ const RegistrationTab = ({
           resetAt: new Date().toISOString(),
         };
         onUpdate(fresh);
+        // 📌 איפוס רישום ברזל יחד עם איפוס המפגש
+        if (onIronUpdate && (ironRegistration?.players?.length || ironRegistration?.refused?.length)) {
+          onIronUpdate({ players: [], refused: [] });
+        }
       }
     } else if (!registration.sessionDate || !registration.entries) {
       // אין registration כלל - אתחל
@@ -3103,11 +3111,102 @@ const RegistrationTab = ({
     }
   }, [nextSession, registration, onUpdate]);
   
+  // 📌 גיבוי - בדיקה כל 30 שניות אם יש ברזל ממתין שלא נכנס לזמן ארוך
+  // (מקרה קצה: ההרשמה האחרונה הייתה לפני יותר מ-2 דקות אבל הברזל לא נכנס)
+  useEffect(() => {
+    if (!ironRegistration?.players?.length) return;
+    if (!registration?.entries) return;
+    
+    const interval = setInterval(() => {
+      const entries = registration.entries || [];
+      const enrolled = new Set(entries.map(e => e.name));
+      const refused = new Set(ironRegistration.refused || []);
+      const ironsLeft = ironRegistration.players.filter(n => !enrolled.has(n) && !refused.has(n));
+      if (ironsLeft.length === 0) return;
+      
+      // אם המפגש מלא - לא עושה כלום
+      if (entries.length >= MAX_SLOTS) return;
+      
+      // בדיקה: ההרשמה האחרונה הייתה לפני יותר מ-2 דקות?
+      const lastEntry = entries[entries.length - 1];
+      if (!lastEntry?.addedAt) return;
+      const lastTime = new Date(lastEntry.addedAt).getTime();
+      const now = Date.now();
+      const minutesSinceLast = (now - lastTime) / 60000;
+      
+      if (minutesSinceLast >= 2) {
+        // הוסף ברזל אקראי
+        const chosen = ironsLeft[Math.floor(Math.random() * ironsLeft.length)];
+        const newEntries = [...entries, {
+          name: chosen,
+          addedAt: new Date().toISOString(),
+          isHost: false,
+          isIron: true,
+        }];
+        onUpdate({ ...registration, entries: newEntries });
+      }
+    }, 30000);
+    
+    return () => clearInterval(interval);
+  }, [ironRegistration, registration, onUpdate]);
+  
   // 📋 רשימת רשומים מסודרת לפי סדר ההצטרפות
   const entries = registration?.entries || [];
   const myEntry = entries.find(e => e.name === currentUser);
   const myPosition = myEntry ? entries.indexOf(myEntry) + 1 : null;
   const myStatus = myPosition ? (myPosition <= MAX_SLOTS ? 'registered' : 'standby') : null;
+  
+  // 📌 רשימת שמות הברזל הממתינים (שטרם נכנסו לרשימה ולא סורבו)
+  const pendingIron = useMemo(() => {
+    if (!ironRegistration?.players) return [];
+    const enrolled = new Set(entries.map(e => e.name));
+    const refused = new Set(ironRegistration.refused || []);
+    return ironRegistration.players.filter(name => !enrolled.has(name) && !refused.has(name));
+  }, [ironRegistration, entries]);
+  
+  // 🎲 פונקציה להגרלת הצטרפות ברזל
+  // החלטה אם להוסיף ברזל ב-setTimeout, ואיזה - לפי האלגוריתם הדינמי
+  const tryAddIronAfterDelay = (currentEntries) => {
+    if (!ironRegistration?.players?.length) return;
+    if (!registrationOpenInfo.isOpen) return;
+    
+    // חישוב כמה ברזלים ממתינים וכמה מקומות פנויים
+    const enrolled = new Set(currentEntries.map(e => e.name));
+    const refused = new Set(ironRegistration.refused || []);
+    const ironsLeft = ironRegistration.players.filter(n => !enrolled.has(n) && !refused.has(n));
+    if (ironsLeft.length === 0) return;
+    
+    const remainingSlots = MAX_SLOTS - currentEntries.length;
+    if (remainingSlots <= 0) return; // כל המקומות תפוסים
+    
+    // 🎲 הסיכוי = (ברזלים שנותרו) / (מקומות פנויים)
+    // אם 100% או יותר - חייבים להכניס
+    const chance = ironsLeft.length / remainingSlots;
+    const shouldAdd = Math.random() < chance;
+    if (!shouldAdd) return;
+    
+    // מתזמן הצטרפות תוך 5-15 שניות אקראיות
+    const delayMs = 5000 + Math.random() * 10000;
+    setTimeout(async () => {
+      // בודק שוב לפני ההוספה - אולי המצב השתנה
+      const latestEntries = registration?.entries || [];
+      const latestEnrolled = new Set(latestEntries.map(e => e.name));
+      const latestRefused = new Set(ironRegistration.refused || []);
+      const stillPending = ironRegistration.players.filter(n => !latestEnrolled.has(n) && !latestRefused.has(n));
+      if (stillPending.length === 0) return;
+      if (latestEntries.length >= MAX_SLOTS) return;
+      
+      // בוחר ברזל אקראי מהממתינים
+      const chosen = stillPending[Math.floor(Math.random() * stillPending.length)];
+      const newEntries = [...latestEntries, {
+        name: chosen,
+        addedAt: new Date().toISOString(),
+        isHost: false,
+        isIron: true, // סימון פנימי שזה הצטרפות ברזל (לא נחשף ל-UI הציבורי)
+      }];
+      await onUpdate({ ...registration, entries: newEntries });
+    }, delayMs);
+  };
   
   // ➕ פעולה: אני בא
   const handleJoin = async () => {
@@ -3120,6 +3219,9 @@ const RegistrationTab = ({
       isHost: false 
     }];
     await onUpdate({ ...registration, entries: newEntries });
+    
+    // 📌 אחרי הרישום - מנסה להוסיף ברזל באקראי
+    tryAddIronAfterDelay(newEntries);
   };
   
   // ➖ פעולה: ביטול (השחקן עצמו או אדמין)
@@ -3132,12 +3234,35 @@ const RegistrationTab = ({
       return;
     }
     const newEntries = entries.filter(e => e.name !== name);
+    
+    // 📌 אם זה שחקן ברזל שמבטל - מוסיף אותו לרשימת המסורבים (לא ננסה להחזיר אותו)
+    const wasIronPlayer = ironRegistration?.players?.includes(name);
+    if (wasIronPlayer && onIronUpdate) {
+      const refused = [...(ironRegistration.refused || []), name];
+      await onIronUpdate({ ...ironRegistration, refused });
+    }
+    
     await onUpdate({ ...registration, entries: newEntries });
+  };
+  
+  // 📌 הפעלת/ביטול סימון של שחקן ברזל
+  const toggleIron = async (name) => {
+    if (!onIronUpdate) return;
+    const current = ironRegistration?.players || [];
+    const newPlayers = current.includes(name) 
+      ? current.filter(p => p !== name)
+      : [...current, name];
+    // אם הוספנו - נוודא שהוא לא ברשימת המסורבים (לאפשר רישום מחדש)
+    const refused = (ironRegistration?.refused || []).filter(p => p !== name);
+    await onIronUpdate({ players: newPlayers, refused });
   };
   
   // ➕ אדמין: הוספת שחקן ידנית
   const [adminAddOpen, setAdminAddOpen] = useState(false);
   const [adminAddSearch, setAdminAddSearch] = useState('');
+  // 📌 רישום ברזל - פאנל פתוח/סגור (סופר אדמין בלבד)
+  const [ironPanelOpen, setIronPanelOpen] = useState(false);
+  const [ironSearch, setIronSearch] = useState('');
   const handleAdminAdd = async (name) => {
     if (entries.some(e => e.name === name)) return;
     const newEntries = [...entries, {
@@ -3271,15 +3396,83 @@ const RegistrationTab = ({
             <Users className="h-4 w-4 text-amber-400" />
             <div className="text-sm font-bold text-stone-200">רשימת נרשמים</div>
           </div>
-          {isSuperAdmin && registrationOpenInfo.isOpen && (
-            <button
-              onClick={() => setAdminAddOpen(!adminAddOpen)}
-              className="text-xs rounded-md bg-amber-900/40 hover:bg-amber-900/60 border border-amber-800 px-2 py-1 text-amber-300 font-bold flex items-center gap-1"
-            >
-              <Plus className="h-3 w-3" /> אדמין
-            </button>
-          )}
+          <div className="flex items-center gap-1.5">
+            {/* 📌 כפתור רישום ברזל - רק לסופר אדמין */}
+            {isSuperAdmin && (
+              <button
+                onClick={() => setIronPanelOpen(!ironPanelOpen)}
+                className={`text-xs rounded-md border px-2 py-1 font-bold flex items-center gap-1 transition ${
+                  ironPanelOpen
+                    ? 'bg-rose-700 border-rose-500 text-white'
+                    : 'bg-rose-950/40 hover:bg-rose-950/60 border-rose-900 text-rose-300'
+                }`}
+                title="רישום ברזל - שחקנים שיצטרפו אוטומטית"
+              >
+                📌 ברזל {ironRegistration?.players?.length > 0 && `(${ironRegistration.players.length})`}
+              </button>
+            )}
+            {isSuperAdmin && registrationOpenInfo.isOpen && (
+              <button
+                onClick={() => setAdminAddOpen(!adminAddOpen)}
+                className="text-xs rounded-md bg-amber-900/40 hover:bg-amber-900/60 border border-amber-800 px-2 py-1 text-amber-300 font-bold flex items-center gap-1"
+              >
+                <Plus className="h-3 w-3" /> אדמין
+              </button>
+            )}
+          </div>
         </div>
+        
+        {/* 📌 פאנל רישום ברזל - סופר אדמין בלבד */}
+        {ironPanelOpen && isSuperAdmin && (
+          <div className="p-3 bg-rose-950/20 border-b border-rose-900/40">
+            <div className="text-xs text-rose-300 mb-1 font-bold">📌 רישום ברזל</div>
+            <div className="text-[11px] text-stone-400 mb-2 leading-relaxed">
+              סמן שחקנים שיצטרפו אוטומטית לרשימה כשהרישום פתוח. ההצטרפות נראית טבעית - השחקנים נכנסים אחרי שאחרים נרשמים, באקראיות.
+            </div>
+            <div className="relative mb-2">
+              <Search className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-500" />
+              <input
+                type="text"
+                value={ironSearch}
+                onChange={e => setIronSearch(e.target.value)}
+                placeholder="חיפוש..."
+                className="w-full rounded-md border border-stone-700 bg-stone-950 pr-8 pl-2 py-1.5 text-sm text-white placeholder-stone-500 focus:outline-none focus:border-rose-600"
+              />
+            </div>
+            <div className="grid grid-cols-3 md:grid-cols-4 gap-1.5 max-h-48 overflow-y-auto">
+              {players
+                .filter(p => !ironSearch || p.toLowerCase().includes(ironSearch.toLowerCase()))
+                .map(p => {
+                  const isMarked = ironRegistration?.players?.includes(p);
+                  const isAlreadyRegistered = entries.some(e => e.name === p);
+                  const wasRefused = ironRegistration?.refused?.includes(p);
+                  return (
+                    <button key={p} onClick={() => toggleIron(p)}
+                      disabled={isAlreadyRegistered}
+                      className={`rounded-md px-2 py-1.5 text-sm transition flex items-center justify-center gap-1 ${
+                        isAlreadyRegistered
+                          ? 'bg-stone-900 text-stone-600 cursor-not-allowed line-through'
+                          : isMarked
+                            ? 'bg-rose-700 text-white font-bold ring-2 ring-rose-400'
+                            : wasRefused
+                              ? 'bg-stone-800 text-stone-500'
+                              : 'bg-stone-800 text-stone-200 hover:bg-stone-700'
+                      }`}
+                      title={isAlreadyRegistered ? 'כבר רשום' : (wasRefused ? 'ביטל הרשמה - לא ינסה שוב' : '')}
+                    >
+                      {isMarked && '📌'}
+                      <span>{p}</span>
+                    </button>
+                  );
+                })}
+            </div>
+            {ironRegistration?.players?.length > 0 && (
+              <div className="mt-2 text-[10px] text-rose-300">
+                ממתינים להצטרפות: {pendingIron.length} מתוך {ironRegistration.players.length}
+              </div>
+            )}
+          </div>
+        )}
         
         {/* פאנל סופר אדמין להוספה ידנית */}
         {adminAddOpen && isSuperAdmin && (
@@ -10039,6 +10232,8 @@ export default function PokerApp() {
   const [birthdayPopup, setBirthdayPopup] = useState(null); // { name, age } או null
   // 🆕 רישום למפגש הבא - מסונכרן ב-Firebase
   const [registration, setRegistration] = useState(null);
+  // 📌 רישום ברזל - {players: ['יניב', 'שגיא'], refused: []}
+  const [ironRegistration, setIronRegistration] = useState({ players: [], refused: [] });
   // 🔒 הפעלת/כיבוי הטאב גלובלית (אדמין)
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
   // 🔐 נעילות מכשירים: {playerName: {deviceId, lockedAt, userAgent}}
@@ -10353,6 +10548,14 @@ export default function PokerApp() {
         if (savedReg) setRegistration(savedReg);
         const savedRegEnabled = await loadState(REGISTRATION_ENABLED_KEY);
         if (savedRegEnabled?.enabled) setRegistrationEnabled(true);
+        // 📌 טעינת רישום ברזל
+        const savedIron = await loadState(IRON_REGISTRATION_KEY);
+        if (savedIron && typeof savedIron === 'object') {
+          setIronRegistration({ 
+            players: savedIron.players || [], 
+            refused: savedIron.refused || [] 
+          });
+        }
       } catch {}
       
       // 🔐 טעינת נעילות מכשירים
@@ -11075,6 +11278,16 @@ export default function PokerApp() {
     }
   };
 
+  // 📌 עדכון רישום ברזל
+  const handleUpdateIronRegistration = async (newIron) => {
+    setIronRegistration(newIron);
+    try {
+      await saveState(newIron, IRON_REGISTRATION_KEY);
+    } catch (e) {
+      console.error('Failed to save iron registration:', e);
+    }
+  };
+
   // 🔒 הפעלה/כיבוי הטאב גלובלית (אדמין בלבד)
   const handleToggleRegistrationFeature = async () => {
     const newVal = !registrationEnabled;
@@ -11150,6 +11363,14 @@ export default function PokerApp() {
         if (registrationEnabled) {
           const fresh = await loadState(REGISTRATION_KEY);
           if (fresh) setRegistration(fresh);
+          // 📌 רישום ברזל - מסונכרן יחד
+          const freshIron = await loadState(IRON_REGISTRATION_KEY);
+          if (freshIron && typeof freshIron === 'object') {
+            setIronRegistration({ 
+              players: freshIron.players || [], 
+              refused: freshIron.refused || [] 
+            });
+          }
         }
         
         // מצב טאב הרישום (אם הסופר אדמין הפעיל/כיבה)
@@ -11529,10 +11750,16 @@ export default function PokerApp() {
 
               {isAdmin ? (
                 <>
-                  {/* תגית מנהל */}
-                  <div className="flex items-center gap-2 rounded-lg bg-emerald-950/30 border border-emerald-800/50 px-3 py-1.5">
-                    <Lock className="h-3 w-3 text-emerald-400" />
-                    <span className="text-xs text-emerald-300 font-bold">מנהל</span>
+                  {/* תגית מנהל / סופר אדמין */}
+                  <div className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 ${
+                    isSuperAdmin 
+                      ? 'bg-amber-950/40 border-amber-700/60' 
+                      : 'bg-emerald-950/30 border-emerald-800/50'
+                  }`}>
+                    <Lock className={`h-3 w-3 ${isSuperAdmin ? 'text-amber-400' : 'text-emerald-400'}`} />
+                    <span className={`text-xs font-bold ${isSuperAdmin ? 'text-amber-300' : 'text-emerald-300'}`}>
+                      {isSuperAdmin ? '👑 סופר אדמין' : 'מנהל'}
+                    </span>
                   </div>
                 </>
               ) : isAdminEligible ? (
@@ -11740,6 +11967,8 @@ export default function PokerApp() {
               registration={registration}
               onUpdate={handleUpdateRegistration}
               players={activePlayers}
+              ironRegistration={ironRegistration}
+              onIronUpdate={handleUpdateIronRegistration}
             />
           </div>
         )}
@@ -11900,7 +12129,8 @@ export default function PokerApp() {
                     )}
                   </button>
                 )}
-                {can('photoSession') && (
+                {/* 📸 עדכון ערב בתמונה - מוסתר כרגע (false) */}
+                {false && can('photoSession') && (
                   <button onClick={() => { setMenuOpen(false); setModalOpen(true); }}
                     className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-blue-700/80 to-blue-800/80 border border-blue-700/50 px-4 py-3 text-white font-bold hover:from-blue-600 hover:to-blue-700 transition text-sm">
                     <span className="text-xl">📸</span>
