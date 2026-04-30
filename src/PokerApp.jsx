@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.32.2';
-const APP_BUILD_TIME = '30/04/2026 10:00';
-const APP_NOTES = '🎨 טאב רישום למפגש - ראשון, רקע מיוחד, נקודה אדומה מהבהבת כשהרישום פתוח';
+const APP_VERSION = 'v2.33.0';
+const APP_BUILD_TIME = '30/04/2026 11:00';
+const APP_NOTES = '🔔 התראות Push - כפתור הפעלה בתפריט. שולח התראה כשהרישום נפתח / מישהו מבטל';
 
 
 // ===== הרשאות מנהל =====
@@ -23,6 +23,8 @@ const SUPER_ADMIN_PASSWORD_KEY = 'poker_super_admin_password_v1';
 const ADMIN_NAMES = ['רון', 'גילי']; // ברירת מחדל - ניתן לערוך מהאפליקציה
 const SUPER_ADMINS = ['רון']; // 👑 סופר אדמינים קבועים - לא ניתן לשינוי דרך ה-UI
 const ADMIN_NAMES_KEY = 'poker_admin_names_v1'; // 🆕 רשימת מנהלים שמורה ב-Firebase
+// 🔔 רשימת tokens להתראות Push - { 'userName_deviceId': { token, userName, registeredAt } }
+const PUSH_TOKENS_KEY = 'poker_push_tokens_v1';
 const ADMIN_PERMISSIONS_KEY = 'poker_admin_permissions_v1'; // 🆕 הרשאות לאדמינים רגילים
 const HIDDEN_PLAYERS_KEY = 'poker_hidden_players_v1'; // 🆕 שחקנים מוסתרים מרשימת הפעילים
 const BIRTHDAYS_KEY = 'poker_birthdays_v1'; // 🆕 ימי הולדת של שחקנים
@@ -129,6 +131,99 @@ const DEVICE_ID_KEY = 'poker_device_id_v1';
 // ===== ניהול Device ID =====
 // יוצר מזהה ייחודי לכל מכשיר (נשמר בקובץ localStorage לכל החיים)
 // 🔐 hashing פשוט לסיסמה (SHA-256) - לא חשוף ב-Firebase כטקסט גלוי
+// 🔔 ============ Push Notifications Helpers ============
+// VAPID Public Key (מהקונסולה של Firebase)
+const FCM_VAPID_KEY = 'BPYwf-_fn2Glo1FnwoU2sN_UgoOqFL2HuNAaQ2sdrcu-TbrBAUebqdY-t1eBbRvyHvEiyz_1QXFh9Gw-eFPz_4A';
+
+// בדיקה: האם הדפדפן תומך בהתראות Push?
+const isPushSupported = () => {
+  return typeof window !== 'undefined' 
+    && 'Notification' in window 
+    && 'serviceWorker' in navigator
+    && 'PushManager' in window;
+};
+
+// קבלת מצב הרשאה נוכחי
+const getNotificationPermission = () => {
+  if (!isPushSupported()) return 'unsupported';
+  return Notification.permission; // 'default' | 'granted' | 'denied'
+};
+
+// רישום ל-Push וקבלת token
+const registerForPushNotifications = async (userName, deviceId) => {
+  if (!isPushSupported()) {
+    return { success: false, reason: 'unsupported' };
+  }
+  
+  try {
+    // רישום של ה-Service Worker (אם עוד לא רשום)
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    
+    // ייבוא דינמי של Firebase Messaging (לחסוך bundle size)
+    const { initializeApp, getApps } = await import('firebase/app');
+    const { getMessaging, getToken } = await import('firebase/messaging');
+    
+    // וודא שיש app מאותחל (כבר יש - מ-firebase.js, אבל ליתר ביטחון)
+    let app;
+    const apps = getApps();
+    if (apps.length > 0) {
+      app = apps[0];
+    } else {
+      app = initializeApp({
+        apiKey: "AIzaSyB2qU_rP_SRsjiA31e4oWoWB-HCsxvXAys",
+        authDomain: "barbur-poker.firebaseapp.com",
+        projectId: "barbur-poker",
+        storageBucket: "barbur-poker.firebasestorage.app",
+        messagingSenderId: "233472709878",
+        appId: "1:233472709878:web:f6b9fed6d53c3dd28848d7"
+      });
+    }
+    
+    const messaging = getMessaging(app);
+    
+    // בקשת token (תוצג למשתמש בקשת הרשאה אם עוד לא נשאל)
+    const token = await getToken(messaging, {
+      vapidKey: FCM_VAPID_KEY,
+      serviceWorkerRegistration: registration,
+    });
+    
+    if (!token) {
+      return { success: false, reason: 'no_token' };
+    }
+    
+    // שמירת ה-token ב-Firebase
+    const tokenKey = `${userName}_${deviceId}`;
+    const existing = await fbLoadState(PUSH_TOKENS_KEY) || {};
+    existing[tokenKey] = {
+      token,
+      userName,
+      deviceId,
+      registeredAt: new Date().toISOString(),
+      userAgent: navigator.userAgent.slice(0, 200),
+    };
+    await fbSaveState(existing, PUSH_TOKENS_KEY);
+    
+    return { success: true, token };
+  } catch (e) {
+    console.error('שגיאה ברישום ל-Push:', e);
+    return { success: false, reason: 'error', error: e.message };
+  }
+};
+
+// הסרת token (כיבוי התראות)
+const unregisterFromPushNotifications = async (userName, deviceId) => {
+  try {
+    const existing = await fbLoadState(PUSH_TOKENS_KEY) || {};
+    const tokenKey = `${userName}_${deviceId}`;
+    delete existing[tokenKey];
+    await fbSaveState(existing, PUSH_TOKENS_KEY);
+    return { success: true };
+  } catch (e) {
+    console.error('שגיאה בכיבוי Push:', e);
+    return { success: false };
+  }
+};
+
 const hashPassword = async (password) => {
   if (!password) return '';
   try {
@@ -10212,6 +10307,9 @@ export default function PokerApp() {
   const [adminPermissions, setAdminPermissions] = useState(getDefaultPermissions());
   // 🔐 hash של סיסמת סופר אדמין (נשמר ב-Firebase, ריק אם טרם הוגדר)
   const [superAdminPasswordHash, setSuperAdminPasswordHash] = useState('');
+  // 🔔 מצב הרשאת התראות: 'default' | 'granted' | 'denied' | 'unsupported' | 'unknown'
+  const [notificationPermission, setNotificationPermission] = useState('unknown');
+  const [notificationBusy, setNotificationBusy] = useState(false);
   // 🔔 הודעת toast חולפת על שינוי הרשאות
   const [permissionsToast, setPermissionsToast] = useState(null);
   // הסתרה אוטומטית של ה-toast אחרי 8 שניות
@@ -11410,6 +11508,48 @@ export default function PokerApp() {
     } catch (err) { alert('קובץ לא תקין'); }
   };
 
+  // 🔔 ============ Push Notifications Handlers ============
+  // טעינת מצב ההרשאה בעלייה ראשונה
+  useEffect(() => {
+    setNotificationPermission(getNotificationPermission());
+  }, []);
+  
+  // הפעלת התראות (לחיצה על הכפתור הירוק)
+  const handleEnableNotifications = async () => {
+    if (!currentUser || notificationBusy) return;
+    setNotificationBusy(true);
+    
+    const result = await registerForPushNotifications(currentUser, deviceId);
+    
+    if (result.success) {
+      setNotificationPermission('granted');
+      alert('✅ התראות מופעלות!\nתקבל הודעה כשהרישום למפגש נפתח, או כשמישהו מבטל הרשמה.');
+    } else if (result.reason === 'unsupported') {
+      alert('⚠️ הדפדפן שלך לא תומך בהתראות.\nאם אתה ב-iPhone, וודא שהאפליקציה מותקנת על מסך הבית.');
+    } else if (result.reason === 'no_token') {
+      // המשתמש כנראה לחץ "חסום"
+      setNotificationPermission(getNotificationPermission());
+      alert('❌ ההתראות נחסמו. תוכל להפעיל מהגדרות הדפדפן.');
+    } else {
+      alert('❌ שגיאה בהפעלת התראות. נסה שוב או דווח לרון.');
+    }
+    
+    setNotificationBusy(false);
+  };
+  
+  // כיבוי התראות (לחיצה כשהן כבר מופעלות)
+  const handleDisableNotifications = async () => {
+    if (!currentUser || notificationBusy) return;
+    if (!confirm('לכבות התראות?')) return;
+    setNotificationBusy(true);
+    
+    await unregisterFromPushNotifications(currentUser, deviceId);
+    setNotificationPermission('default');
+    alert('✓ התראות כובו במכשיר זה.');
+    
+    setNotificationBusy(false);
+  };
+  
   const handleAdminLogin = async (name, role = 'admin') => {
     setAdminName(name);
     setAdminRole(role);
@@ -12243,6 +12383,34 @@ export default function PokerApp() {
                   <Lock className="h-4 w-4" />
                   <span>כניסת מנהל</span>
                 </button>
+              </div>
+            )}
+
+            {/* 🔔 כפתור הפעלת/כיבוי התראות - לכל משתמש */}
+            {currentUser && notificationPermission !== 'unsupported' && (
+              <div className="px-5 py-3 border-b border-stone-800">
+                {notificationPermission === 'granted' ? (
+                  <button onClick={() => { setMenuOpen(false); handleDisableNotifications(); }}
+                    disabled={notificationBusy}
+                    className="w-full flex items-center gap-3 rounded-lg border border-emerald-700/50 bg-emerald-950/30 px-4 py-2.5 text-emerald-300 hover:bg-emerald-950/50 transition text-sm font-bold disabled:opacity-50">
+                    <span className="text-base">✅</span>
+                    <span>התראות מופעלות</span>
+                    <span className="mr-auto text-[10px] text-emerald-400/70">לחץ לכיבוי</span>
+                  </button>
+                ) : notificationPermission === 'denied' ? (
+                  <div className="w-full flex items-center gap-3 rounded-lg border border-stone-700 bg-stone-900/50 px-4 py-2.5 text-stone-400 text-sm">
+                    <span className="text-base">🔕</span>
+                    <span>התראות חסומות בדפדפן</span>
+                  </div>
+                ) : (
+                  <button onClick={() => { setMenuOpen(false); handleEnableNotifications(); }}
+                    disabled={notificationBusy}
+                    className="w-full flex items-center gap-3 rounded-lg border border-emerald-700/50 bg-emerald-950/40 px-4 py-2.5 text-emerald-300 hover:bg-emerald-950/70 transition text-sm font-bold disabled:opacity-50">
+                    <span className="text-base">🔔</span>
+                    <span>{notificationBusy ? 'מפעיל...' : 'הפעל התראות'}</span>
+                    <span className="mr-auto text-[10px] text-emerald-400/70">לקבלת עדכונים</span>
+                  </button>
+                )}
               </div>
             )}
 
