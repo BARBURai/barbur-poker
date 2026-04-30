@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.31.7';
-const APP_BUILD_TIME = '29/04/2026 19:15';
-const APP_NOTES = '👑 סופר אדמין יכול להיכנס מכמה מכשירים במקביל (פטור מנעילה)';
+const APP_VERSION = 'v2.31.10';
+const APP_BUILD_TIME = '29/04/2026 19:55';
+const APP_NOTES = '👑 הערות גרסה מלאות - סופר אדמין בלבד. כולם רואים רק מספר גרסה';
 
 
 // ===== הרשאות מנהל =====
@@ -2043,6 +2043,117 @@ const QuoteCard = ({ quote, likeCount, onLike, onDelete }) => {
     </div>
   );
 };
+// ===== מסך אתגר סיסמת סופר אדמין =====
+// מופיע כשבוחרים סופר אדמין במכשיר שלא נעול אליו
+// אם אין סיסמה ב-Firebase - מציג מצב הגדרה ראשונית
+const SuperAdminChallengeScreen = ({ name, passwordHash, onSuccess, onSetupPassword, onCancel }) => {
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  
+  const isSetup = !passwordHash; // אם אין hash - מצב הגדרה ראשונית
+  
+  const handleSubmit = async () => {
+    if (busy) return;
+    setError('');
+    
+    if (isSetup) {
+      // מצב הגדרה ראשונית
+      if (password.length < 6) {
+        setError('סיסמה חייבת לכלול לפחות 6 תווים');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('הסיסמאות לא תואמות');
+        return;
+      }
+      setBusy(true);
+      try {
+        const hash = await hashPassword(password);
+        await onSetupPassword(hash);
+      } catch {
+        setError('שגיאה בהגדרת סיסמה');
+        setBusy(false);
+      }
+      return;
+    }
+    
+    // מצב כניסה רגיל
+    setBusy(true);
+    try {
+      const inputHash = await hashPassword(password);
+      if (inputHash === passwordHash) {
+        await onSuccess();
+      } else {
+        setError('סיסמה שגויה');
+        setBusy(false);
+      }
+    } catch {
+      setError('שגיאה');
+      setBusy(false);
+    }
+  };
+  
+  return (
+    <div dir="rtl" className="min-h-screen flex items-center justify-center p-4" style={{
+      background: 'radial-gradient(ellipse at center, #0f5132 0%, #0a3520 50%, #041810 100%)',
+      fontFamily: 'Assistant, sans-serif'
+    }}>
+      <div className="max-w-md w-full rounded-2xl border-2 border-amber-700 bg-stone-950/95 p-6">
+        <div className="text-center mb-5">
+          <div className="text-6xl mb-3">👑</div>
+          <h2 className="text-2xl font-extrabold text-amber-200 mb-1">
+            {isSetup ? 'הגדרת סיסמת סופר אדמין' : 'אימות סופר אדמין'}
+          </h2>
+          <p className="text-sm text-stone-400">
+            כניסה כ-<span className="font-bold text-amber-300">{name}</span>
+          </p>
+        </div>
+        
+        {isSetup && (
+          <div className="rounded-lg bg-amber-950/30 border border-amber-800/50 p-3 text-xs text-amber-200 leading-relaxed mb-4">
+            זוהי הכניסה הראשונה כסופר אדמין. בחר סיסמה אישית - היא תישמר מוצפנת ב-Firebase ולא בקוד.<br/>
+            <span className="text-amber-400 font-bold">חשוב: שמור את הסיסמה במקום בטוח!</span>
+          </div>
+        )}
+        
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-stone-400 mb-1">
+              {isSetup ? 'סיסמה חדשה (לפחות 6 תווים)' : 'סיסמת סופר אדמין'}
+            </label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} autoFocus
+              onKeyDown={e => !isSetup && e.key === 'Enter' && handleSubmit()}
+              className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white focus:border-amber-600 focus:outline-none" />
+          </div>
+          {isSetup && (
+            <div>
+              <label className="block text-xs text-stone-400 mb-1">אימות סיסמה</label>
+              <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                className="w-full rounded-lg border border-stone-700 bg-stone-900 px-3 py-2 text-white focus:border-amber-600 focus:outline-none" />
+            </div>
+          )}
+          {error && (
+            <div className="text-xs text-rose-400 flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />{error}
+            </div>
+          )}
+          <button onClick={handleSubmit} disabled={busy}
+            className="w-full rounded-lg bg-gradient-to-br from-amber-600 to-amber-700 px-4 py-3 font-bold text-white hover:from-amber-500 hover:to-amber-600 transition disabled:opacity-50">
+            {busy ? 'בודק...' : (isSetup ? '👑 קבע סיסמה והתחבר' : 'התחבר')}
+          </button>
+          <button onClick={onCancel}
+            className="w-full rounded-lg bg-stone-800 hover:bg-stone-700 border border-stone-700 px-4 py-2 text-stone-300 transition text-sm">
+            ביטול
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ===== מסך בחירת שם משתמש =====
 const UserSelectScreen = ({ players, onSelect, deviceLocks = {}, currentDeviceId = '', impersonating = null, onCancelImpersonate = () => {} }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -2900,6 +3011,7 @@ const RegistrationTab = ({
   sessions,
   currentUser, 
   isAdmin, 
+  isSuperAdmin,
   registration, 
   onUpdate, 
   players 
@@ -3159,7 +3271,7 @@ const RegistrationTab = ({
             <Users className="h-4 w-4 text-amber-400" />
             <div className="text-sm font-bold text-stone-200">רשימת נרשמים</div>
           </div>
-          {isAdmin && registrationOpenInfo.isOpen && (
+          {isSuperAdmin && registrationOpenInfo.isOpen && (
             <button
               onClick={() => setAdminAddOpen(!adminAddOpen)}
               className="text-xs rounded-md bg-amber-900/40 hover:bg-amber-900/60 border border-amber-800 px-2 py-1 text-amber-300 font-bold flex items-center gap-1"
@@ -3169,8 +3281,8 @@ const RegistrationTab = ({
           )}
         </div>
         
-        {/* פאנל אדמין להוספה ידנית */}
-        {adminAddOpen && isAdmin && (
+        {/* פאנל סופר אדמין להוספה ידנית */}
+        {adminAddOpen && isSuperAdmin && (
           <div className="p-3 bg-amber-950/20 border-b border-amber-900/40">
             <div className="text-xs text-amber-300 mb-2">בחר שחקן להוספה (כאדמין):</div>
             <div className="relative mb-2">
@@ -3222,7 +3334,7 @@ const RegistrationTab = ({
                       {isMe && <span className="text-emerald-400 text-xs mr-1.5">(אני)</span>}
                     </div>
                   </div>
-                  {(isAdmin || isMe) && !entry.isHost && (
+                  {(isSuperAdmin || isMe) && !entry.isHost && (
                     <button
                       onClick={() => handleLeave(entry.name)}
                       className="text-stone-500 hover:text-red-400 p-1"
@@ -3259,7 +3371,7 @@ const RegistrationTab = ({
                           {isMe && <span className="text-amber-400 text-xs mr-1.5">(אני)</span>}
                         </div>
                       </div>
-                      {(isAdmin || isMe) && (
+                      {(isSuperAdmin || isMe) && (
                         <button
                           onClick={() => handleLeave(entry.name)}
                           className="text-stone-500 hover:text-red-400 p-1"
@@ -9935,6 +10047,8 @@ export default function PokerApp() {
   const [deviceId] = useState(() => getOrCreateDeviceId());
   // 🚫 הודעת חסימה - "השם תפוס במכשיר אחר"
   const [lockBlockedName, setLockBlockedName] = useState(null);
+  // 🔐 שם שדורש סיסמת סופר אדמין כדי להיכנס (כשבחרו סופר אדמין במסך "מי אתה?")
+  const [superAdminChallenge, setSuperAdminChallenge] = useState(null);
   // 🎭 התחזות לאדמין - שומר את האדמין האמיתי
   // 🎭 התחזות לאדמין - שומר את האדמין האמיתי
   // נשמר ב-localStorage כדי שלא ילך לאיבוד בריענון
@@ -10255,12 +10369,22 @@ export default function PokerApp() {
       try {
         const savedUser = window.localStorage.getItem('poker_user_name');
         if (savedUser) {
-          // 🔐 בדיקת נעילת מכשיר - 👑 סופר אדמינים פטורים (יכולים להיכנס מכמה מכשירים)
+          // 🔐 בדיקת נעילת מכשיר
           const userLock = currentLocks[savedUser];
           const isSuperAdminUser = SUPER_ADMINS.includes(savedUser);
-          if (userLock && userLock.deviceId !== deviceId && !isSuperAdminUser) {
+          const isMyDevice = userLock && userLock.deviceId === deviceId;
+          
+          // 👑 סופר אדמין: כניסה אוטומטית רק אם המכשיר הזה כבר נעול אליו
+          // (אחרת יראה את מסך "מי אתה?" וידרוש סיסמה)
+          if (isSuperAdminUser && !isMyDevice) {
+            try { 
+              window.localStorage.removeItem('poker_user_name');
+              window.localStorage.removeItem('poker_admin_name');
+              window.localStorage.removeItem('poker_admin_role');
+            } catch {}
+            setShowSplash(false);
+          } else if (userLock && userLock.deviceId !== deviceId && !isSuperAdminUser) {
             // השם נעול במכשיר אחר! - לא מאפשרים כניסה
-            // נמחק את ה-localStorage המקומי כדי שלא ינסה שוב בלולאה
             try { 
               window.localStorage.removeItem('poker_user_name');
               window.localStorage.removeItem('poker_admin_name');
@@ -10732,18 +10856,43 @@ export default function PokerApp() {
   };
 
   const handleUserSelect = async (name) => {
-    // 🔐 בדיקת נעילה - האם השם הזה כבר תפוס במכשיר אחר?
-    // (אם זה מכשיר זה - נמשיך כרגיל)
-    // 👑 סופר אדמינים פטורים מנעילה - יכולים להיכנס מכמה מכשירים במקביל
+    // 👑 סופר אדמין - דורש סיסמה כדי להזדהות (אלא אם המכשיר הזה כבר נעול אליו)
     const existingLock = deviceLocks[name];
     const isSuperAdminUser = SUPER_ADMINS.includes(name);
+    const isMyDevice = existingLock && existingLock.deviceId === deviceId;
+    
+    if (isSuperAdminUser && !isMyDevice) {
+      // אין נעילה למכשיר הזה - דרוש אימות סיסמה
+      setSuperAdminChallenge(name);
+      return;
+    }
+    
+    // 🔐 בדיקת נעילה - האם השם הזה כבר תפוס במכשיר אחר? (לא רלוונטי לסופר אדמין)
     if (existingLock && existingLock.deviceId !== deviceId && !isSuperAdminUser) {
       setLockBlockedName(name);
       return;
     }
     
+    await completeUserSelect(name);
+  };
+  
+  // 🆕 השלמת הכניסה (אחרי כל הבדיקות)
+  const completeUserSelect = async (name, options = {}) => {
+    const isSuperAdminUser = SUPER_ADMINS.includes(name);
+    const existingLock = deviceLocks[name];
+    
     setCurrentUser(name);
     try { window.localStorage.setItem('poker_user_name', name); } catch {}
+    
+    // 👑 אם זה סופר אדמין - הגדרה אוטומטית כסופר אדמין
+    if (isSuperAdminUser) {
+      setAdminName(name);
+      setAdminRole('super');
+      try { 
+        window.localStorage.setItem('poker_admin_name', name);
+        window.localStorage.setItem('poker_admin_role', 'super');
+      } catch {}
+    }
     
     // 🔐 נעילה אוטומטית של המכשיר לשם הזה
     if (!existingLock) {
@@ -10751,7 +10900,7 @@ export default function PokerApp() {
         deviceId,
         lockedAt: new Date().toISOString(),
         userAgent: (typeof navigator !== 'undefined' && navigator.userAgent) ? navigator.userAgent.slice(0, 200) : '',
-        autoLocked: false, // נעילה רגילה - בחר את עצמו
+        autoLocked: false,
       };
       const updatedLocks = { ...deviceLocks, [name]: newLock };
       setDeviceLocks(updatedLocks);
@@ -11228,6 +11377,26 @@ export default function PokerApp() {
     );
   }
 
+  // 🔐 מסך אתגר סיסמת סופר אדמין (כשבוחרים סופר אדמין במכשיר חדש)
+  if (superAdminChallenge) {
+    return <SuperAdminChallengeScreen 
+      name={superAdminChallenge}
+      passwordHash={superAdminPasswordHash}
+      onSuccess={async () => {
+        const name = superAdminChallenge;
+        setSuperAdminChallenge(null);
+        await completeUserSelect(name);
+      }}
+      onSetupPassword={async (newHash) => {
+        await handleSetSuperAdminPassword(newHash);
+        const name = superAdminChallenge;
+        setSuperAdminChallenge(null);
+        await completeUserSelect(name);
+      }}
+      onCancel={() => setSuperAdminChallenge(null)}
+    />;
+  }
+
   // מסך בחירת משתמש (אם עוד לא בחר)
   if (!currentUser) {
     return <UserSelectScreen 
@@ -11567,6 +11736,7 @@ export default function PokerApp() {
               sessions={allSessions}
               currentUser={currentUser}
               isAdmin={isAdmin}
+              isSuperAdmin={isSuperAdmin}
               registration={registration}
               onUpdate={handleUpdateRegistration}
               players={activePlayers}
@@ -11605,7 +11775,7 @@ export default function PokerApp() {
           {sessions.length} מפגשים • {stats.length} שחקנים • עונת {selectedSeason} • 
           <span className="text-amber-600/60"> BARBUR AI</span>
           <div className="mt-2 text-[11px] text-stone-100 tracking-normal normal-case font-mono">
-            {isAdmin ? `${APP_VERSION} • ${APP_BUILD_TIME} • ${APP_NOTES}` : APP_VERSION}
+            {isSuperAdmin ? `${APP_VERSION} • ${APP_BUILD_TIME} • ${APP_NOTES}` : APP_VERSION}
           </div>
         </footer>
       </div>
