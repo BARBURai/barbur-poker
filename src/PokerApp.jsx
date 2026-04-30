@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.31.2';
-const APP_BUILD_TIME = '29/04/2026 17:50';
-const APP_NOTES = '🚪 הוספת כפתור "התנתק כמנהל" בתפריט - חזרה למצב שחקן רגיל';
+const APP_VERSION = 'v2.31.6';
+const APP_BUILD_TIME = '29/04/2026 19:00';
+const APP_NOTES = '🎭 באנר התחזות סגול בראש המסך עם כפתור ביטול גלוי תמיד';
 
 
 // ===== הרשאות מנהל =====
@@ -9907,6 +9907,14 @@ export default function PokerApp() {
   const [adminPermissions, setAdminPermissions] = useState(getDefaultPermissions());
   // 🔐 hash של סיסמת סופר אדמין (נשמר ב-Firebase, ריק אם טרם הוגדר)
   const [superAdminPasswordHash, setSuperAdminPasswordHash] = useState('');
+  // 🔔 הודעת toast חולפת על שינוי הרשאות
+  const [permissionsToast, setPermissionsToast] = useState(null);
+  // הסתרה אוטומטית של ה-toast אחרי 8 שניות
+  useEffect(() => {
+    if (!permissionsToast) return;
+    const t = setTimeout(() => setPermissionsToast(null), 8000);
+    return () => clearTimeout(t);
+  }, [permissionsToast]);
   // 🔓 מסך ניהול הרשאות (רק לסופר אדמין)
   const [permissionsManagerOpen, setPermissionsManagerOpen] = useState(false);
   // 🆕 רשימת המנהלים - נטענת מ-Firebase
@@ -9928,7 +9936,15 @@ export default function PokerApp() {
   // 🚫 הודעת חסימה - "השם תפוס במכשיר אחר"
   const [lockBlockedName, setLockBlockedName] = useState(null);
   // 🎭 התחזות לאדמין - שומר את האדמין האמיתי
-  const [impersonating, setImpersonating] = useState(null); // null או שם השחקן שמתחזים אליו
+  // 🎭 התחזות לאדמין - שומר את האדמין האמיתי
+  // נשמר ב-localStorage כדי שלא ילך לאיבוד בריענון
+  const [impersonating, setImpersonating] = useState(() => {
+    try {
+      return window.localStorage.getItem('poker_real_admin_name') || null;
+    } catch {
+      return null;
+    }
+  });
   // 📋 פאנל אדמין לניהול נעילות
   const [deviceLocksManagerOpen, setDeviceLocksManagerOpen] = useState(false);
   // 🆕 כניסה אחרונה לכל משתמש {שם: timestamp ISO}
@@ -10766,7 +10782,10 @@ export default function PokerApp() {
     if (can('impersonate') && currentUser) {
       const ok = confirm('🎭 התחזות כמשתמש אחר?\n(לבדיקות בלבד - הנעילה של המשתמש המקורי לא תשתחרר)');
       if (!ok) return;
-      // שומר את האדמין האמיתי כדי לחזור אליו
+      // 🆕 שומרים את האדמין האמיתי גם ב-localStorage כדי שלא ילך לאיבוד בריענון
+      try { 
+        window.localStorage.setItem('poker_real_admin_name', currentUser);
+      } catch {}
       setImpersonating(currentUser);
       setCurrentUser(null);
       // לא מוחקים את poker_user_name ולא משחררים נעילה
@@ -10779,14 +10798,41 @@ export default function PokerApp() {
   // 🎭 חזרה מהתחזות לאדמין המקורי
   const handleStopImpersonating = () => {
     if (!impersonating) return;
-    setCurrentUser(impersonating);
+    const realAdmin = impersonating;
+    setCurrentUser(realAdmin);
     setImpersonating(null);
+    // 🆕 ניקוי ה-localStorage של ההתחזות
+    try {
+      window.localStorage.removeItem('poker_real_admin_name');
+      // החזרת ה-poker_user_name לאדמין האמיתי (במקרה והשתנה)
+      window.localStorage.setItem('poker_user_name', realAdmin);
+    } catch {}
+  };
+  
+  // 🚨 ביטול התחזות חירום - גם אם המצב נתקע
+  // משחזר את המשתמש המקורי מ-localStorage או מנקה הכל
+  const handleEmergencyResetImpersonation = () => {
+    try {
+      const realAdmin = window.localStorage.getItem('poker_real_admin_name');
+      const lockedUser = window.localStorage.getItem('poker_user_name');
+      // אם יש לנו רשומה של האדמין האמיתי - חזור אליו
+      if (realAdmin) {
+        setCurrentUser(realAdmin);
+        setImpersonating(null);
+        window.localStorage.removeItem('poker_real_admin_name');
+        window.localStorage.setItem('poker_user_name', realAdmin);
+      } else if (lockedUser) {
+        // אחרת - חזור למשתמש שלפי הנעילה במכשיר
+        setCurrentUser(lockedUser);
+        setImpersonating(null);
+      }
+    } catch {}
   };
   
   // 🎭 בחירה במצב התחזות (אדמין בוחר משתמש אחר ללא נעילה)
   const handleImpersonate = async (name) => {
     setCurrentUser(name);
-    // לא נוגעים ב-localStorage ולא נועלים מכשיר
+    // לא נוגעים ב-localStorage של poker_user_name (כדי שלא נשבור את הנעילה)
     // לא שומרים זמן כניסה
   };
   
@@ -10888,19 +10934,79 @@ export default function PokerApp() {
     }
   };
   
-  // 🔄 רענון אוטומטי של הרישום כל 20 שניות (סנכרון בין משתמשים)
+  // 🔄 רענון אוטומטי כל 20 שניות (סנכרון בין משתמשים בזמן אמת)
+  // - הרישום למפגש (אם פעיל)
+  // - הרשאות אדמין רגיל (כשהסופר אדמין משנה הרשאות, האדמינים יראו תוך 20 שניות)
+  // - hash של סיסמת סופר אדמין (אם הסופר אדמין שינה סיסמה)
+  // - נעילות מכשירים (אם הסופר אדמין שחרר נעילה)
   useEffect(() => {
-    if (!registrationEnabled) return;
     const interval = setInterval(async () => {
       try {
-        const fresh = await loadState(REGISTRATION_KEY);
-        if (fresh) setRegistration(fresh);
+        // הרשאות - תמיד מסנכרן (לכל משתמש חשוב)
+        const freshPerms = await loadState(ADMIN_PERMISSIONS_KEY);
+        if (freshPerms && typeof freshPerms === 'object') {
+          setAdminPermissions(prev => {
+            const merged = { ...getDefaultPermissions(), ...freshPerms };
+            // השוואה רדודה - אם זהה, לא עוטף עדכון לחינם
+            const same = Object.keys(merged).every(k => merged[k] === prev[k]);
+            if (same) return prev;
+            
+            // 🔔 אם זה אדמין רגיל (לא סופר), נציג לו הודעה על שינוי
+            // (סופר אדמין רואה את השינוי שהוא עצמו עושה - לא צריך הודעה)
+            if (isAdmin && adminRole === 'admin') {
+              // מצא מה השתנה
+              const added = [];
+              const removed = [];
+              for (const key of Object.keys(merged)) {
+                if (merged[key] && !prev[key]) added.push(key);
+                if (!merged[key] && prev[key]) removed.push(key);
+              }
+              if (added.length || removed.length) {
+                const labels = (keys) => keys.map(k => {
+                  const item = PERMISSIONS_REGISTRY.find(p => p.key === k);
+                  return item ? item.label : k;
+                });
+                setPermissionsToast({
+                  added: labels(added),
+                  removed: labels(removed),
+                  at: Date.now(),
+                });
+              }
+            }
+            return merged;
+          });
+        }
+        
+        // hash סיסמת סופר אדמין
+        const freshHash = await loadState(SUPER_ADMIN_PASSWORD_KEY);
+        if (freshHash?.hash && freshHash.hash !== superAdminPasswordHash) {
+          setSuperAdminPasswordHash(freshHash.hash);
+        }
+        
+        // נעילות מכשירים
+        const freshLocks = await loadState(DEVICE_LOCKS_KEY);
+        if (freshLocks && typeof freshLocks === 'object') {
+          setDeviceLocks(prev => {
+            // השוואה רדודה
+            const sameKeys = Object.keys(prev).length === Object.keys(freshLocks).length 
+              && Object.keys(prev).every(k => freshLocks[k]?.deviceId === prev[k]?.deviceId);
+            return sameKeys ? prev : freshLocks;
+          });
+        }
+        
+        // רישום למפגש - רק אם הפיצ'ר פעיל
+        if (registrationEnabled) {
+          const fresh = await loadState(REGISTRATION_KEY);
+          if (fresh) setRegistration(fresh);
+        }
+        
+        // מצב טאב הרישום (אם הסופר אדמין הפעיל/כיבה)
         const enabled = await loadState(REGISTRATION_ENABLED_KEY);
         if (enabled) setRegistrationEnabled(!!enabled.enabled);
       } catch {}
     }, 20000);
     return () => clearInterval(interval);
-  }, [registrationEnabled]);
+  }, [registrationEnabled, superAdminPasswordHash]);
 
 
   const handleReset = async () => {
@@ -11053,9 +11159,15 @@ export default function PokerApp() {
     await persistQuotes(newDeleted, quoteLikes);
   };
 
-  const isAdmin = !!adminName;
+  // 🎭 בזמן התחזות - הסטטוס משקף את המשתמש שאליו מתחזים, לא את הסופר אדמין האמיתי
+  // ככה שהמסך באמת ייראה כמו שהוא ייראה לאותו משתמש
+  // המידע על הסופר אדמין האמיתי נשמר ב-impersonating - ככה שאפשר תמיד לחזור.
+  const impersonatedIsAdmin = impersonating ? adminNamesList.includes(currentUser) : false;
+  const impersonatedIsSuper = impersonating ? SUPER_ADMINS.includes(currentUser) : false;
+  
+  const isAdmin = impersonating ? impersonatedIsAdmin : !!adminName;
   // 👑 האם המשתמש הנוכחי הוא סופר אדמין?
-  const isSuperAdmin = isAdmin && adminRole === 'super';
+  const isSuperAdmin = impersonating ? impersonatedIsSuper : (isAdmin && adminRole === 'super');
   
   // 🔐 פונקציה מרכזית לבדיקת הרשאה לפיצ'ר
   // can('liveSession') -> true/false
@@ -11167,6 +11279,27 @@ export default function PokerApp() {
       }} />
       <div className="fixed top-0 right-0 w-96 h-96 bg-amber-900/10 rounded-full blur-3xl pointer-events-none" />
       <div className="fixed bottom-0 left-0 w-96 h-96 bg-red-900/10 rounded-full blur-3xl pointer-events-none" />
+
+      {/* 🎭 באנר התחזות - מופיע ברגע שיש התחזות פעילה. כפתור יציאה תמיד נגיש. */}
+      {impersonating && (
+        <div className="sticky top-0 z-40 bg-gradient-to-l from-purple-900 to-purple-700 border-b-2 border-purple-500 shadow-lg shadow-purple-900/50">
+          <div className="max-w-7xl mx-auto px-3 py-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-white text-sm min-w-0">
+              <span className="text-xl shrink-0">🎭</span>
+              <span className="truncate">
+                <span className="font-bold">{impersonating}</span>
+                <span className="opacity-80"> מתחזה כ-</span>
+                <span className="font-bold text-amber-200">{currentUser || '?'}</span>
+              </span>
+            </div>
+            <button onClick={handleStopImpersonating}
+              className="shrink-0 rounded-lg bg-white/20 hover:bg-white/30 active:bg-white/40 border border-white/30 px-3 py-1.5 text-white font-bold text-sm transition flex items-center gap-1.5">
+              <X className="h-4 w-4" />
+              <span>ביטול</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="relative max-w-7xl mx-auto px-3 md:px-4 py-4 md:py-6">
         {/* Header */}
@@ -11847,6 +11980,35 @@ export default function PokerApp() {
           onClose={() => setBirthdayPopup(null)} />
       )}
 
+      {/* 🔔 הודעה על שינוי הרשאות (לאדמינים רגילים בלבד) */}
+      {permissionsToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[9999] max-w-md w-[calc(100%-2rem)] animate-fadeInUp">
+          <div className="rounded-2xl border-2 border-amber-600 bg-stone-950/95 backdrop-blur-md shadow-2xl shadow-amber-900/40 p-4">
+            <div className="flex items-start gap-3">
+              <div className="text-2xl shrink-0">🔔</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-extrabold text-amber-300 text-sm mb-1">ההרשאות שלך עודכנו</div>
+                {permissionsToast.added.length > 0 && (
+                  <div className="text-xs text-emerald-300 mb-1">
+                    <span className="font-bold">✅ נוסף:</span> {permissionsToast.added.join(' • ')}
+                  </div>
+                )}
+                {permissionsToast.removed.length > 0 && (
+                  <div className="text-xs text-rose-300">
+                    <span className="font-bold">❌ הוסר:</span> {permissionsToast.removed.join(' • ')}
+                  </div>
+                )}
+                <div className="text-[10px] text-stone-500 mt-1">השינוי כבר תקף - בדוק את התפריט</div>
+              </div>
+              <button onClick={() => setPermissionsToast(null)}
+                className="text-stone-500 hover:text-white shrink-0">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&family=Assistant:wght@300;400;500;600;700;800&family=Cinzel:wght@600;800&display=swap');
         * { font-family: 'Heebo', 'Assistant', sans-serif !important; }
@@ -11862,6 +12024,11 @@ export default function PokerApp() {
           0%, 100% { opacity: 1; transform: translateY(-50%) translateX(0); }
           50% { opacity: 0.85; transform: translateY(-50%) translateX(-3px); }
         }
+        @keyframes fadeInUp {
+          from { opacity: 0; transform: translate(-50%, 1rem); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        .animate-fadeInUp { animation: fadeInUp 0.3s ease-out; }
         .animate-pulse-subtle { animation: pulse-subtle 1.8s ease-in-out infinite; }
         @keyframes swan-arc {
           0% { opacity: 0; transform: translate(0, 0); }
