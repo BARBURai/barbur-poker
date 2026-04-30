@@ -1,12 +1,9 @@
-// 🔔 Service Worker להתראות Push
+// 🔔 Service Worker להתראות Push - גרסה משופרת
 // קובץ זה רץ ברקע גם כשהאפליקציה סגורה
-// הוא מאפשר לקבל התראות מ-Firebase Cloud Messaging (FCM)
 
-// טעינת Firebase SDK בגרסת compat (התואמת ל-Service Workers)
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js');
 
-// הגדרות Firebase - אותן ההגדרות מ-src/firebase.js
 firebase.initializeApp({
   apiKey: "AIzaSyB2qU_rP_SRsjiA31e4oWoWB-HCsxvXAys",
   authDomain: "barbur-poker.firebaseapp.com",
@@ -18,38 +15,65 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// טיפול בהתראות שמגיעות כשהאפליקציה סגורה
-messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] התראה ברקע:', payload);
+// 🔔 Handler ראשי - מטפל בכל הודעת push שמגיעה
+// משתמש ב-push event במקום onBackgroundMessage למנוע כפילויות
+self.addEventListener('push', (event) => {
+  console.log('[SW] Push event received');
   
-  const notificationTitle = payload.notification?.title || 'פוקר ברבורי תל מונד';
-  const notificationOptions = {
-    body: payload.notification?.body || '',
-    icon: '/icon-192.png',  // אייקון של האפליקציה (אם קיים)
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch (e) {
+    console.error('[SW] Failed to parse payload:', e);
+    payload = { notification: { title: 'הודעה חדשה', body: 'יש לך הודעה חדשה' } };
+  }
+  
+  console.log('[SW] Payload:', JSON.stringify(payload));
+  
+  const title = payload.notification?.title || payload.data?.title || 'פוקר ברבורי תל מונד';
+  const body = payload.notification?.body || payload.data?.body || '';
+  
+  const options = {
+    body: body,
+    icon: '/icon-192.png',
     badge: '/icon-192.png',
     dir: 'rtl',
     lang: 'he',
-    tag: payload.data?.type || 'general', // התראות מאותו סוג מחליפות זו את זו
+    tag: payload.data?.type || 'general',
     requireInteraction: false,
+    vibrate: [200, 100, 200],
     data: payload.data || {},
   };
   
-  return self.registration.showNotification(notificationTitle, notificationOptions);
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+      .then(() => console.log('[SW] Notification displayed:', title))
+      .catch(err => console.error('[SW] Show notification failed:', err))
+  );
 });
 
 // כשהמשתמש לוחץ על ההתראה - פותח את האפליקציה
 self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] Notification clicked');
   event.notification.close();
   
-  // פתיחה / החזרה של חלון האפליקציה
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // אם יש חלון פתוח - מחזיר אותו
       for (const client of clientList) {
         if ('focus' in client) return client.focus();
       }
-      // אם אין - פותח חדש
       if (clients.openWindow) return clients.openWindow('/');
     })
   );
+});
+
+// install + activate - להבטיח שה-SW יופעל מיד
+self.addEventListener('install', (event) => {
+  console.log('[SW] Installing...');
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  console.log('[SW] Activated');
+  event.waitUntil(self.clients.claim());
 });
