@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.9';
-const APP_BUILD_TIME = '01/05/2026 15:00';
-const APP_NOTES = '🍻 שלב 2 של תזכורות מארח: מסך אישור אירוח באפליקציה';
+const APP_VERSION = 'v2.33.10';
+const APP_BUILD_TIME = '01/05/2026 15:30';
+const APP_NOTES = '🍻 שלב 3 של תזכורות מארח: סימון אישור בלוח האירוחים + כפתור סמן ידנית';
 
 
 // ===== הרשאות מנהל =====
@@ -3843,7 +3843,53 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
   const [newHost, setNewHost] = useState({ date: '', dayName: 'שני', host: '', notes: '', address: '' });
   const [filter, setFilter] = useState(defaultFilter); // upcoming | past | all
   const [filterHost, setFilterHost] = useState('all'); // 🆕 פילטר לפי שם המארח
+  const [hostReminders, setHostReminders] = useState({}); // 🍻 תזכורות מארחים - מי אישר/דחה/ממתין
+  const [reminderMenuOpen, setReminderMenuOpen] = useState(null); // איזה תאריך פתוח לתפריט "סמן ידנית"
   const today = getTodayIsrael();
+  
+  // 🍻 טעינה ראשונית של תזכורות מארחים + רענון כל 30 שניות
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const data = await fbLoadState(HOST_REMINDERS_KEY);
+        if (!cancelled && data && typeof data === 'object') {
+          setHostReminders(data);
+        }
+      } catch (e) {
+        console.error('שגיאה בטעינת תזכורות:', e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+  
+  // 🍻 פונקציה לסימון ידני (רק לאדמינים)
+  const markReminderManually = async (date, host, response) => {
+    try {
+      const reminders = (await fbLoadState(HOST_REMINDERS_KEY)) || {};
+      const key = `${date}_${host}`;
+      reminders[key] = {
+        ...(reminders[key] || {}),
+        sessionDate: date,
+        sessionHost: host,
+        response: response, // 'confirmed' | 'declined' | null (clear)
+        respondedAt: response ? new Date().toISOString() : null,
+        markedManuallyBy: response ? addedBy : null,
+      };
+      // אם clear - מוחקים את הרשומה
+      if (response === null) {
+        delete reminders[key];
+      }
+      await fbSaveState(reminders, HOST_REMINDERS_KEY);
+      setHostReminders(reminders);
+      setReminderMenuOpen(null);
+    } catch (e) {
+      console.error('שגיאה בסימון:', e);
+      alert('❌ שגיאה - נסה שוב');
+    }
+  };
   
   // 🆕 רשימת מארחים ייחודיים מהלוח (מסודרים אלפבית)
   const allHosts = useMemo(() => {
@@ -4055,7 +4101,36 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
                           </span>
                         )}
                       </div>
-                      <div className="text-base font-bold text-stone-100">{h.host || <span className="text-stone-500 italic">לא נקבע</span>}</div>
+                      <div className="text-base font-bold text-stone-100 flex items-center gap-2 flex-wrap">
+                        <span>{h.host || <span className="text-stone-500 italic">לא נקבע</span>}</span>
+                        {/* 🍻 סטטוס תזכורת אירוח - רק למפגשים עתידיים עם מארח */}
+                        {isFuture && h.host && (() => {
+                          const reminder = hostReminders[`${h.date}_${h.host}`];
+                          if (!reminder) return null;
+                          if (reminder.response === 'confirmed') {
+                            return (
+                              <span className="rounded-md bg-emerald-900/60 border border-emerald-700/60 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200" title={`אישר ב-${new Date(reminder.respondedAt).toLocaleString('he-IL')}${reminder.markedManuallyBy ? ' (סומן ידנית ע"י ' + reminder.markedManuallyBy + ')' : ''}`}>
+                                ✅ אישר
+                              </span>
+                            );
+                          }
+                          if (reminder.response === 'declined') {
+                            return (
+                              <span className="rounded-md bg-rose-900/60 border border-rose-700/60 px-1.5 py-0.5 text-[10px] font-bold text-rose-200" title={`דחה ב-${new Date(reminder.respondedAt).toLocaleString('he-IL')}${reminder.markedManuallyBy ? ' (סומן ידנית ע"י ' + reminder.markedManuallyBy + ')' : ''}`}>
+                                ❌ דחה
+                              </span>
+                            );
+                          }
+                          if (reminder.sentAt) {
+                            return (
+                              <span className="rounded-md bg-amber-900/60 border border-amber-700/60 px-1.5 py-0.5 text-[10px] font-bold text-amber-200" title={`תזכורת נשלחה ב-${new Date(reminder.sentAt).toLocaleString('he-IL')}, עדיין לא ענה`}>
+                                ⏳ ממתין
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                       {h.address && (
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs text-stone-400 truncate">📍 {h.address}</span>
@@ -4071,9 +4146,50 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
                     </div>
                   </div>
                   {isAdmin && (
-                    <button onClick={() => startEdit(h)} className="text-xs text-amber-400 hover:text-amber-300 px-2 py-1 flex-shrink-0">
-                      ערוך
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {/* 🍻 כפתור "סמן ידנית" לאדמינים - רק למפגשים עתידיים עם מארח */}
+                      {isFuture && h.host && (
+                        <div className="relative">
+                          <button 
+                            onClick={() => setReminderMenuOpen(reminderMenuOpen === h.date ? null : h.date)}
+                            className="text-xs text-emerald-400 hover:text-emerald-300 px-2 py-1"
+                            title="סמן את האישור של המארח ידנית"
+                          >
+                            📝 סמן
+                          </button>
+                          {reminderMenuOpen === h.date && (
+                            <div className="absolute left-0 top-full mt-1 z-20 bg-stone-900 border border-stone-700 rounded-lg shadow-2xl py-1 min-w-[140px]">
+                              <button
+                                onClick={() => markReminderManually(h.date, h.host, 'confirmed')}
+                                className="w-full text-right px-3 py-2 text-xs text-emerald-300 hover:bg-emerald-900/30 transition"
+                              >
+                                ✅ סמן כמאושר
+                              </button>
+                              <button
+                                onClick={() => markReminderManually(h.date, h.host, 'declined')}
+                                className="w-full text-right px-3 py-2 text-xs text-rose-300 hover:bg-rose-900/30 transition"
+                              >
+                                ❌ סמן כדחוי
+                              </button>
+                              {hostReminders[`${h.date}_${h.host}`] && (
+                                <>
+                                  <div className="border-t border-stone-700 my-1"></div>
+                                  <button
+                                    onClick={() => markReminderManually(h.date, h.host, null)}
+                                    className="w-full text-right px-3 py-2 text-xs text-stone-400 hover:bg-stone-800 transition"
+                                  >
+                                    ↩ נקה סימון
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <button onClick={() => startEdit(h)} className="text-xs text-amber-400 hover:text-amber-300 px-2 py-1">
+                        ערוך
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
