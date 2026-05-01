@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.5';
-const APP_BUILD_TIME = '01/05/2026 12:30';
-const APP_NOTES = '🛡️ איפוס רשימה ב-06:00 (במקום 11:55) - רק סופר אדמין מאפס אוטומטית';
+const APP_VERSION = 'v2.33.7';
+const APP_BUILD_TIME = '01/05/2026 13:50';
+const APP_NOTES = '🎰 כפתור צף לפתיחת מסך ערב חי שנסגר';
 
 
 // ===== הרשאות מנהל =====
@@ -6537,11 +6537,21 @@ const LiveBroadcastViewer = ({ broadcast, onClose, currentUser }) => {
         {/* רשימת משתתפים */}
         {participants.length > 0 && (
           <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur p-4">
-            <h3 className="text-base font-bold text-amber-200 mb-3 flex items-center gap-2">
-              👥 משתתפים ({participants.length})
+            <h3 className="text-base font-bold text-amber-200 mb-3 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2">👥 משתתפים ({participants.length})</span>
+              <button
+                onClick={() => setSortByAlphabet(!sortByAlphabet)}
+                className="text-xs rounded-md bg-stone-800 hover:bg-stone-700 border border-stone-700 px-2 py-1 text-stone-300 font-bold transition"
+                title={sortByAlphabet ? 'מיון לפי סדר רישום' : 'מיון לפי א"ב'}
+              >
+                {sortByAlphabet ? '🔤 לפי א"ב' : '🔢 סדר רישום'}
+              </button>
             </h3>
             <div className="space-y-2">
-              {participants.map((p, i) => {
+              {(sortByAlphabet 
+                ? [...participants].sort((a, b) => a.name.localeCompare(b.name, 'he'))
+                : participants
+              ).map((p, i) => {
                 const isMe = p.name === currentUser;
                 return (
                   <div 
@@ -6608,6 +6618,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   const [participants, setParticipants] = useState([]); // [{name, buyIns: 1}]
   const [showAddPlayer, setShowAddPlayer] = useState(false);
   const [pendingAdditions, setPendingAdditions] = useState([]); // שחקנים שנבחרו בבחירה מרובה לפני אישור
+  const [sortByAlphabet, setSortByAlphabet] = useState(false); // 🔤 מצב מיון - false=סדר רישום, true=לפי א"ב
   const [closing, setClosing] = useState(false);
   const [finalChips, setFinalChips] = useState({});
   const [settlementOpen, setSettlementOpen] = useState(false); // מודל חלוקת כספים
@@ -6763,10 +6774,12 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
   };
 
   const addBuyIn = (name) => {
+    if (!confirm(`+20 ל${name}?`)) return;
     setParticipants(participants.map(p => p.name === name ? { ...p, buyIns: p.buyIns + 1 } : p));
   };
 
   const removeBuyIn = (name) => {
+    if (!confirm(`-20 מ${name}?`)) return;
     setParticipants(participants.map(p => p.name === name ? { ...p, buyIns: Math.max(1, p.buyIns - 1) } : p));
   };
 
@@ -12604,6 +12617,20 @@ export default function PokerApp() {
             setBroadcastDismissed(true);
           }}
         />
+      )}
+      
+      {/* 🎰 כפתור צף לפתיחה מחדש של מסך הערב החי - מופיע כשיש שידור פעיל אבל הסגור */}
+      {liveBroadcast && !broadcastViewerOpen && liveBroadcast.adminName !== currentUser && (
+        <button
+          onClick={() => {
+            setBroadcastViewerOpen(true);
+            setBroadcastDismissed(false);
+          }}
+          className="fixed bottom-4 left-4 z-50 rounded-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-2xl shadow-amber-900/50 px-5 py-3 font-bold text-sm flex items-center gap-2 border-2 border-amber-400/50 animate-pulse"
+          title="פתח את מסך הערב החי"
+        >
+          🎰 מסך ערב חי
+        </button>
       )}
       
       <AdminLoginModal 
