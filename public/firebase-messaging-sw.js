@@ -15,6 +15,9 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
+// 🌐 כתובת מלאה של האפליקציה - חשוב לפתיחה אחרי לחיצה על התראה
+const APP_URL = 'https://barbur-poker.vercel.app/';
+
 // 🔔 Handler ראשי - מטפל בכל הודעת push שמגיעה
 // משתמש ב-push event במקום onBackgroundMessage למנוע כפילויות
 self.addEventListener('push', (event) => {
@@ -42,7 +45,10 @@ self.addEventListener('push', (event) => {
     tag: payload.data?.type || 'general',
     requireInteraction: false,
     vibrate: [200, 100, 200],
-    data: payload.data || {},
+    data: { 
+      ...(payload.data || {}),
+      url: APP_URL  // 🆕 שומרים URL בנתונים של ההתראה
+    },
   };
   
   event.waitUntil(
@@ -52,17 +58,32 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// כשהמשתמש לוחץ על ההתראה - פותח את האפליקציה
+// 🆕 כשהמשתמש לוחץ על ההתראה - פותח את האפליקציה (תוקן!)
 self.addEventListener('notificationclick', (event) => {
   console.log('[SW] Notification clicked');
   event.notification.close();
   
+  // קבלת ה-URL מהנתונים, או ברירת מחדל
+  const targetUrl = event.notification.data?.url || APP_URL;
+  
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // 🔍 חיפוש חלון של האפליקציה שכבר פתוח
       for (const client of clientList) {
-        if ('focus' in client) return client.focus();
+        // בודקים אם זה חלון של האפליקציה שלנו
+        const clientUrl = client.url || '';
+        if (clientUrl.includes('barbur-poker') && 'focus' in client) {
+          console.log('[SW] Found existing window, focusing:', clientUrl);
+          return client.focus();
+        }
       }
-      if (clients.openWindow) return clients.openWindow('/');
+      // לא נמצא חלון פתוח - פותחים חדש עם URL מלא
+      if (clients.openWindow) {
+        console.log('[SW] Opening new window:', targetUrl);
+        return clients.openWindow(targetUrl);
+      }
+    }).catch(err => {
+      console.error('[SW] Error handling notification click:', err);
     })
   );
 });
