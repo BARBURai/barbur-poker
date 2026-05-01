@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.8';
-const APP_BUILD_TIME = '01/05/2026 14:30';
-const APP_NOTES = '🔧 תיקון: כפתור מיון א"ב במסך ניהול ערב חי הנכון';
+const APP_VERSION = 'v2.33.9';
+const APP_BUILD_TIME = '01/05/2026 15:00';
+const APP_NOTES = '🍻 שלב 2 של תזכורות מארח: מסך אישור אירוח באפליקציה';
 
 
 // ===== הרשאות מנהל =====
@@ -123,6 +123,8 @@ const REGISTRATION_KEY = 'poker_next_session_registration_v1';
 const REGISTRATION_ENABLED_KEY = 'poker_registration_feature_enabled_v1';
 // 📌 רישום ברזל - שחקנים שמסומנים מראש להצטרף אוטומטית (סופר אדמין בלבד)
 const IRON_REGISTRATION_KEY = 'poker_iron_registration_v1';
+// 📅 תזכורות מארחים - מי אישר, מי דחה, מי לא ענה
+const HOST_REMINDERS_KEY = 'poker_host_reminders_v1';
 // 🔐 נעילת מכשיר לכל משתמש - {playerName: {deviceId, lockedAt, userAgent}}
 const DEVICE_LOCKS_KEY = 'poker_device_locks_v1';
 // 🆔 מזהה ייחודי של המכשיר הנוכחי (נוצר פעם אחת ונשמר ב-localStorage)
@@ -6451,6 +6453,76 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
 // ============================================================
 // 📡 צופה בשידור חי - מסך נפרד שעולה אוטומטית למשתמשים
 // ============================================================
+// 🍻 מסך אישור אירוח - למארח שצריך לאשר אירוח עתידי
+// מופיע כשהמשתמש לוחץ על התראת תזכורת או כשנכנס לאפליקציה
+// ============================================================
+const HostReminderModal = ({ sessionDate, sessionHost, onConfirm, onDecline, onLater }) => {
+  if (!sessionDate || !sessionHost) return null;
+  
+  // עיצוב התאריך לעברית
+  let formattedDate = sessionDate;
+  try {
+    const date = new Date(sessionDate);
+    formattedDate = date.toLocaleDateString('he-IL', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      timeZone: 'Asia/Jerusalem'
+    });
+  } catch (e) {}
+  
+  return (
+    <div dir="rtl" className="fixed inset-0 z-[200] bg-stone-950/95 backdrop-blur-sm flex items-center justify-center p-4" style={{ fontFamily: 'Assistant, sans-serif' }}>
+      <div className="max-w-md w-full bg-gradient-to-br from-stone-900 to-stone-950 border-2 border-amber-700/50 rounded-2xl shadow-2xl p-6 space-y-5">
+        {/* אייקון וכותרת */}
+        <div className="text-center">
+          <div className="text-6xl mb-3">🍻</div>
+          <h2 className="text-2xl font-bold text-amber-300">תזכורת אירוח</h2>
+        </div>
+        
+        {/* תוכן */}
+        <div className="text-center space-y-2 py-3">
+          <p className="text-stone-200 text-base">
+            <span className="font-bold text-amber-200">{sessionHost}</span>, אתה מארח את המפגש
+          </p>
+          <p className="text-amber-100 text-lg font-bold">
+            {formattedDate}
+          </p>
+          <p className="text-stone-400 text-sm pt-2">
+            האם אתה מאשר את האירוח?
+          </p>
+        </div>
+        
+        {/* כפתורי תגובה */}
+        <div className="space-y-2 pt-2">
+          <button
+            onClick={onConfirm}
+            className="w-full rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-bold text-base py-3 px-4 transition shadow-lg"
+          >
+            ✅ מאשר! אהיה שם
+          </button>
+          <button
+            onClick={onDecline}
+            className="w-full rounded-xl bg-gradient-to-r from-red-700 to-red-800 hover:from-red-600 hover:to-red-700 text-white font-bold text-base py-3 px-4 transition shadow-lg"
+          >
+            ❌ לא יכול לארח
+          </button>
+          <button
+            onClick={onLater}
+            className="w-full rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-sm py-2 px-4 transition border border-stone-700"
+          >
+            אחר כך
+          </button>
+        </div>
+        
+        {/* הערה */}
+        <div className="text-center text-xs text-stone-500 pt-2">
+          לא יכול? ההודעה תישלח מיידית לאדמינים והם יחזרו אליך
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
 // מציג רשימת משתתפים + buy-ins של ערב חי שמתנהל כעת
 const LiveBroadcastViewer = ({ broadcast, onClose, currentUser }) => {
   if (!broadcast || !broadcast.active) return null;
@@ -10404,6 +10476,8 @@ export default function PokerApp() {
   const [liveBroadcast, setLiveBroadcast] = useState(null);
   const [broadcastViewerOpen, setBroadcastViewerOpen] = useState(false);
   const [broadcastDismissed, setBroadcastDismissed] = useState(false); // המשתמש סגר את הצופה
+  // 🍻 מסך אישור אירוח - מופיע למארח שצריך לאשר אירוח עתידי
+  const [hostReminderModal, setHostReminderModal] = useState(null); // { sessionDate, sessionHost } או null
   const [isMobile, setIsMobile] = useState(false);
   
   // ציטוטים
@@ -10505,6 +10579,54 @@ export default function PokerApp() {
       clearInterval(interval);
     };
   }, [hostingSchedule, currentUser, broadcastDismissed]);
+  
+  // 🍻 בדיקה אם יש תזכורת אירוח ממתינה למשתמש הנוכחי
+  // 1. בודק URL params (אם המשתמש לחץ על התראה)
+  // 2. בודק ב-Firestore אם יש תזכורת לא-נענתה למשתמש
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const checkHostReminder = async () => {
+      try {
+        // קודם - בדיקה ב-URL (אם הגיע מהתראה)
+        const params = new URLSearchParams(window.location.search);
+        const reminderDate = params.get('reminder_date');
+        const reminderHost = params.get('reminder_host');
+        
+        if (reminderDate && reminderHost === currentUser) {
+          // המשתמש הנוכחי הוא המארח של התזכורת בURL
+          setHostReminderModal({ sessionDate: reminderDate, sessionHost: currentUser, fromUrl: true });
+          // ניקוי URL
+          window.history.replaceState({}, '', window.location.pathname);
+          return;
+        }
+        
+        // אחרת - בדיקה ב-Firestore אם יש תזכורת ממתינה
+        const reminders = await fbLoadState(HOST_REMINDERS_KEY);
+        if (!reminders || typeof reminders !== 'object') return;
+        
+        // חיפוש תזכורת שלא נענתה ושייכת למשתמש הנוכחי
+        for (const key in reminders) {
+          const r = reminders[key];
+          if (r.sessionHost === currentUser && r.response === null) {
+            // לא לפתוח אם כבר פתחנו את המודל
+            if (!hostReminderModal) {
+              setHostReminderModal({ 
+                sessionDate: r.sessionDate, 
+                sessionHost: r.sessionHost,
+                reminderKey: key
+              });
+            }
+            return;
+          }
+        }
+      } catch (e) {
+        console.error('שגיאה בבדיקת תזכורת אירוח:', e);
+      }
+    };
+    
+    checkHostReminder();
+  }, [currentUser]);
   
   // 💸 סנכרון אוטומטי - כל מכשיר יוצר תזכורות לעצמו על ערבים מ-7 ימים אחרונים
   // רץ כשהערבים מתעדכנים (טעינה ראשונה / סנכרון מ-Firebase)
@@ -12645,6 +12767,53 @@ export default function PokerApp() {
         >
           🎰 מסך ערב חי
         </button>
+      )}
+      
+      {/* 🍻 מסך אישור אירוח - מופיע למארח שצריך לאשר אירוח עתידי */}
+      {hostReminderModal && (
+        <HostReminderModal
+          sessionDate={hostReminderModal.sessionDate}
+          sessionHost={hostReminderModal.sessionHost}
+          onConfirm={async () => {
+            try {
+              const reminders = (await fbLoadState(HOST_REMINDERS_KEY)) || {};
+              const key = hostReminderModal.reminderKey || `${hostReminderModal.sessionDate}_${hostReminderModal.sessionHost}`;
+              reminders[key] = {
+                ...(reminders[key] || {}),
+                sessionDate: hostReminderModal.sessionDate,
+                sessionHost: hostReminderModal.sessionHost,
+                response: 'confirmed',
+                respondedAt: new Date().toISOString(),
+              };
+              await fbSaveState(reminders, HOST_REMINDERS_KEY);
+              setHostReminderModal(null);
+              alert('✅ תודה! האירוח נרשם.');
+            } catch (e) {
+              console.error('שגיאה באישור אירוח:', e);
+              alert('❌ שגיאה - נסה שוב');
+            }
+          }}
+          onDecline={async () => {
+            try {
+              const reminders = (await fbLoadState(HOST_REMINDERS_KEY)) || {};
+              const key = hostReminderModal.reminderKey || `${hostReminderModal.sessionDate}_${hostReminderModal.sessionHost}`;
+              reminders[key] = {
+                ...(reminders[key] || {}),
+                sessionDate: hostReminderModal.sessionDate,
+                sessionHost: hostReminderModal.sessionHost,
+                response: 'declined',
+                respondedAt: new Date().toISOString(),
+              };
+              await fbSaveState(reminders, HOST_REMINDERS_KEY);
+              setHostReminderModal(null);
+              alert('❌ ההודעה נשלחה לאדמינים. הם יחזרו אליך.');
+            } catch (e) {
+              console.error('שגיאה בדחיית אירוח:', e);
+              alert('❌ שגיאה - נסה שוב');
+            }
+          }}
+          onLater={() => setHostReminderModal(null)}
+        />
       )}
       
       <AdminLoginModal 
