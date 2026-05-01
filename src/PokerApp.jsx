@@ -11460,7 +11460,7 @@ export default function PokerApp() {
       await saveState({ enabled: true, toggledAt: new Date().toISOString(), toggledBy: adminName, manualTrigger: true }, REGISTRATION_ENABLED_KEY);
       setRegistrationEnabled(true);
       
-      alert('✅ ההתראה נשלחה!\nהיא אמורה להגיע לכל המכשירים תוך 5-15 שניות.\n\n⚠️ שים לב: הפיצ'ר עכשיו מופעל לכולם.');
+      alert("✅ ההתראה נשלחה!\nהיא אמורה להגיע לכל המכשירים תוך 5-15 שניות.\n\n⚠️ שים לב: הפיצ'ר עכשיו מופעל לכולם.");
     } catch (e) {
       console.error('Failed to send manual notification:', e);
       alert('❌ שגיאה בשליחת ההתראה');
