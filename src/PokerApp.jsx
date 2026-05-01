@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.3';
-const APP_BUILD_TIME = '01/05/2026 09:50';
-const APP_NOTES = '🔧 כפתור "+ אדמין" זמין גם כשהרישום סגור (סופר אדמין יכול להוסיף בכל זמן)';
+const APP_VERSION = 'v2.33.4';
+const APP_BUILD_TIME = '01/05/2026 10:55';
+const APP_NOTES = '🔧 ברזלים נכנסים רק כשהרישום פתוח רשמית';
 
 
 // ===== הרשאות מנהל =====
@@ -3215,6 +3215,9 @@ const RegistrationTab = ({
     if (!registration?.entries) return;
     
     const interval = setInterval(() => {
+      // 🔒 בדיקה: רק אם הרישום פתוח רשמית
+      if (!registrationOpenInfo.isOpen) return;
+      
       const entries = registration.entries || [];
       const enrolled = new Set(entries.map(e => e.name));
       const refused = new Set(ironRegistration.refused || []);
@@ -3245,7 +3248,7 @@ const RegistrationTab = ({
     }, 30000);
     
     return () => clearInterval(interval);
-  }, [ironRegistration, registration, onUpdate]);
+  }, [ironRegistration, registration, onUpdate, registrationOpenInfo.isOpen]);
   
   // 📋 רשימת רשומים מסודרת לפי סדר ההצטרפות
   const entries = registration?.entries || [];
