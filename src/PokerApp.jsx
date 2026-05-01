@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.0';
-const APP_BUILD_TIME = '30/04/2026 11:00';
-const APP_NOTES = '🔔 התראות Push - כפתור הפעלה בתפריט. שולח התראה כשהרישום נפתח / מישהו מבטל';
+const APP_VERSION = 'v2.33.1';
+const APP_BUILD_TIME = '30/04/2026 20:35';
+const APP_NOTES = '🔄 איפוס רישום ידני + 🔔 שליחת התראה ידנית. תיקון באג השעתיים: איפוס ב-11:55 (5 דק לפני פתיחה ב-12:00)';
 
 
 // ===== הרשאות מנהל =====
@@ -3166,18 +3166,20 @@ const RegistrationTab = ({
     return { isOpen: true, opensAt, reason: null };
   }, [nextSession, lastSessionDate]);
   
-  // 🔄 איפוס אוטומטי: אם המפגש האחרון השתנה ועברה השעה 10:00 למחרת
+  // 🔄 איפוס אוטומטי: אם המפגש האחרון השתנה ועברה השעה 11:55 למחרת
   // הרשימה הנוכחית של ה-registration שייכת למפגש שכבר עבר -> ננקה
+  // (11:55 - 5 דקות לפני שהרישום החדש נפתח, למניעת race condition של "מישהו לוחץ אני בא ברגע שהקוד מאפס")
   useEffect(() => {
     if (!nextSession || !registration) return;
     
     // אם ה-registration מתייחס למפגש שכבר עבר - אפס
     if (registration.sessionDate && registration.sessionDate !== nextSession.date) {
-      // בדיקה: האם השעה כבר אחרי 10:00 בבוקר ביום אחרי הסשן הישן
+      // בדיקה: האם השעה כבר אחרי 11:55 בבוקר ביום אחרי הסשן הישן
+      // (5 דקות לפני שהרישום נפתח ב-12:00 - באפר בטיחות מפני race condition)
       const oldDate = new Date(registration.sessionDate + 'T00:00:00');
       const resetAt = new Date(oldDate);
       resetAt.setDate(resetAt.getDate() + 1);
-      resetAt.setHours(10, 0, 0, 0);
+      resetAt.setHours(11, 55, 0, 0);
       
       const now = new Date();
       if (now >= resetAt) {
@@ -11396,6 +11398,74 @@ export default function PokerApp() {
       console.error('Failed to toggle registration feature:', e);
     }
   };
+
+  // 🔄 איפוס ידני של הרישום - לשימוש סופר אדמין במקרי שינוי
+  // (מארח השתנה, מפגש בוטל ושוחזר, וכו')
+  const handleManualResetRegistration = async () => {
+    if (!nextSession) {
+      alert('⚠️ אין מפגש מתוכנן כרגע - אי אפשר לאפס');
+      return;
+    }
+    const confirmMsg = `🔄 לאפס את הרישום הנוכחי?\n\nכל הנרשמים יוסרו מהרשימה והרשימה תאוכלס מחדש עם המארח של המפגש הבא (${nextSession.host}, ${nextSession.date}).\n\nפעולה זו לא ניתנת לביטול.`;
+    if (!confirm(confirmMsg)) return;
+    
+    try {
+      const fresh = {
+        sessionDate: nextSession.date,
+        host: nextSession.host,
+        entries: [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }],
+        resetAt: new Date().toISOString(),
+        manuallyResetBy: adminName,
+      };
+      await saveState(fresh, REGISTRATION_KEY);
+      setRegistration(fresh);
+      // אפס גם רישום ברזל
+      if (ironRegistration?.players?.length || ironRegistration?.refused?.length) {
+        await saveState({ players: [], refused: [] }, IRON_REGISTRATION_KEY);
+        setIronRegistration({ players: [], refused: [] });
+      }
+      alert('✅ הרישום אופס בהצלחה');
+    } catch (e) {
+      console.error('Failed to manually reset registration:', e);
+      alert('❌ שגיאה באיפוס הרישום');
+    }
+  };
+
+  // 🔔 שליחת התראה ידנית "הרישום נפתח" - לשימוש סופר אדמין
+  // (לדוגמה: ב-12:00 בצהריים, או אחרי חופש, או במקרה חירום)
+  // טכנית: מבצע toggle off+on מהיר של הפיצ'ר כדי לטריגר את Cloud Function notifyRegistrationOpen
+  const handleManualSendNotification = async () => {
+    if (!nextSession) {
+      alert('⚠️ אין מפגש מתוכנן כרגע - אי אפשר לשלוח התראה');
+      return;
+    }
+    const sessionDateFormatted = new Date(nextSession.date).toLocaleDateString('he-IL', {
+      weekday: 'long', day: 'numeric', month: 'long'
+    });
+    const confirmMsg = `🔔 לשלוח התראה לכל מי שאישר התראות?\n\nההודעה: "הרישום למפגש ${sessionDateFormatted} אצל ${nextSession.host} נפתח! 🎰"\n\nההתראה תישלח לכל המכשירים הרשומים תוך 5-15 שניות.`;
+    if (!confirm(confirmMsg)) return;
+    
+    try {
+      // טריק: שמירת המצב הנוכחי, כיבוי הפיצ'ר, המתנה קצרה, והפעלה מחדש
+      // זה יטריגר את Cloud Function notifyRegistrationOpen ששולחת התראה לכולם
+      const wasEnabled = registrationEnabled;
+      
+      // שלב 1: כיבוי
+      await saveState({ enabled: false, toggledAt: new Date().toISOString(), toggledBy: adminName }, REGISTRATION_ENABLED_KEY);
+      
+      // שלב 2: המתנה קצרה (1.5 שניות) כדי שהמערכת תזהה את השינוי
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      // שלב 3: הפעלה מחדש - זה הטריגר להתראה
+      await saveState({ enabled: true, toggledAt: new Date().toISOString(), toggledBy: adminName, manualTrigger: true }, REGISTRATION_ENABLED_KEY);
+      setRegistrationEnabled(true);
+      
+      alert('✅ ההתראה נשלחה!\nהיא אמורה להגיע לכל המכשירים תוך 5-15 שניות.\n\n⚠️ שים לב: הפיצ'ר עכשיו מופעל לכולם.');
+    } catch (e) {
+      console.error('Failed to send manual notification:', e);
+      alert('❌ שגיאה בשליחת ההתראה');
+    }
+  };
   
   // 🔄 רענון אוטומטי כל 20 שניות (סנכרון בין משתמשים בזמן אמת)
   // - הרישום למפגש (אם פעיל)
@@ -12132,6 +12202,26 @@ export default function PokerApp() {
                     {registrationEnabled ? 'כבה גלובלית' : 'הפעל לכולם'}
                   </button>
                 </div>
+                
+                {/* 🆕 2 כפתורי פעולה ידניים - גלוי רק לסופר אדמין */}
+                {isSuperAdmin && (
+                  <div className="mt-3 pt-3 border-t border-stone-700/50 grid grid-cols-2 gap-2">
+                    <button
+                      onClick={handleManualResetRegistration}
+                      className="rounded-lg px-3 py-2 text-xs font-bold bg-amber-900/40 hover:bg-amber-900/60 border border-amber-800 text-amber-200 transition flex items-center justify-center gap-1"
+                      title="מאפס את הרשימה ומאכלס את המארח של המפגש הבא"
+                    >
+                      🔄 אפס רישום
+                    </button>
+                    <button
+                      onClick={handleManualSendNotification}
+                      className="rounded-lg px-3 py-2 text-xs font-bold bg-blue-900/40 hover:bg-blue-900/60 border border-blue-800 text-blue-200 transition flex items-center justify-center gap-1"
+                      title="שולח התראה לכל מי שאישר התראות שהרישום נפתח"
+                    >
+                      🔔 שלח התראה
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             
