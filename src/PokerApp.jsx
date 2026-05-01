@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.1';
-const APP_BUILD_TIME = '30/04/2026 20:35';
-const APP_NOTES = '🔄 איפוס רישום ידני + 🔔 שליחת התראה ידנית. תיקון באג השעתיים: איפוס ב-11:55 (5 דק לפני פתיחה ב-12:00)';
+const APP_VERSION = 'v2.33.2';
+const APP_BUILD_TIME = '01/05/2026 09:30';
+const APP_NOTES = '🔧 תיקון באג בכפתורי האדמין (אפס רישום + שלח התראה)';
 
 
 // ===== הרשאות מנהל =====
@@ -11402,18 +11402,25 @@ export default function PokerApp() {
   // 🔄 איפוס ידני של הרישום - לשימוש סופר אדמין במקרי שינוי
   // (מארח השתנה, מפגש בוטל ושוחזר, וכו')
   const handleManualResetRegistration = async () => {
-    if (!nextSession) {
+    // מחשבים את המפגש הבא מתוך לוח האירוחים
+    const todayStr = new Date().toISOString().split('T')[0];
+    const upcoming = (hostingSchedule || [])
+      .filter(h => h.date >= todayStr && h.host)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const computedNext = upcoming[0] || null;
+    
+    if (!computedNext) {
       alert('⚠️ אין מפגש מתוכנן כרגע - אי אפשר לאפס');
       return;
     }
-    const confirmMsg = `🔄 לאפס את הרישום הנוכחי?\n\nכל הנרשמים יוסרו מהרשימה והרשימה תאוכלס מחדש עם המארח של המפגש הבא (${nextSession.host}, ${nextSession.date}).\n\nפעולה זו לא ניתנת לביטול.`;
+    const confirmMsg = `🔄 לאפס את הרישום הנוכחי?\n\nכל הנרשמים יוסרו מהרשימה והרשימה תאוכלס מחדש עם המארח של המפגש הבא (${computedNext.host}, ${computedNext.date}).\n\nפעולה זו לא ניתנת לביטול.`;
     if (!confirm(confirmMsg)) return;
     
     try {
       const fresh = {
-        sessionDate: nextSession.date,
-        host: nextSession.host,
-        entries: [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }],
+        sessionDate: computedNext.date,
+        host: computedNext.host,
+        entries: [{ name: computedNext.host, addedAt: new Date().toISOString(), isHost: true }],
         resetAt: new Date().toISOString(),
         manuallyResetBy: adminName,
       };
@@ -11435,20 +11442,26 @@ export default function PokerApp() {
   // (לדוגמה: ב-12:00 בצהריים, או אחרי חופש, או במקרה חירום)
   // טכנית: מבצע toggle off+on מהיר של הפיצ'ר כדי לטריגר את Cloud Function notifyRegistrationOpen
   const handleManualSendNotification = async () => {
-    if (!nextSession) {
+    // מחשבים את המפגש הבא מתוך לוח האירוחים
+    const todayStr = new Date().toISOString().split('T')[0];
+    const upcoming = (hostingSchedule || [])
+      .filter(h => h.date >= todayStr && h.host)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const computedNext = upcoming[0] || null;
+    
+    if (!computedNext) {
       alert('⚠️ אין מפגש מתוכנן כרגע - אי אפשר לשלוח התראה');
       return;
     }
-    const sessionDateFormatted = new Date(nextSession.date).toLocaleDateString('he-IL', {
+    const sessionDateFormatted = new Date(computedNext.date).toLocaleDateString('he-IL', {
       weekday: 'long', day: 'numeric', month: 'long'
     });
-    const confirmMsg = `🔔 לשלוח התראה לכל מי שאישר התראות?\n\nההודעה: "הרישום למפגש ${sessionDateFormatted} אצל ${nextSession.host} נפתח! 🎰"\n\nההתראה תישלח לכל המכשירים הרשומים תוך 5-15 שניות.`;
+    const confirmMsg = `🔔 לשלוח התראה לכל מי שאישר התראות?\n\nההודעה: "הרישום למפגש ${sessionDateFormatted} אצל ${computedNext.host} נפתח! 🎰"\n\nההתראה תישלח לכל המכשירים הרשומים תוך 5-15 שניות.`;
     if (!confirm(confirmMsg)) return;
     
     try {
       // טריק: שמירת המצב הנוכחי, כיבוי הפיצ'ר, המתנה קצרה, והפעלה מחדש
       // זה יטריגר את Cloud Function notifyRegistrationOpen ששולחת התראה לכולם
-      const wasEnabled = registrationEnabled;
       
       // שלב 1: כיבוי
       await saveState({ enabled: false, toggledAt: new Date().toISOString(), toggledBy: adminName }, REGISTRATION_ENABLED_KEY);
