@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.2';
-const APP_BUILD_TIME = '01/05/2026 09:30';
-const APP_NOTES = '🔧 תיקון באג בכפתורי האדמין (אפס רישום + שלח התראה)';
+const APP_VERSION = 'v2.33.3';
+const APP_BUILD_TIME = '01/05/2026 09:50';
+const APP_NOTES = '🔧 כפתור "+ אדמין" זמין גם כשהרישום סגור (סופר אדמין יכול להוסיף בכל זמן)';
 
 
 // ===== הרשאות מנהל =====
@@ -3508,7 +3508,7 @@ const RegistrationTab = ({
                 📌 ברזל {ironRegistration?.players?.length > 0 && `(${ironRegistration.players.length})`}
               </button>
             )}
-            {isSuperAdmin && registrationOpenInfo.isOpen && (
+            {isSuperAdmin && (
               <button
                 onClick={() => setAdminAddOpen(!adminAddOpen)}
                 className="text-xs rounded-md bg-amber-900/40 hover:bg-amber-900/60 border border-amber-800 px-2 py-1 text-amber-300 font-bold flex items-center gap-1"
