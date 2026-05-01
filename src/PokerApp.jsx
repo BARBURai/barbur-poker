@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.7';
-const APP_BUILD_TIME = '01/05/2026 13:50';
-const APP_NOTES = '🎰 כפתור צף לפתיחת מסך ערב חי שנסגר';
+const APP_VERSION = 'v2.33.8';
+const APP_BUILD_TIME = '01/05/2026 14:30';
+const APP_NOTES = '🔧 תיקון: כפתור מיון א"ב במסך ניהול ערב חי הנכון';
 
 
 // ===== הרשאות מנהל =====
@@ -6978,10 +6978,21 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-sm font-bold text-stone-300">שחקנים פעילים</div>
-                  <button onClick={() => setShowAddPlayer(true)} disabled={availablePlayers.length === 0}
-                    className="rounded-lg bg-amber-700 hover:bg-amber-600 px-3 py-1.5 text-xs text-white font-bold flex items-center gap-1 disabled:opacity-50">
-                    <Plus className="h-3.5 w-3.5" /> הוסף שחקנים
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {participants.length > 1 && (
+                      <button
+                        onClick={() => setSortByAlphabet(!sortByAlphabet)}
+                        className="text-xs rounded-md bg-stone-800 hover:bg-stone-700 border border-stone-700 px-2 py-1.5 text-stone-300 font-bold transition"
+                        title={sortByAlphabet ? 'מיון לפי סדר רישום' : 'מיון לפי א"ב'}
+                      >
+                        {sortByAlphabet ? '🔤 לפי א"ב' : '🔢 סדר'}
+                      </button>
+                    )}
+                    <button onClick={() => setShowAddPlayer(true)} disabled={availablePlayers.length === 0}
+                      className="rounded-lg bg-amber-700 hover:bg-amber-600 px-3 py-1.5 text-xs text-white font-bold flex items-center gap-1 disabled:opacity-50">
+                      <Plus className="h-3.5 w-3.5" /> הוסף שחקנים
+                    </button>
+                  </div>
                 </div>
                 
                 {showAddPlayer && (
@@ -7064,7 +7075,10 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                       עדיין לא הוספת שחקנים. לחץ "הוסף שחקנים" כדי להתחיל.
                     </div>
                   )}
-                  {participants.map(p => {
+                  {(sortByAlphabet 
+                    ? [...participants].sort((a, b) => a.name.localeCompare(b.name, 'he'))
+                    : participants
+                  ).map(p => {
                     const hasEarlyClose = typeof p.earlyClose === 'number';
                     return (
                     <div key={p.name} className={`rounded-xl border p-3 ${
