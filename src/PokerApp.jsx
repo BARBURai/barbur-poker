@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.4';
-const APP_BUILD_TIME = '01/05/2026 10:55';
-const APP_NOTES = '🔧 ברזלים נכנסים רק כשהרישום פתוח רשמית';
+const APP_VERSION = 'v2.33.5';
+const APP_BUILD_TIME = '01/05/2026 12:30';
+const APP_NOTES = '🛡️ איפוס רשימה ב-06:00 (במקום 11:55) - רק סופר אדמין מאפס אוטומטית';
 
 
 // ===== הרשאות מנהל =====
@@ -3166,20 +3166,32 @@ const RegistrationTab = ({
     return { isOpen: true, opensAt, reason: null };
   }, [nextSession, lastSessionDate]);
   
-  // 🔄 איפוס אוטומטי: אם המפגש האחרון השתנה ועברה השעה 11:55 למחרת
-  // הרשימה הנוכחית של ה-registration שייכת למפגש שכבר עבר -> ננקה
-  // (11:55 - 5 דקות לפני שהרישום החדש נפתח, למניעת race condition של "מישהו לוחץ אני בא ברגע שהקוד מאפס")
+  // 🔄 איפוס אוטומטי ב-11:55 ביום אחרי המפגש - רק סופר אדמין מבצע
+  // (כדי למנוע race condition של משתמשים מרובים שמאפסים בו זמנית)
+  // איפוסים נוספים = ידנית בלבד דרך כפתור "🔄 אפס רישום"
   useEffect(() => {
     if (!nextSession || !registration) return;
     
-    // אם ה-registration מתייחס למפגש שכבר עבר - אפס
+    // איפוס ראשוני: אין registration כלל - אכלס את המארח (כל משתמש יכול)
+    if (!registration.sessionDate || !registration.entries) {
+      const fresh = {
+        sessionDate: nextSession.date,
+        host: nextSession.host,
+        entries: [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }],
+        resetAt: new Date().toISOString(),
+      };
+      onUpdate(fresh);
+      return;
+    }
+    
+    // איפוס מעבר בין מפגשים ב-11:55 - רק סופר אדמין
+    if (!isSuperAdmin) return;
+    
     if (registration.sessionDate && registration.sessionDate !== nextSession.date) {
-      // בדיקה: האם השעה כבר אחרי 11:55 בבוקר ביום אחרי הסשן הישן
-      // (5 דקות לפני שהרישום נפתח ב-12:00 - באפר בטיחות מפני race condition)
       const oldDate = new Date(registration.sessionDate + 'T00:00:00');
       const resetAt = new Date(oldDate);
       resetAt.setDate(resetAt.getDate() + 1);
-      resetAt.setHours(11, 55, 0, 0);
+      resetAt.setHours(6, 0, 0, 0);
       
       const now = new Date();
       if (now >= resetAt) {
@@ -3196,17 +3208,8 @@ const RegistrationTab = ({
           onIronUpdate({ players: [], refused: [] });
         }
       }
-    } else if (!registration.sessionDate || !registration.entries) {
-      // אין registration כלל - אתחל
-      const fresh = {
-        sessionDate: nextSession.date,
-        host: nextSession.host,
-        entries: [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }],
-        resetAt: new Date().toISOString(),
-      };
-      onUpdate(fresh);
     }
-  }, [nextSession, registration, onUpdate]);
+  }, [nextSession, registration, onUpdate, isSuperAdmin]);
   
   // 📌 גיבוי - בדיקה כל 30 שניות אם יש ברזל ממתין שלא נכנס לזמן ארוך
   // (מקרה קצה: ההרשמה האחרונה הייתה לפני יותר מ-2 דקות אבל הברזל לא נכנס)
