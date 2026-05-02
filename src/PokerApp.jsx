@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.20';
-const APP_BUILD_TIME = '02/05/2026 11:30';
-const APP_NOTES = '🦢 קונפטי עם 3 ברבורים שונים בגדלים מעורבים 80-140px + לוגו בערב חי';
+const APP_VERSION = 'v2.33.21';
+const APP_BUILD_TIME = '02/05/2026 12:00';
+const APP_NOTES = '🎉 קונפטי לכולם בפופ-אפ MVP (לא רק לזוכה)';
 
 
 // ===== הרשאות מנהל =====
@@ -6942,14 +6942,11 @@ const MVPCelebrationPopup = ({ data, onClose, currentUser }) => {
   
   if (cards.length === 0) return null;
   
-  // 🎉 קונפטי - אם המשתמש הנוכחי הוא אחד הזוכים
+  // 🎉 קונפטי לכולם בעת פתיחת הפופ-אפ (חוויה חגיגית)
   useEffect(() => {
-    const isWinner = cards.some(c => c.name === currentUser);
-    if (isWinner) {
-      // עיכוב קטן כדי שהפופ-אפ יספיק להיפתח
-      const timer = setTimeout(() => setConfettiActive(true), 400);
-      return () => clearTimeout(timer);
-    }
+    // עיכוב קטן כדי שהפופ-אפ יספיק להיפתח
+    const timer = setTimeout(() => setConfettiActive(true), 400);
+    return () => clearTimeout(timer);
   }, []);
   
   // כותרת ראשית
@@ -6970,11 +6967,11 @@ const MVPCelebrationPopup = ({ data, onClose, currentUser }) => {
   
   return (
     <div dir="rtl" className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex items-center justify-center p-4" style={{ fontFamily: 'Assistant, sans-serif' }}>
-      {/* 🎉 קונפטי לזוכה */}
+      {/* 🎉 קונפטי לכולם */}
       <Confetti 
         active={confettiActive} 
         onComplete={() => setConfettiActive(false)}
-        message={isWinnerView ? `🎉 כל הכבוד ${currentUser}!` : ''}
+        message={isWinnerView ? `🎉 כל הכבוד ${currentUser}!` : `🏆 ה-MVP של ${card.label}`}
       />
       
       <div className="max-w-md w-full bg-gradient-to-br from-stone-900 to-stone-950 border-2 border-amber-700/60 rounded-3xl shadow-2xl overflow-hidden">
