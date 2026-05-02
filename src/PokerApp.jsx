@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.29';
-const APP_BUILD_TIME = '02/05/2026 17:30';
-const APP_NOTES = '🦢 ברבור גדול בגרף + תצוגה אופקית + תיקון padding + ⚠️ אזהרה בטבלה היומית';
+const APP_VERSION = 'v2.33.30';
+const APP_BUILD_TIME = '02/05/2026 22:30';
+const APP_NOTES = '✨ סימון בעיות תקינות כידועות + תיקוני גרף';
 
 
 // ===== הרשאות מנהל =====
@@ -31,6 +31,7 @@ const ADMIN_NAMES_KEY = 'poker_admin_names_v1'; // 🆕 רשימת מנהלים 
 const PUSH_TOKENS_KEY = 'poker_push_tokens_v1';
 const ADMIN_PERMISSIONS_KEY = 'poker_admin_permissions_v1'; // 🆕 הרשאות לאדמינים רגילים
 const HIDDEN_PLAYERS_KEY = 'poker_hidden_players_v1'; // 🆕 שחקנים מוסתרים מרשימת הפעילים
+const KNOWN_ISSUES_KEY = 'poker_known_issues_v1'; // 🆕 בעיות תקינות שסומנו כידועות
 const BIRTHDAYS_KEY = 'poker_birthdays_v1'; // 🆕 ימי הולדת של שחקנים
 const LAST_LOGIN_KEY = 'poker_last_login_v1'; // 🆕 כניסה אחרונה של כל משתמש
 
@@ -629,6 +630,23 @@ const validateTablesIntegrity = (allSessions, hiddenPlayers = [], yearFilter = n
       ? `✅ כל הטבלאות מאוזנות (${sessionsToCheck.length} ערבים)` 
       : `⚠️ ${issues.length} בעיות נמצאו`,
   };
+};
+
+// 🆕 יוצר מזהה ייחודי לבעיה - לצורך סימון "ידועה"
+// המזהה מבוסס על סוג הבעיה + מאפיין מזהה (תאריך/שנה/שמות שחקנים)
+// כך שאם הבעיה תיפתר ותחזור - היא תזוהה אוטומטית כידועה ולא תיחשב חדשה
+const getIssueId = (issue) => {
+  if (issue.type === 'session_imbalance') {
+    return `session_imbalance::${issue.date}`;
+  }
+  if (issue.type === 'year_imbalance') {
+    return `year_imbalance::${issue.year}`;
+  }
+  if (issue.type === 'hidden_players_active') {
+    // ממיין כדי שהמזהה יהיה יציב גם אם סדר השחקנים משתנה
+    return `hidden_players_active::${[...(issue.players || [])].sort().join(',')}`;
+  }
+  return `unknown::${JSON.stringify(issue)}`;
 };
 
 const calculateCumulative = (sessions, selectedPlayers) => {
@@ -1550,6 +1568,58 @@ const TableIntegrityIndicator = ({ allSessions, hiddenPlayers, isSuperAdmin }) =
   const [showModal, setShowModal] = useState(false);
   const currentYear = new Date().getFullYear();
   const [yearFilter, setYearFilter] = useState(String(currentYear));
+  // 🆕 בעיות ידועות - { issueId: { markedAt, markedBy } }
+  const [knownIssues, setKnownIssues] = useState({});
+  const [loadingKnown, setLoadingKnown] = useState(false);
+  
+  // 🆕 טעינת בעיות ידועות מ-Firestore בעת טעינה
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await fbLoadState(KNOWN_ISSUES_KEY);
+        if (!cancelled) setKnownIssues(data || {});
+      } catch (e) {
+        console.error('שגיאה בטעינת בעיות ידועות:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  
+  // 🆕 סימון בעיה כידועה
+  const markAsKnown = async (issueId) => {
+    setLoadingKnown(true);
+    try {
+      const updated = {
+        ...knownIssues,
+        [issueId]: {
+          markedAt: new Date().toISOString(),
+          markedBy: 'רון',
+        },
+      };
+      await fbSaveState(updated, KNOWN_ISSUES_KEY);
+      setKnownIssues(updated);
+    } catch (e) {
+      console.error('שגיאה בסימון בעיה כידועה:', e);
+      alert('שגיאה בשמירה. נסה שוב.');
+    }
+    setLoadingKnown(false);
+  };
+  
+  // 🆕 ביטול סימון "ידועה"
+  const unmarkAsKnown = async (issueId) => {
+    setLoadingKnown(true);
+    try {
+      const updated = { ...knownIssues };
+      delete updated[issueId];
+      await fbSaveState(updated, KNOWN_ISSUES_KEY);
+      setKnownIssues(updated);
+    } catch (e) {
+      console.error('שגיאה בביטול סימון:', e);
+      alert('שגיאה בשמירה. נסה שוב.');
+    }
+    setLoadingKnown(false);
+  };
   
   // לא מציג למשתמשים רגילים
   if (!isSuperAdmin) return null;
@@ -1576,8 +1646,31 @@ const TableIntegrityIndicator = ({ allSessions, hiddenPlayers, isSuperAdmin }) =
     [allSessions, hiddenPlayers, currentYear]
   );
   
-  if (currentYearResult.isValid && !showModal) {
-    // הכל תקין השנה - חיווי ירוק קטן + לחיצה פותחת מודל לבדיקת שנים אחרות
+  // 🆕 חלוקה לבעיות חדשות (לא ידועות) ובעיות ידועות
+  const { newIssues: currentNewIssues, knownIssuesList: currentKnownIssuesList } = useMemo(() => {
+    const newOnes = [];
+    const knownOnes = [];
+    result.issues.forEach(issue => {
+      const id = getIssueId(issue);
+      if (knownIssues[id]) {
+        knownOnes.push({ ...issue, _id: id, _knownInfo: knownIssues[id] });
+      } else {
+        newOnes.push({ ...issue, _id: id });
+      }
+    });
+    return { newIssues: newOnes, knownIssuesList: knownOnes };
+  }, [result.issues, knownIssues]);
+  
+  // 🆕 חלוקה גם בבדיקת השנה הנוכחית (לחיווי בכותרת)
+  const newIssuesCurrentYearCount = useMemo(() => {
+    return currentYearResult.issues.filter(issue => !knownIssues[getIssueId(issue)]).length;
+  }, [currentYearResult.issues, knownIssues]);
+  
+  // 🆕 הצגת מצב סופי לפי בעיות חדשות בלבד
+  const hasNewIssuesThisYear = newIssuesCurrentYearCount > 0;
+  
+  if (!hasNewIssuesThisYear && !showModal) {
+    // אין בעיות חדשות השנה - חיווי ירוק קטן
     return (
       <button 
         onClick={() => setShowModal(true)}
@@ -1589,29 +1682,29 @@ const TableIntegrityIndicator = ({ allSessions, hiddenPlayers, isSuperAdmin }) =
     );
   }
   
-  // אם יש בעיות השנה או המודל פתוח
+  // אם יש בעיות חדשות השנה או המודל פתוח
   return (
     <>
       <button
         onClick={() => setShowModal(true)}
         className={`inline-flex items-center gap-1 text-xs font-bold cursor-pointer ${
-          currentYearResult.isValid 
+          !hasNewIssuesThisYear
             ? 'text-emerald-400 hover:text-emerald-300' 
             : 'text-rose-400 animate-pulse hover:text-rose-300'
         }`}
-        title={currentYearResult.isValid ? 'לחץ לבדיקת שנים נוספות' : 'לחץ לראות פירוט הבעיות'}
+        title={!hasNewIssuesThisYear ? 'לחץ לבדיקת שנים נוספות' : 'לחץ לראות פירוט הבעיות'}
       >
-        {currentYearResult.isValid ? '✓ בדוק' : `⚠️ ${currentYearResult.issues.length} בעיות`}
+        {!hasNewIssuesThisYear ? '✓ בדוק' : `⚠️ ${newIssuesCurrentYearCount} ${newIssuesCurrentYearCount === 1 ? 'בעיה חדשה' : 'בעיות חדשות'}`}
       </button>
       
       {showModal && (
         <div dir="rtl" className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowModal(false)}>
-          <div className={`bg-stone-950 rounded-2xl border-2 ${result.isValid ? 'border-emerald-700' : 'border-rose-700'} w-full max-w-lg my-8`} onClick={e => e.stopPropagation()}>
-            <div className={`flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l ${result.isValid ? 'from-emerald-950/40' : 'from-rose-950/40'} to-stone-950`}>
+          <div className={`bg-stone-950 rounded-2xl border-2 ${currentNewIssues.length === 0 ? 'border-emerald-700' : 'border-rose-700'} w-full max-w-lg my-8`} onClick={e => e.stopPropagation()}>
+            <div className={`flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l ${currentNewIssues.length === 0 ? 'from-emerald-950/40' : 'from-rose-950/40'} to-stone-950`}>
               <div className="flex items-center gap-2">
-                <span className="text-2xl">{result.isValid ? '✅' : '⚠️'}</span>
+                <span className="text-2xl">{currentNewIssues.length === 0 ? '✅' : '⚠️'}</span>
                 <div>
-                  <h2 className={`text-lg font-extrabold ${result.isValid ? 'text-emerald-200' : 'text-rose-200'}`}>
+                  <h2 className={`text-lg font-extrabold ${currentNewIssues.length === 0 ? 'text-emerald-200' : 'text-rose-200'}`}>
                     בדיקת תקינות טבלאות
                   </h2>
                   <div className="text-xs text-stone-400">סופר אדמין בלבד 👑</div>
@@ -1665,33 +1758,95 @@ const TableIntegrityIndicator = ({ allSessions, hiddenPlayers, isSuperAdmin }) =
                 </div>
               ) : (
                 <>
-                  <div className="rounded-lg bg-rose-950/30 border border-rose-800/50 p-3">
-                    <div className="text-sm text-rose-200 font-bold mb-2">
-                      ⚠️ נמצאו {result.issues.length} בעיות
-                    </div>
-                    <div className="text-xs text-stone-400">
-                      כל ערב פוקר חייב להיות מאוזן (סכום = 0). אם יש סטייה - יש בעיה בנתונים או בקוד.
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {result.issues.map((issue, idx) => (
-                      <div key={idx} className="rounded-lg bg-stone-900 border border-stone-700 p-3">
-                        <div className="text-sm text-rose-300 font-bold mb-1">
-                          {issue.type === 'session_imbalance' && `🎲 ערב ${issue.date}`}
-                          {issue.type === 'year_imbalance' && `📅 שנת ${issue.year}`}
-                          {issue.type === 'hidden_players_active' && `👻 שחקנים מוסתרים פעילים`}
+                  {/* 🆕 בעיות חדשות (לא מסומנות כידועות) */}
+                  {currentNewIssues.length > 0 ? (
+                    <>
+                      <div className="rounded-lg bg-rose-950/30 border border-rose-800/50 p-3">
+                        <div className="text-sm text-rose-200 font-bold mb-2">
+                          ⚠️ נמצאו {currentNewIssues.length} {currentNewIssues.length === 1 ? 'בעיה חדשה' : 'בעיות חדשות'}
                         </div>
-                        <div className="text-xs text-stone-300">
-                          {issue.message}
+                        <div className="text-xs text-stone-400">
+                          כל ערב פוקר חייב להיות מאוזן (סכום = 0). אם יש סטייה - יש בעיה בנתונים או בקוד.
                         </div>
                       </div>
-                    ))}
-                  </div>
+                      
+                      <div className="space-y-2 max-h-72 overflow-y-auto">
+                        {currentNewIssues.map((issue) => (
+                          <div key={issue._id} className="rounded-lg bg-stone-900 border border-stone-700 p-3">
+                            <div className="text-sm text-rose-300 font-bold mb-1">
+                              {issue.type === 'session_imbalance' && `🎲 ערב ${issue.date}`}
+                              {issue.type === 'year_imbalance' && `📅 שנת ${issue.year}`}
+                              {issue.type === 'hidden_players_active' && `👻 שחקנים מוסתרים פעילים`}
+                            </div>
+                            <div className="text-xs text-stone-300 mb-2">
+                              {issue.message}
+                            </div>
+                            <button
+                              onClick={() => markAsKnown(issue._id)}
+                              disabled={loadingKnown}
+                              className="text-xs rounded-md bg-amber-900/40 hover:bg-amber-800/60 border border-amber-700/50 px-2 py-1 text-amber-200 font-bold transition disabled:opacity-50"
+                              title="סמן בעיה זו כידועה - לא תיחשב בעיה חדשה יותר"
+                            >
+                              ✓ סמן כידועה
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="rounded-lg bg-emerald-950/30 border border-emerald-800/50 p-3">
+                      <div className="text-sm text-emerald-200 font-bold mb-1">
+                        ✅ אין בעיות חדשות
+                      </div>
+                      <div className="text-xs text-stone-400">
+                        כל הבעיות בשנה הזו מסומנות כידועות
+                      </div>
+                    </div>
+                  )}
                   
-                  <div className="rounded-lg bg-amber-950/30 border border-amber-800/50 p-3 text-xs text-amber-200">
-                    💡 <b>מה לעשות?</b> צלם את החלון הזה ושלח לרון. הוא יבדוק ויתקן בקוד.
-                  </div>
+                  {/* 🆕 בעיות ידועות (מסומנות) */}
+                  {currentKnownIssuesList.length > 0 && (
+                    <details className="rounded-lg bg-stone-900/40 border border-stone-700/50 overflow-hidden">
+                      <summary className="cursor-pointer p-3 text-sm text-stone-300 font-bold hover:bg-stone-900/60 transition select-none">
+                        📌 בעיות ידועות ({currentKnownIssuesList.length})
+                      </summary>
+                      <div className="p-3 pt-0 space-y-2 max-h-60 overflow-y-auto">
+                        {currentKnownIssuesList.map((issue) => (
+                          <div key={issue._id} className="rounded-lg bg-stone-950/80 border border-stone-800 p-2.5">
+                            <div className="text-xs text-stone-400 font-bold mb-1">
+                              {issue.type === 'session_imbalance' && `🎲 ערב ${issue.date}`}
+                              {issue.type === 'year_imbalance' && `📅 שנת ${issue.year}`}
+                              {issue.type === 'hidden_players_active' && `👻 שחקנים מוסתרים פעילים`}
+                            </div>
+                            <div className="text-xs text-stone-500 mb-1.5">
+                              {issue.message}
+                            </div>
+                            {issue._knownInfo?.markedAt && (
+                              <div className="text-[10px] text-stone-600 mb-1.5">
+                                סומן: {new Date(issue._knownInfo.markedAt).toLocaleDateString('he-IL')}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => unmarkAsKnown(issue._id)}
+                              disabled={loadingKnown}
+                              className="text-[11px] rounded-md bg-stone-800 hover:bg-stone-700 border border-stone-600 px-2 py-0.5 text-stone-300 transition disabled:opacity-50"
+                              title="בטל סימון - הבעיה תחזור להיחשב בעיה חדשה"
+                            >
+                              ↩️ בטל סימון
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                  
+                  {currentNewIssues.length > 0 && (
+                    <div className="rounded-lg bg-amber-950/30 border border-amber-800/50 p-3 text-xs text-amber-200">
+                      💡 <b>מה לעשות?</b> צלם את החלון הזה ושלח לרון. הוא יבדוק ויתקן בקוד.
+                      <br/>
+                      <span className="text-stone-400">או לחץ "סמן כידועה" כדי שלא תופיע בכותרת יותר.</span>
+                    </div>
+                  )}
                 </>
               )}
             </div>
