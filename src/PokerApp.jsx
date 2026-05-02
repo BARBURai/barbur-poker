@@ -7,12 +7,12 @@ import BARBUR_LOGO from './assets/barbur-logo.webp';
 import SWAN_IMG from './assets/swan.png';
 import { loadState as fbLoadState, saveState as fbSaveState } from './firebase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
+import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.11';
-const APP_BUILD_TIME = '01/05/2026 16:00';
-const APP_NOTES = '🔄 איחוד טאבים: "אירוח/רישום" עם 2 סאב-טאבים פנימיים';
+const APP_VERSION = 'v2.33.13';
+const APP_BUILD_TIME = '01/05/2026 17:30';
+const APP_NOTES = '🆕 תמיכה במפגש בלי מארח + סנכרון מארח דרך לוח האירוחים (אדמין שעורך מקבל דיאלוג)';
 
 
 // ===== הרשאות מנהל =====
@@ -3119,12 +3119,12 @@ const RegistrationTab = ({
 }) => {
   const MAX_SLOTS = 11; // מספר מקומות רשמיים
   
-  // 🗓️ זיהוי המפגש הבא מ-hostingSchedule
+  // 🗓️ זיהוי המפגש הבא מ-hostingSchedule - גם אם אין מארח עדיין
   const today = getTodayIsrael();
   const nextSession = useMemo(() => {
     if (!hostingSchedule || !Array.isArray(hostingSchedule)) return null;
     return hostingSchedule
-      .filter(h => h.date >= today && h.host)
+      .filter(h => h.date >= today)  // ⬅️ אין יותר && h.host - גם תאריכים בלי מארח
       .sort((a, b) => a.date.localeCompare(b.date))[0] || null;
   }, [hostingSchedule, today]);
   
@@ -3178,8 +3178,10 @@ const RegistrationTab = ({
     if (!registration.sessionDate || !registration.entries) {
       const fresh = {
         sessionDate: nextSession.date,
-        host: nextSession.host,
-        entries: [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }],
+        host: nextSession.host || '',
+        entries: nextSession.host 
+          ? [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }]
+          : [],  // ⬅️ אם אין מארח - רשימה ריקה (מקום #1 שמור)
         resetAt: new Date().toISOString(),
       };
       onUpdate(fresh);
@@ -3417,9 +3419,34 @@ const RegistrationTab = ({
           </div>
           <div className="text-2xl font-extrabold text-amber-200 mb-1">המפגש הבא</div>
           <div className="text-base text-stone-300">{sessionDateFormatted}</div>
-          <div className="text-sm text-stone-400 mt-1">
-            מארח: <span className="font-bold text-amber-300">{nextSession.host}</span>
-          </div>
+          {nextSession.host ? (
+            <>
+              <div className="text-sm text-stone-400 mt-1">
+                מארח: <span className="font-bold text-amber-300">{nextSession.host}</span>
+              </div>
+              {nextSession.address && (
+                <div className="text-xs text-stone-400 mt-0.5 flex items-center gap-1">
+                  <MapPin className="h-3 w-3 text-stone-500" />
+                  {nextSession.address}
+                </div>
+              )}
+              {nextSession.notes && (
+                <div className="text-xs text-stone-500 italic mt-0.5">
+                  {nextSession.notes}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="mt-2 rounded-lg bg-amber-950/40 border border-amber-700/40 px-3 py-2">
+              <div className="text-sm text-amber-300 font-bold flex items-center gap-2">
+                <span>⏳</span>
+                <span>עדיין לא נקבע מארח</span>
+              </div>
+              <div className="text-xs text-amber-400/70 mt-0.5">
+                ניתן להירשם - מקום #1 ישמר למארח
+              </div>
+            </div>
+          )}
         </div>
         
         {/* מצב הרישום */}
@@ -3613,8 +3640,23 @@ const RegistrationTab = ({
           </div>
         ) : (
           <div className="divide-y divide-stone-800">
-            {entries.slice(0, MAX_SLOTS).map((entry, idx) => {
-              const position = idx + 1;
+            {/* 🟡 שורה ב-#1 כשאין מארח - מקום שמור */}
+            {!nextSession.host && (
+              <div className="flex items-center gap-3 px-4 py-2.5 bg-amber-950/20 border-r-4 border-amber-700/60">
+                <div className="w-8 h-8 rounded-full bg-amber-700/40 border border-amber-700 text-amber-300 font-extrabold text-sm flex items-center justify-center shrink-0">
+                  1
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-amber-300/90 truncate flex items-center gap-2">
+                    <span>⏳</span>
+                    <span className="italic">ממתין למארח</span>
+                  </div>
+                  <div className="text-xs text-amber-500/60">המקום שמור</div>
+                </div>
+              </div>
+            )}
+            {entries.slice(0, MAX_SLOTS - (!nextSession.host ? 1 : 0)).map((entry, idx) => {
+              const position = idx + 1 + (!nextSession.host ? 1 : 0);
               const isMe = entry.name === currentUser;
               return (
                 <div key={entry.name} 
@@ -3834,7 +3876,7 @@ const HostingSummaryTable = ({ allSessions, players }) => {
 };
 
 // ===== טאב אירוחים מלא =====
-const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defaultFilter = 'upcoming' }) => {
+const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defaultFilter = 'upcoming', registration, onRegistrationUpdate }) => {
   const [editingDate, setEditingDate] = useState(null);
   const [editHost, setEditHost] = useState('');
   const [editNotes, setEditNotes] = useState('');
@@ -3921,6 +3963,49 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
       h.date === editingDate ? { ...h, host: editHost || null, notes: editNotes || null, address: editAddress || null } : h
     );
     onUpdate(updated);
+    
+    // 🔄 בדיקה: האם המפגש שערכנו הוא המפגש הקרוב? אם כן - הצע סנכרון לרישום
+    if (registration && onRegistrationUpdate && registration.sessionDate === editingDate) {
+      const newHost = editHost || '';
+      const oldHost = registration.host || '';
+      
+      if (newHost !== oldHost) {
+        // המארח של המפגש הקרוב השתנה - שואלים את האדמין
+        let message;
+        if (newHost && !oldHost) {
+          message = `📅 הוספת מארח: ${newHost}\n\nלעדכן את הרשימה? (${newHost} ייכנס למקום #1)`;
+        } else if (!newHost && oldHost) {
+          message = `📅 הסרת את המארח (${oldHost})\n\nלהסיר אותו גם מהרשימה? המקום #1 ישאר פנוי למארח שייקבע.`;
+        } else {
+          message = `📅 שינית את המארח:\n${oldHost} ← ${newHost}\n\nלעדכן את הרשימה? ${newHost} ייכנס במקום ${oldHost} ב-#1.`;
+        }
+        
+        if (confirm(message)) {
+          // העדכון:
+          // 1. הסר את המארח הישן (isHost: true)
+          // 2. אם המארח החדש קיים במקום אחר - הסר אותו משם
+          // 3. הכנס את המארח החדש ל-#1
+          let newEntries = (registration.entries || []).filter(e => !e.isHost);
+          
+          if (newHost) {
+            newEntries = newEntries.filter(e => e.name !== newHost);
+            newEntries = [
+              { name: newHost, addedAt: new Date().toISOString(), isHost: true },
+              ...newEntries
+            ];
+          }
+          
+          onRegistrationUpdate({
+            ...registration,
+            host: newHost,
+            entries: newEntries,
+            hostChangedAt: new Date().toISOString(),
+            hostChangedBy: addedBy,
+          });
+        }
+      }
+    }
+    
     setEditingDate(null);
   };
 
@@ -4202,7 +4287,7 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
 };
 
 // ===== טאב אירוחים עם בורר תצוגה =====
-const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, isAdmin, onUpdate, adminName }) => {
+const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, isAdmin, onUpdate, adminName, registration, onRegistrationUpdate }) => {
   const [view, setView] = useState('upcoming'); // upcoming | history
   
   return (
@@ -4230,7 +4315,8 @@ const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, 
       {/* תוכן לפי הבחירה */}
       {view === 'upcoming' ? (
         <HostingTab hostingSchedule={hostingSchedule} isAdmin={isAdmin}
-          onUpdate={onUpdate} players={sortedPlayers} addedBy={adminName} defaultFilter="upcoming" />
+          onUpdate={onUpdate} players={sortedPlayers} addedBy={adminName} defaultFilter="upcoming"
+          registration={registration} onRegistrationUpdate={onRegistrationUpdate} />
       ) : (
         <div className="space-y-4">
           <HostingSummaryTable allSessions={allSessions} players={players} />
@@ -12463,7 +12549,7 @@ export default function PokerApp() {
                     : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800/50'
                 }`}
               >
-                🍻 אירוח
+                🍻 אירוח קרוב
               </button>
               <button
                 onClick={() => setRegistrationSubTab('hosting')}
@@ -12481,7 +12567,8 @@ export default function PokerApp() {
             {registrationSubTab === 'hosting' ? (
               <HostingWrapper allSessions={allSessions} hostingSchedule={hostingSchedule}
                 players={activePlayers} sortedPlayers={sortedActivePlayers} isAdmin={isAdmin}
-                onUpdate={handleHostingUpdate} adminName={adminName} />
+                onUpdate={handleHostingUpdate} adminName={adminName}
+                registration={registration} onRegistrationUpdate={handleUpdateRegistration} />
             ) : (
               <>
             {/* 🔒 כפתור הפעלה/כיבוי - מי שיש לו הרשאת registrationToggle בלבד */}
