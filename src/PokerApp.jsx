@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.23';
-const APP_BUILD_TIME = '02/05/2026 13:15';
-const APP_NOTES = '🎉 קונפטי MVP מלא (כולל צינורות) - רק בלי הודעת זכייה';
+const APP_VERSION = 'v2.33.24';
+const APP_BUILD_TIME = '02/05/2026 13:30';
+const APP_NOTES = '🎯 פופ-אפ MVP מחכה לקונפטי זכייה להיגמר לפני שיוצג';
 
 
 // ===== הרשאות מנהל =====
@@ -11421,11 +11421,31 @@ export default function PokerApp() {
   }, [allSessions]);
   
   // 🏆 בדיקה: האם יש MVPs ש-currentUser לא ראה עדיין? (פופ-אפ ברכה)
+  // ⚠️ ממתין: אם יש קונפטי זכייה שעדיין לא נראה - דוחה את ה-MVP עד שהזכייה תיגמר
   useEffect(() => {
     if (!currentUser) return;
     
     const checkMVPPopup = async () => {
       try {
+        // 🚰 בדיקה: האם יש קונפטי זכייה שעדיין לא נראה?
+        // אם כן - לא מציגים MVP popup עכשיו, יקפוץ בפעם הבאה
+        if (allSessions && allSessions.length > 0) {
+          const sortedSessions = [...allSessions].sort((a, b) => new Date(b.date) - new Date(a.date));
+          const lastSession = sortedSessions.find(s => s.results && typeof s.results[currentUser] === 'number');
+          if (lastSession) {
+            const myProfit = Number(lastSession.results[currentUser]) || 0;
+            if (myProfit > 0) {
+              const sessionKey = `${lastSession.date}_${lastSession.season || 2026}`;
+              const seenKey = `confetti_seen_${currentUser}_${sessionKey}`;
+              const alreadySeen = window.localStorage.getItem(seenKey);
+              if (!alreadySeen) {
+                console.log('🚰 קונפטי זכייה ימתין להיגמר לפני שיוצג MVP popup');
+                return; // אל תציג MVP - תן לקונפטי הזכייה להיות ראשון
+              }
+            }
+          }
+        }
+        
         const mvpData = await fbLoadState(MVP_RESULTS_KEY);
         if (!mvpData || typeof mvpData !== 'object') return;
         
