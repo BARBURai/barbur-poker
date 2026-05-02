@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.24';
-const APP_BUILD_TIME = '02/05/2026 13:30';
-const APP_NOTES = '🎯 פופ-אפ MVP מחכה לקונפטי זכייה להיגמר לפני שיוצג';
+const APP_VERSION = 'v2.33.25';
+const APP_BUILD_TIME = '02/05/2026 16:00';
+const APP_NOTES = '🛡️ תיקון באג טבלת דירוג + מנגנון אימות תקינות + סינון מוסתרים';
 
 
 // ===== הרשאות מנהל =====
@@ -497,8 +497,11 @@ const SearchableSelect = ({ value, onChange, options, placeholder = 'בחר...',
 };
 
 // ===== חישובי סטטיסטיקה =====
+// 🛡️ הקוד מבטיח שכל מי שיש לו תוצאות בערב יופיע בטבלה
+//   גם אם הוא לא ברשימת players הפעילה (כדי שהמאזן יישאר 0)
 const calculateStats = (sessions, players) => {
   const stats = {};
+  // יצירת רשומה לכל שחקן ב-players
   players.forEach(p => {
     stats[p] = { name: p, total: 0, sessions: 0, wins: 0, losses: 0, ties: 0,
       maxStreak: 0, currentStreak: 0, biggestWin: 0, biggestLoss: 0, values: [], hosted: 0 };
@@ -507,7 +510,12 @@ const calculateStats = (sessions, players) => {
   sortedSessions.forEach(session => {
     if (session.host && stats[session.host]) stats[session.host].hosted++;
     Object.entries(session.results || {}).forEach(([name, amount]) => {
-      if (!stats[name]) return;
+      // 🆕 אם השחקן לא ברשימה - הוסף אותו אוטומטית (כדי לשמור על מאזן)
+      if (!stats[name]) {
+        stats[name] = { name, total: 0, sessions: 0, wins: 0, losses: 0, ties: 0,
+          maxStreak: 0, currentStreak: 0, biggestWin: 0, biggestLoss: 0, values: [], hosted: 0 };
+        console.warn(`⚠️ שחקן "${name}" יש לו תוצאות אבל לא ברשימת players - מתווסף אוטומטית`);
+      }
       const s = stats[name];
       s.total += amount; s.sessions++; s.values.push(amount);
       if (amount > 0) { s.wins++; s.currentStreak++; }
@@ -533,6 +541,85 @@ const calculateStats = (sessions, players) => {
     }
   });
   return Object.values(stats).filter(s => s.sessions > 0).sort((a, b) => b.total - a.total);
+};
+
+// ============================================================
+// 🛡️ אימות תקינות טבלאות - בודק שכל הטבלאות מאוזנות
+// בערב פוקר - סכום הרווחים = סכום ההפסדים = 0
+// אם זה לא 0 - יש שחקן חסר/מזיק/בעיה בנתונים
+// ============================================================
+const validateTablesIntegrity = (allSessions, hiddenPlayers = []) => {
+  const issues = [];
+  
+  if (!allSessions || allSessions.length === 0) {
+    return { isValid: true, issues: [], summary: 'אין נתונים לבדוק' };
+  }
+  
+  // 🔍 בדיקה 1: מאזן לכל ערב בנפרד (חובה להיות 0)
+  allSessions.forEach(session => {
+    if (!session.results) return;
+    const sum = Object.values(session.results).reduce((acc, val) => acc + Number(val), 0);
+    if (Math.abs(sum) > 0.01) { // רף לסטיות עיגול
+      issues.push({
+        type: 'session_imbalance',
+        date: session.date,
+        sum,
+        message: `ערב ${session.date}: מאזן = ${sum > 0 ? '+' : ''}${sum} (אמור להיות 0)`,
+      });
+    }
+  });
+  
+  // 🔍 בדיקה 2: מאזן שנתי - סכום כל הערבים בשנה (חובה להיות 0)
+  const sessionsByYear = {};
+  allSessions.forEach(s => {
+    if (!s.date) return;
+    const year = new Date(s.date).getFullYear();
+    if (!sessionsByYear[year]) sessionsByYear[year] = [];
+    sessionsByYear[year].push(s);
+  });
+  
+  Object.entries(sessionsByYear).forEach(([year, yearSessions]) => {
+    const totals = {};
+    yearSessions.forEach(s => {
+      Object.entries(s.results || {}).forEach(([name, amount]) => {
+        totals[name] = (totals[name] || 0) + Number(amount);
+      });
+    });
+    const yearSum = Object.values(totals).reduce((a, b) => a + b, 0);
+    if (Math.abs(yearSum) > 0.01) {
+      issues.push({
+        type: 'year_imbalance',
+        year,
+        sum: yearSum,
+        message: `שנת ${year}: מאזן כללי = ${yearSum > 0 ? '+' : ''}${yearSum} (אמור להיות 0)`,
+      });
+    }
+  });
+  
+  // 🔍 בדיקה 3: שחקנים מוסתרים שמופיעים ב-results
+  if (hiddenPlayers.length > 0) {
+    const playersWithResults = new Set();
+    allSessions.forEach(s => {
+      Object.keys(s.results || {}).forEach(name => playersWithResults.add(name));
+    });
+    
+    const hiddenButPlaying = hiddenPlayers.filter(p => playersWithResults.has(p));
+    if (hiddenButPlaying.length > 0) {
+      issues.push({
+        type: 'hidden_players_active',
+        players: hiddenButPlaying,
+        message: `שחקנים מוסתרים עם תוצאות: ${hiddenButPlaying.join(', ')} - לא יופיעו בטבלה`,
+      });
+    }
+  }
+  
+  return {
+    isValid: issues.length === 0,
+    issues,
+    summary: issues.length === 0 
+      ? `✅ כל הטבלאות מאוזנות (${allSessions.length} ערבים)` 
+      : `⚠️ ${issues.length} בעיות נמצאו`,
+  };
 };
 
 const calculateCumulative = (sessions, selectedPlayers) => {
@@ -1367,21 +1454,122 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
   );
 };
 
+// ============================================================
+// 🛡️ חיווי תקינות טבלאות - מציג ✓ ירוק או ⚠️ אדום
+// רק לסופר אדמין. אם יש בעיה - לחיצה פותחת מודל עם פירוט
+// ============================================================
+const TableIntegrityIndicator = ({ allSessions, hiddenPlayers, isSuperAdmin }) => {
+  const [showModal, setShowModal] = useState(false);
+  
+  // לא מציג למשתמשים רגילים
+  if (!isSuperAdmin) return null;
+  
+  const result = useMemo(
+    () => validateTablesIntegrity(allSessions, hiddenPlayers),
+    [allSessions, hiddenPlayers]
+  );
+  
+  if (result.isValid) {
+    // הכל תקין - חיווי ירוק קטן
+    return (
+      <span 
+        title="כל הטבלאות מאוזנות"
+        className="inline-flex items-center gap-1 text-xs text-emerald-400 font-bold cursor-help"
+      >
+        ✓ בדוק
+      </span>
+    );
+  }
+  
+  // יש בעיות - חיווי אדום + מודל
+  return (
+    <>
+      <button
+        onClick={() => setShowModal(true)}
+        className="inline-flex items-center gap-1 text-xs text-rose-400 font-bold animate-pulse cursor-pointer hover:text-rose-300"
+        title="לחץ לראות פירוט הבעיות"
+      >
+        ⚠️ {result.issues.length} בעיות
+      </button>
+      
+      {showModal && (
+        <div dir="rtl" className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowModal(false)}>
+          <div className="bg-stone-950 rounded-2xl border-2 border-rose-700 w-full max-w-lg my-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-rose-950/40 to-stone-950">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <h2 className="text-lg font-extrabold text-rose-200">בעיה בתקינות הטבלה</h2>
+                  <div className="text-xs text-stone-400">סופר אדמין בלבד 👑</div>
+                </div>
+              </div>
+              <button onClick={() => setShowModal(false)} className="text-stone-400 hover:text-white p-1">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-3">
+              <div className="rounded-lg bg-rose-950/30 border border-rose-800/50 p-3">
+                <div className="text-sm text-rose-200 font-bold mb-2">
+                  ⚠️ נמצאו {result.issues.length} בעיות
+                </div>
+                <div className="text-xs text-stone-400">
+                  כל ערב פוקר חייב להיות מאוזן (סכום = 0). אם יש סטייה - יש בעיה בנתונים או בקוד.
+                </div>
+              </div>
+              
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {result.issues.map((issue, idx) => (
+                  <div key={idx} className="rounded-lg bg-stone-900 border border-stone-700 p-3">
+                    <div className="text-sm text-rose-300 font-bold mb-1">
+                      {issue.type === 'session_imbalance' && `🎲 ערב ${issue.date}`}
+                      {issue.type === 'year_imbalance' && `📅 שנת ${issue.year}`}
+                      {issue.type === 'hidden_players_active' && `👻 שחקנים מוסתרים פעילים`}
+                    </div>
+                    <div className="text-xs text-stone-300">
+                      {issue.message}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="rounded-lg bg-amber-950/30 border border-amber-800/50 p-3 text-xs text-amber-200">
+                💡 <b>מה לעשות?</b> צלם את החלון הזה ושלח לרון. הוא יבדוק ויתקן בקוד.
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-stone-800">
+              <button
+                onClick={() => setShowModal(false)}
+                className="w-full rounded-lg bg-stone-800 hover:bg-stone-700 px-4 py-2.5 text-stone-300 font-bold text-sm transition"
+              >
+                סבבה
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 // ===== טבלה ראשית =====
-const MainLeaderboard = ({ stats, sessions }) => {
+const MainLeaderboard = ({ stats, sessions, hiddenPlayers = [], allSessions, isSuperAdmin }) => {
   const latestDate = getLatestSessionDate(sessions);
   // 🎯 מסנן שחקנים פעילים - לפי אחוז מסך המפגשים בעונה
   // 'all' = כולם, 10/15/20 = מינימום אחוז השתתפות
   const [activityFilter, setActivityFilter] = useState('all');
   
-  // חישוב הסינון
+  // חישוב הסינון - מסנן מוסתרים + לפי אחוז השתתפות
   const totalSessions = sessions.length;
   const filteredStats = useMemo(() => {
-    if (activityFilter === 'all') return stats;
+    // 🛡️ סינון: מסיר שחקנים מוסתרים מהטבלה
+    let filtered = stats.filter(s => !hiddenPlayers.includes(s.name));
+    if (activityFilter === 'all') return filtered;
     const minPct = parseInt(activityFilter); // 10, 15, 20
     const minSessions = Math.max(1, Math.ceil(totalSessions * minPct / 100));
-    return stats.filter(p => p.sessions >= minSessions);
-  }, [stats, activityFilter, totalSessions]);
+    return filtered.filter(p => p.sessions >= minSessions);
+  }, [stats, activityFilter, totalSessions, hiddenPlayers]);
   
   const columns = [
     { key: 'total', label: 'רווח' },
@@ -1433,6 +1621,8 @@ const MainLeaderboard = ({ stats, sessions }) => {
           <span className="text-xs text-stone-400 font-normal">
             ({filteredStats.length}/{stats.length})
           </span>
+          {/* 🛡️ חיווי תקינות - רק לסופר אדמין */}
+          <TableIntegrityIndicator allSessions={allSessions} hiddenPlayers={hiddenPlayers} isSuperAdmin={isSuperAdmin} />
         </h3>
         <div className="flex items-center gap-3 flex-wrap">
           {/* 🎯 מסנן שחקנים פעילים */}
@@ -13181,7 +13371,7 @@ export default function PokerApp() {
           </>
         )}
 
-        {tab === 'table' && <MainLeaderboard stats={stats} sessions={sessions} />}
+        {tab === 'table' && <MainLeaderboard stats={stats} sessions={sessions} hiddenPlayers={hiddenPlayers} allSessions={allSessions} isSuperAdmin={isSuperAdmin} />}
 
         {tab === 'periodic' && <PeriodicTables allSessions={allSessions} players={players} />}
         {tab === 'champions' && <ChampionsTab allSessions={allSessions} hostingSchedule={hostingSchedule} userQuotes={userQuotes} quoteLikes={quoteLikes} allQuotes={ALL_QUOTES} deletedQuoteIds={deletedQuoteIds} />}
