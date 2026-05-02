@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.26';
-const APP_BUILD_TIME = '02/05/2026 16:30';
-const APP_NOTES = '🛡️ תיקון גלילה בטבלה + בורר שנים בדוח התקינות';
+const APP_VERSION = 'v2.33.28';
+const APP_BUILD_TIME = '02/05/2026 17:30';
+const APP_NOTES = '🦢 ברבור גדול בגרף + תצוגה אופקית + תיקון padding + ⚠️ אזהרה בטבלה היומית';
 
 
 // ===== הרשאות מנהל =====
@@ -1224,6 +1224,9 @@ const PlayerPicker = ({ allPlayers, selected, onChange }) => {
 
 // ===== גרף רווח מצטבר =====
 const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscreenToggle, selectedPlayers, onPlayersChange, isMobile }) => {
+  // 🆕 מצב תצוגה אופקית - משתמש מסובב את הטלפון לרוחב לראות יותר טוב
+  const [landscape, setLandscape] = useState(false);
+  
   // 🆕 כל השנים הזמינות בהיסטוריה
   const allYears = useMemo(() => {
     const years = new Set();
@@ -1323,17 +1326,22 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
   
   // 🦢 Dot מותאם - מציג ברבור רק בנקודה האחרונה של כל קו
   // כל ברבור עם רקע צבעוני שתואם לצבע הקו - כדי להבדיל בין שחקנים
+  const SWAN_VARIANTS_CHART = [SWAN_FLY_1, SWAN_FLY_2, SWAN_FLY_3];
   const SwanDot = (props) => {
     const { cx, cy, payload, dataKey, stroke, value } = props;
     if (cx === undefined || cy === undefined || cx === null || cy === null) return null;
     if (value === undefined || value === null) return null;
     if (!payload || !payload._isLast) return null;
     
-    const size = 44; // גדול יותר
+    const size = 44;
     const halfSize = size / 2;
     const ringRadius = halfSize + 2;
-    const swanSize = size - 8;
+    // 🆕 ברבור גדול יותר בתוך העיגול - קופץ החוצה מעט (כמו מדבקה)
+    const swanSize = size + 10; // קצת גדול מהעיגול
     const swanOffset = (size - swanSize) / 2;
+    // 🆕 בחירה אקראית יציבה לפי dataKey - כל שחקן יקבל אותה תמונה תמיד
+    const variantIdx = dataKey ? Math.abs(dataKey.charCodeAt(0)) % 3 : 0;
+    const swanImg = SWAN_VARIANTS_CHART[variantIdx];
     
     return (
       <g transform={`translate(${cx - halfSize}, ${cy - halfSize})`} style={{ pointerEvents: 'none' }}>
@@ -1348,13 +1356,15 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
           strokeWidth="2"
           style={{ filter: `drop-shadow(0 2px 4px rgba(0,0,0,0.5))` }}
         />
-        {/* ברבור */}
+        {/* ברבור - גדול ויפה */}
         <image 
-          href={SWAN_IMG}
+          href={swanImg}
           x={swanOffset}
           y={swanOffset}
           width={swanSize}
           height={swanSize}
+          preserveAspectRatio="xMidYMid meet"
+          style={{ filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))' }}
         />
       </g>
     );
@@ -1375,6 +1385,13 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
         </div>
         <div className="flex items-center gap-2">
           <PlayerPicker allPlayers={playersForPicker} selected={selectedPlayers} onChange={onPlayersChange} />
+          {/* 🆕 כפתור תצוגה אופקית - לראות הגרף בנוחות יותר */}
+          {isMobile && !fullscreen && (
+            <button onClick={() => setLandscape(true)}
+              className="rounded-lg border border-stone-700 bg-stone-900 p-2 text-stone-300 hover:bg-stone-800 transition" title="תצוגה אופקית">
+              <span style={{ display: 'inline-block', transform: 'rotate(90deg)', fontSize: '14px' }}>📱</span>
+            </button>
+          )}
           <button onClick={onFullscreenToggle}
             className="rounded-lg border border-stone-700 bg-stone-900 p-2 text-stone-300 hover:bg-stone-800 transition" title={fullscreen ? 'חזור' : 'מסך מלא'}>
             {fullscreen ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
@@ -1412,11 +1429,11 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
       
       <div style={{ width: '100%', height: chartHeight }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: isMobile ? 40 : 10 }}>
+          <LineChart data={data} margin={{ top: 10, right: 8, left: 8, bottom: isMobile ? 40 : 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
             <XAxis dataKey="label" stroke="#78716c" style={{ fontSize: isMobile ? '10px' : '11px' }} 
               angle={isMobile ? -45 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 50 : 30} />
-            <YAxis stroke="#78716c" style={{ fontSize: isMobile ? '10px' : '11px' }} width={40} />
+            <YAxis stroke="#78716c" style={{ fontSize: isMobile ? '10px' : '11px' }} width={45} />
             <Tooltip 
               contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '12px' }} 
               labelStyle={{ color: '#fbbf24' }}
@@ -1458,6 +1475,60 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
       )}
       {selectedPlayers.length === 0 && (
         <div className="text-center text-stone-500 text-sm py-8">בחר שחקנים להצגה בגרף</div>
+      )}
+      
+      {/* 🔄 תצוגה אופקית (landscape) - מודל מסובב 90° */}
+      {landscape && (
+        <div 
+          className="fixed inset-0 z-[200] bg-black flex items-center justify-center"
+          onClick={() => setLandscape(false)}
+        >
+          {/* תוכן הגרף מסובב 90 מעלות - תופס את כל המסך כאופקי */}
+          <div 
+            style={{
+              width: '100vh',
+              height: '100vw',
+              transform: 'rotate(90deg)',
+            }}
+            className="bg-stone-950 p-4"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-bold text-amber-200">רווח מצטבר השנה - תצוגה אופקית</h3>
+              <button 
+                onClick={() => setLandscape(false)}
+                className="rounded-lg border border-stone-700 bg-stone-900 p-2 text-stone-300 hover:bg-stone-800"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div style={{ width: '100%', height: 'calc(100% - 50px)' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data} margin={{ top: 10, right: 8, left: 8, bottom: 30 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
+                  <XAxis dataKey="label" stroke="#78716c" style={{ fontSize: '12px' }} />
+                  <YAxis stroke="#78716c" style={{ fontSize: '12px' }} width={45} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '12px' }} 
+                    labelStyle={{ color: '#fbbf24' }}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px', fontFamily: 'Assistant' }} />
+                  {selectedPlayers.map((name, i) => (
+                    <Line 
+                      key={name} 
+                      type="monotone" 
+                      dataKey={name} 
+                      stroke={colors[i % colors.length]} 
+                      strokeWidth={3}
+                      dot={<SwanDot />} 
+                      activeDot={{ r: 6 }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -9482,6 +9553,8 @@ const ChampionsTab = ({ allSessions, hostingSchedule = [], userQuotes = [], quot
 
 const PeriodicTables = ({ allSessions, players }) => {
   const [viewMode, setViewMode] = useState('month'); // month | quarter | half
+  // 🛡️ מודל פרטי ערב לא מאוזן
+  const [imbalanceDetails, setImbalanceDetails] = useState(null);
   
   // זיהוי כל השנים הזמינות
   const availableYears = useMemo(() => {
@@ -9496,6 +9569,30 @@ const PeriodicTables = ({ allSessions, players }) => {
     allSessions.filter(s => (s.season || new Date(s.date).getFullYear()) === selectedYear),
     [allSessions, selectedYear]
   );
+  
+  // 🛡️ מיפוי תאריך → ערב לא מאוזן (רק לתצוגה היומית)
+  const imbalancesByDate = useMemo(() => {
+    const map = {};
+    sessions.forEach(s => {
+      if (!s.date || !s.results) return;
+      const sum = Object.values(s.results).reduce((acc, v) => acc + Number(v), 0);
+      if (Math.abs(sum) > 0.01) {
+        // יש סטייה
+        const positive = Object.values(s.results).filter(v => v > 0).reduce((a, b) => a + b, 0);
+        const negative = Object.values(s.results).filter(v => v < 0).reduce((a, b) => a + b, 0);
+        map[s.date] = {
+          date: s.date,
+          sum,
+          positive,
+          negative,
+          players: s.results,
+          host: s.host,
+          pot: s.pot,
+        };
+      }
+    });
+    return map;
+  }, [sessions]);
   
   const { keyFn, getLabel, viewLabel } = useMemo(() => {
     if (viewMode === 'day') return { keyFn: getDayKey, getLabel: getDayLabel, viewLabel: 'יומית' };
@@ -9574,11 +9671,26 @@ const PeriodicTables = ({ allSessions, players }) => {
               <th className="sticky top-0 right-0 z-30 bg-stone-900 border-b-2 border-l border-stone-700 px-3 py-3 text-right font-bold text-xs text-amber-200 min-w-[90px] shadow-[2px_0_4px_-1px_rgba(0,0,0,0.3)]">
                 שחקן
               </th>
-              {sortedKeys.map(k => (
-                <th key={k} className="sticky top-0 z-20 bg-stone-900 border-b-2 border-stone-700 px-3 py-3 text-center font-bold text-xs text-amber-200 whitespace-nowrap min-w-[80px]">
-                  {getLabel(k)}
-                </th>
-              ))}
+              {sortedKeys.map(k => {
+                // 🛡️ בדיקה: האם יש חוסר איזון בערב הזה? (רק בתצוגה יומית)
+                const imbalance = viewMode === 'day' ? imbalancesByDate[k] : null;
+                return (
+                  <th key={k} className="sticky top-0 z-20 bg-stone-900 border-b-2 border-stone-700 px-3 py-3 text-center font-bold text-xs text-amber-200 whitespace-nowrap min-w-[80px]">
+                    <div className="inline-flex items-center gap-1 justify-center">
+                      <span>{getLabel(k)}</span>
+                      {imbalance && (
+                        <button
+                          onClick={() => setImbalanceDetails(imbalance)}
+                          className="text-rose-400 hover:text-rose-300 cursor-pointer"
+                          title="ערב לא מאוזן - לחץ לפרטים"
+                        >
+                          ⚠️
+                        </button>
+                      )}
+                    </div>
+                  </th>
+                );
+              })}
               <th className="sticky top-0 left-0 z-30 bg-amber-950/50 border-b-2 border-r border-amber-700 px-3 py-3 text-center font-bold text-xs text-amber-200 whitespace-nowrap min-w-[80px]">
                 סה״כ
               </th>
@@ -9619,7 +9731,94 @@ const PeriodicTables = ({ allSessions, players }) => {
         <span>🟢 רווח</span>
         <span>🔴 הפסד</span>
         <span>• המספרים בעמודות מראים את הרווח/הפסד בתקופה</span>
+        {viewMode === 'day' && Object.keys(imbalancesByDate).length > 0 && (
+          <span>• ⚠️ = ערב לא מאוזן (לחץ לפרטים)</span>
+        )}
       </div>
+      
+      {/* 🛡️ מודל פרטי ערב לא מאוזן */}
+      {imbalanceDetails && (
+        <div dir="rtl" className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={() => setImbalanceDetails(null)}>
+          <div className="bg-stone-950 rounded-2xl border-2 border-rose-700 w-full max-w-md my-8" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-rose-950/40 to-stone-950">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <h2 className="text-lg font-extrabold text-rose-200">ערב לא מאוזן</h2>
+                  <div className="text-xs text-stone-400">
+                    {new Date(imbalanceDetails.date).toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => setImbalanceDetails(null)} className="text-stone-400 hover:text-white p-1">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-3">
+              {/* פירוט המאזן */}
+              <div className="rounded-lg bg-rose-950/30 border border-rose-800/50 p-3 space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-stone-400">סכום רווחים:</span>
+                  <span className="text-emerald-400 font-bold">+{imbalanceDetails.positive}₪</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-stone-400">סכום הפסדים:</span>
+                  <span className="text-rose-400 font-bold">{imbalanceDetails.negative}₪</span>
+                </div>
+                <div className="border-t border-rose-800/50 pt-1 flex justify-between text-sm">
+                  <span className="text-stone-300 font-bold">מאזן (אמור 0):</span>
+                  <span className={`font-extrabold ${imbalanceDetails.sum > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                    {imbalanceDetails.sum > 0 ? '+' : ''}{imbalanceDetails.sum}₪
+                  </span>
+                </div>
+                {imbalanceDetails.pot && (
+                  <div className="flex justify-between text-xs pt-1">
+                    <span className="text-stone-500">קופה:</span>
+                    <span className="text-stone-400">{imbalanceDetails.pot}₪</span>
+                  </div>
+                )}
+                {imbalanceDetails.host && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-stone-500">מארח:</span>
+                    <span className="text-stone-400">{imbalanceDetails.host}</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* רשימת השחקנים */}
+              <div>
+                <div className="text-xs text-stone-400 font-bold mb-2">שחקנים בערב ({Object.keys(imbalanceDetails.players).length}):</div>
+                <div className="rounded-lg border border-stone-800 overflow-hidden">
+                  {Object.entries(imbalanceDetails.players)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([name, val], idx) => (
+                      <div key={name} className={`flex justify-between items-center px-3 py-2 text-sm ${idx % 2 === 0 ? 'bg-stone-900' : 'bg-stone-900/50'}`}>
+                        <span className="text-stone-200 font-bold">{name}</span>
+                        <span className={`tabular-nums font-bold ${val > 0 ? 'text-emerald-400' : val < 0 ? 'text-rose-400' : 'text-stone-500'}`}>
+                          {val > 0 ? '+' : ''}{val}₪
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+              
+              <div className="rounded-lg bg-amber-950/30 border border-amber-800/50 p-3 text-xs text-amber-200">
+                💡 <b>כנראה שגיאת הקלדה ברישום הערב.</b> אחת מהתוצאות הוקלדה לא נכון. צלם את החלון הזה ופנה לרון לבדיקה.
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-stone-800">
+              <button
+                onClick={() => setImbalanceDetails(null)}
+                className="w-full rounded-lg bg-stone-800 hover:bg-stone-700 px-4 py-2.5 text-stone-300 font-bold text-sm transition"
+              >
+                סבבה
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
