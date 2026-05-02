@@ -10,9 +10,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.10';
-const APP_BUILD_TIME = '01/05/2026 15:30';
-const APP_NOTES = '🍻 שלב 3 של תזכורות מארח: סימון אישור בלוח האירוחים + כפתור סמן ידנית';
+const APP_VERSION = 'v2.33.11';
+const APP_BUILD_TIME = '01/05/2026 16:00';
+const APP_NOTES = '🔄 איחוד טאבים: "אירוח/רישום" עם 2 סאב-טאבים פנימיים';
 
 
 // ===== הרשאות מנהל =====
@@ -10594,6 +10594,8 @@ export default function PokerApp() {
   const [broadcastDismissed, setBroadcastDismissed] = useState(false); // המשתמש סגר את הצופה
   // 🍻 מסך אישור אירוח - מופיע למארח שצריך לאשר אירוח עתידי
   const [hostReminderModal, setHostReminderModal] = useState(null); // { sessionDate, sessionHost } או null
+  // 🆕 סאב-טאב בתוך טאב "אירוח/רישום" - 'registration' או 'hosting'
+  const [registrationSubTab, setRegistrationSubTab] = useState('registration');
   const [isMobile, setIsMobile] = useState(false);
   
   // ציטוטים
@@ -12138,12 +12140,12 @@ export default function PokerApp() {
   }
 
   const tabs = [
-    // 🆕 רישום למפגש - ראשון (משמאל לדשבורד) - emoji בלבד, עיצוב מיוחד
+    // 🆕 אירוח/רישום - טאב מאוחד שכולל את הרישום ולוח האירוחים
     ...((registrationEnabled || can('registrationToggle')) ? [{ 
       id: 'registration', 
-      label: 'רישום למפגש', 
+      label: 'אירוח/רישום', 
       icon: null, 
-      emoji: '📝',
+      emoji: '🍻',
       special: true,
     }] : []),
     { id: 'dashboard', label: 'דשבורד', icon: LayoutDashboard },
@@ -12151,7 +12153,6 @@ export default function PokerApp() {
     { id: 'periodic', label: 'תקופות', icon: Calendar },
     { id: 'champions', label: '🏆 MVP', icon: Trophy },
     { id: 'charts', label: 'תובנות', icon: BarChart3 },
-    { id: 'hosting', label: 'אירוחים', icon: Calendar },
     { id: 'gallery', label: 'גלריה', icon: ImageIcon },
     // 🔒 היסטוריה - רק למי שיש לו הרשאה למחוק מפגשים
     ...(can('deleteSession') ? [{ id: 'history', label: 'היסטוריה', icon: History }] : []),
@@ -12450,14 +12451,39 @@ export default function PokerApp() {
           </div>
         )}
 
-        {tab === 'hosting' && (
-          <HostingWrapper allSessions={allSessions} hostingSchedule={hostingSchedule}
-            players={activePlayers} sortedPlayers={sortedActivePlayers} isAdmin={isAdmin}
-            onUpdate={handleHostingUpdate} adminName={adminName} />
-        )}
-
         {tab === 'registration' && (
           <div className="space-y-4">
+            {/* 🆕 סאב-טאבים: אירוח / לוח אירוחים */}
+            <div className="flex gap-2 rounded-xl bg-stone-900/50 border border-stone-800 p-1.5">
+              <button
+                onClick={() => setRegistrationSubTab('registration')}
+                className={`flex-1 rounded-lg py-2.5 px-3 text-sm font-bold transition flex items-center justify-center gap-2 ${
+                  registrationSubTab === 'registration'
+                    ? 'bg-gradient-to-r from-amber-700 to-orange-700 text-white shadow-lg'
+                    : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800/50'
+                }`}
+              >
+                🍻 אירוח
+              </button>
+              <button
+                onClick={() => setRegistrationSubTab('hosting')}
+                className={`flex-1 rounded-lg py-2.5 px-3 text-sm font-bold transition flex items-center justify-center gap-2 ${
+                  registrationSubTab === 'hosting'
+                    ? 'bg-gradient-to-r from-amber-700 to-orange-700 text-white shadow-lg'
+                    : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800/50'
+                }`}
+              >
+                📅 אירוחים הבאים
+              </button>
+            </div>
+            
+            {/* תוכן הסאב-טאב הנבחר */}
+            {registrationSubTab === 'hosting' ? (
+              <HostingWrapper allSessions={allSessions} hostingSchedule={hostingSchedule}
+                players={activePlayers} sortedPlayers={sortedActivePlayers} isAdmin={isAdmin}
+                onUpdate={handleHostingUpdate} adminName={adminName} />
+            ) : (
+              <>
             {/* 🔒 כפתור הפעלה/כיבוי - מי שיש לו הרשאת registrationToggle בלבד */}
             {can('registrationToggle') && (
               <div className={`rounded-xl p-3 border-2 ${
@@ -12521,6 +12547,8 @@ export default function PokerApp() {
               ironRegistration={ironRegistration}
               onIronUpdate={handleUpdateIronRegistration}
             />
+              </>
+            )}
           </div>
         )}
 
