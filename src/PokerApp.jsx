@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.21';
-const APP_BUILD_TIME = '02/05/2026 12:00';
-const APP_NOTES = '🎉 קונפטי לכולם בפופ-אפ MVP (לא רק לזוכה)';
+const APP_VERSION = 'v2.33.23';
+const APP_BUILD_TIME = '02/05/2026 13:15';
+const APP_NOTES = '🎉 קונפטי MVP מלא (כולל צינורות) - רק בלי הודעת זכייה';
 
 
 // ===== הרשאות מנהל =====
@@ -6295,7 +6295,7 @@ const openPaymentApp = (phone, app) => {
 // ============================================================
 // 🎉 קומפוננטת Confetti
 // ============================================================
-const Confetti = ({ active, onComplete, message }) => {
+const Confetti = ({ active, onComplete, message, showPipes = true }) => {
   const SOURCES = useMemo(() => [
     { side: 'left',  offsetPct: 12, angle: 60 },
     { side: 'left',  offsetPct: 32, angle: 80 },
@@ -6468,16 +6468,16 @@ const Confetti = ({ active, onComplete, message }) => {
           </div>
         </div>
       )}
-      <div className="absolute" style={{ bottom: '8%', left: '6%', transform: 'rotate(-25deg)', transformOrigin: 'bottom center' }}>
+      <div className="absolute" style={{ bottom: '8%', left: '6%', transform: 'rotate(-25deg)', transformOrigin: 'bottom center', display: showPipes ? 'block' : 'none' }}>
         {renderPipe('large', 'L')}
       </div>
-      <div className="absolute" style={{ bottom: '8%', left: '30%', transform: 'rotate(-12deg)', transformOrigin: 'bottom center' }}>
+      <div className="absolute" style={{ bottom: '8%', left: '30%', transform: 'rotate(-12deg)', transformOrigin: 'bottom center', display: showPipes ? 'block' : 'none' }}>
         {renderPipe('medium', 'LC')}
       </div>
-      <div className="absolute" style={{ bottom: '8%', right: '30%', transform: 'rotate(12deg)', transformOrigin: 'bottom center' }}>
+      <div className="absolute" style={{ bottom: '8%', right: '30%', transform: 'rotate(12deg)', transformOrigin: 'bottom center', display: showPipes ? 'block' : 'none' }}>
         {renderPipe('medium', 'RC')}
       </div>
-      <div className="absolute" style={{ bottom: '8%', right: '6%', transform: 'rotate(25deg)', transformOrigin: 'bottom center' }}>
+      <div className="absolute" style={{ bottom: '8%', right: '6%', transform: 'rotate(25deg)', transformOrigin: 'bottom center', display: showPipes ? 'block' : 'none' }}>
         {renderPipe('large', 'R')}
       </div>
       {swans.map(s => (
@@ -6967,11 +6967,10 @@ const MVPCelebrationPopup = ({ data, onClose, currentUser }) => {
   
   return (
     <div dir="rtl" className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex items-center justify-center p-4" style={{ fontFamily: 'Assistant, sans-serif' }}>
-      {/* 🎉 קונפטי לכולם */}
+      {/* 🎉 קונפטי לכולם (בלי הודעה - הפופ-אפ עצמו מציג הכל) */}
       <Confetti 
         active={confettiActive} 
         onComplete={() => setConfettiActive(false)}
-        message={isWinnerView ? `🎉 כל הכבוד ${currentUser}!` : `🏆 ה-MVP של ${card.label}`}
       />
       
       <div className="max-w-md w-full bg-gradient-to-br from-stone-900 to-stone-950 border-2 border-amber-700/60 rounded-3xl shadow-2xl overflow-hidden">
