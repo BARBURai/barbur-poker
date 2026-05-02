@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.30';
-const APP_BUILD_TIME = '02/05/2026 22:30';
-const APP_NOTES = '✨ סימון בעיות תקינות כידועות + תיקוני גרף';
+const APP_VERSION = 'v2.33.31';
+const APP_BUILD_TIME = '02/05/2026 23:00';
+const APP_NOTES = '📊 ניתוח שימוש משתמשים (סופר אדמין) + תיקוני גרף + סימון בעיות ידועות';
 
 
 // ===== הרשאות מנהל =====
@@ -32,6 +32,8 @@ const PUSH_TOKENS_KEY = 'poker_push_tokens_v1';
 const ADMIN_PERMISSIONS_KEY = 'poker_admin_permissions_v1'; // 🆕 הרשאות לאדמינים רגילים
 const HIDDEN_PLAYERS_KEY = 'poker_hidden_players_v1'; // 🆕 שחקנים מוסתרים מרשימת הפעילים
 const KNOWN_ISSUES_KEY = 'poker_known_issues_v1'; // 🆕 בעיות תקינות שסומנו כידועות
+const ANALYTICS_KEY_PREFIX = 'poker_analytics_v1'; // 🆕 תיעוד שימוש - מפתח בפורמט poker_analytics_v1::YYYY-MM-DD
+const ANALYTICS_RETENTION_DAYS = 180; // 🆕 כמה ימים לשמור היסטוריית שימוש
 const BIRTHDAYS_KEY = 'poker_birthdays_v1'; // 🆕 ימי הולדת של שחקנים
 const LAST_LOGIN_KEY = 'poker_last_login_v1'; // 🆕 כניסה אחרונה של כל משתמש
 
@@ -300,6 +302,237 @@ const clearLiveBroadcast = async () => {
   try {
     return await fbSaveState({ active: false, clearedAt: new Date().toISOString() }, LIVE_BROADCAST_KEY);
   } catch (e) {}
+};
+
+// ============================================================
+// 📊 מערכת אנליטיקה - תיעוד שימוש משתמשים
+// ============================================================
+// אסטרטגיה: Buffer בזיכרון + Flush ל-Firestore כל 60 שניות / בעת יציאה
+// כל יום - מסמך יחיד ב-Firestore (poker_analytics_v1::YYYY-MM-DD) שמתעדכן ב-merge
+// שמירה: 180 יום, מחיקה אוטומטית בעת פתיחת מסך הדוח (client-side)
+
+// מפתח לתאריך בפורמט YYYY-MM-DD לפי זמן ישראל
+const getAnalyticsDateKey = (date = new Date()) => {
+  try {
+    const israelTime = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
+    const y = israelTime.getFullYear();
+    const m = String(israelTime.getMonth() + 1).padStart(2, '0');
+    const d = String(israelTime.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  } catch {
+    return new Date().toISOString().split('T')[0];
+  }
+};
+
+// Buffer בזיכרון - אירועים שעוד לא נשלחו
+// מבנה: { screens: { screenName: count }, actions: { actionName: count }, sessionStartTime, lastSeenTime }
+let analyticsBuffer = null;
+let analyticsFlushTimer = null;
+let analyticsCurrentUser = null;
+let analyticsSessionStarted = false;
+
+// אתחול ה-buffer לכניסה חדשה
+const initAnalyticsBuffer = () => {
+  analyticsBuffer = {
+    screens: {},
+    actions: {},
+    sessionStartTime: new Date().toISOString(),
+    lastSeenTime: new Date().toISOString(),
+    sessionsAdded: 0,        // האם להוסיף +1 לסה"כ ה-sessions ביום
+    secondsAccumulated: 0,   // שניות שצריך להוסיף לסה"כ
+    device: detectDevice(),
+  };
+};
+
+// זיהוי סוג מכשיר
+const detectDevice = () => {
+  try {
+    const ua = navigator.userAgent;
+    if (/Mobile|Android|iPhone|iPad|iPod/i.test(ua)) return 'Mobile';
+    return 'Desktop';
+  } catch {
+    return 'Unknown';
+  }
+};
+
+// Flush ה-buffer ל-Firestore (merge עם המסמך היומי הקיים)
+const flushAnalytics = async () => {
+  if (!analyticsBuffer || !analyticsCurrentUser) return;
+  
+  // אם אין שום פעילות לדווח - לא עושים כלום
+  const hasScreens = Object.keys(analyticsBuffer.screens).length > 0;
+  const hasActions = Object.keys(analyticsBuffer.actions).length > 0;
+  const hasSession = analyticsBuffer.sessionsAdded > 0;
+  const hasSeconds = analyticsBuffer.secondsAccumulated > 0;
+  if (!hasScreens && !hasActions && !hasSession && !hasSeconds) return;
+  
+  try {
+    const dateKey = getAnalyticsDateKey();
+    const docKey = `${ANALYTICS_KEY_PREFIX}::${dateKey}`;
+    
+    // טוענים את המסמך הקיים של היום (אם יש)
+    const existing = (await fbLoadState(docKey)) || { date: dateKey, users: {} };
+    if (!existing.users) existing.users = {};
+    
+    const userKey = analyticsCurrentUser;
+    const userData = existing.users[userKey] || {
+      sessions: 0,
+      totalSeconds: 0,
+      firstSeen: analyticsBuffer.sessionStartTime,
+      lastSeen: analyticsBuffer.lastSeenTime,
+      device: analyticsBuffer.device,
+      screens: {},
+      actions: {},
+    };
+    
+    // Merge: הוספת מסכים
+    Object.entries(analyticsBuffer.screens).forEach(([screen, count]) => {
+      userData.screens[screen] = (userData.screens[screen] || 0) + count;
+    });
+    
+    // Merge: הוספת פעולות
+    Object.entries(analyticsBuffer.actions).forEach(([action, count]) => {
+      userData.actions[action] = (userData.actions[action] || 0) + count;
+    });
+    
+    // עדכון מטא-דאטה
+    userData.sessions += analyticsBuffer.sessionsAdded;
+    userData.totalSeconds += analyticsBuffer.secondsAccumulated;
+    userData.lastSeen = analyticsBuffer.lastSeenTime;
+    if (!userData.firstSeen) userData.firstSeen = analyticsBuffer.sessionStartTime;
+    userData.device = analyticsBuffer.device;
+    
+    existing.users[userKey] = userData;
+    existing.date = dateKey;
+    
+    await fbSaveState(existing, docKey);
+    
+    // איפוס ה-buffer אחרי flush מוצלח
+    analyticsBuffer.screens = {};
+    analyticsBuffer.actions = {};
+    analyticsBuffer.sessionsAdded = 0;
+    analyticsBuffer.secondsAccumulated = 0;
+  } catch (e) {
+    console.warn('Analytics flush failed:', e);
+    // לא איפוס במקרה של שגיאה - ננסה שוב בflush הבא
+  }
+};
+
+// API ציבורי לתיעוד אירועים
+
+// אתחול תיעוד - קוראים פעם אחת בכניסה
+const startAnalyticsSession = (userName) => {
+  if (!userName) return;
+  if (analyticsSessionStarted && analyticsCurrentUser === userName) return; // כבר פעיל
+  
+  analyticsCurrentUser = userName;
+  analyticsSessionStarted = true;
+  
+  if (!analyticsBuffer) initAnalyticsBuffer();
+  analyticsBuffer.sessionsAdded += 1; // ספירת כניסה חדשה
+  
+  // Flush אוטומטי כל 60 שניות
+  if (analyticsFlushTimer) clearInterval(analyticsFlushTimer);
+  analyticsFlushTimer = setInterval(() => {
+    if (analyticsBuffer) {
+      // הוספת זמן מאז ה-flush האחרון
+      const now = new Date();
+      const last = new Date(analyticsBuffer.lastSeenTime);
+      const elapsed = Math.min(120, Math.round((now - last) / 1000)); // מקסימום 120 שניות (להגן מטעויות)
+      if (elapsed > 0) analyticsBuffer.secondsAccumulated += elapsed;
+      analyticsBuffer.lastSeenTime = now.toISOString();
+      flushAnalytics();
+    }
+  }, 60000); // 60 שניות
+  
+  // Flush מיידי בעת סגירת האפליקציה
+  const handleBeforeUnload = () => {
+    if (analyticsBuffer) {
+      const now = new Date();
+      const last = new Date(analyticsBuffer.lastSeenTime);
+      const elapsed = Math.min(120, Math.round((now - last) / 1000));
+      if (elapsed > 0) analyticsBuffer.secondsAccumulated += elapsed;
+      analyticsBuffer.lastSeenTime = now.toISOString();
+    }
+    flushAnalytics();
+  };
+  
+  // Flush כאשר האפליקציה עוברת ל-background
+  const handleVisibility = () => {
+    if (document.hidden) {
+      handleBeforeUnload();
+    }
+  };
+  
+  // הסרת listeners ישנים אם יש
+  try {
+    window.removeEventListener('beforeunload', window.__analyticsBeforeUnload);
+    document.removeEventListener('visibilitychange', window.__analyticsVisibility);
+  } catch {}
+  
+  window.__analyticsBeforeUnload = handleBeforeUnload;
+  window.__analyticsVisibility = handleVisibility;
+  window.addEventListener('beforeunload', handleBeforeUnload);
+  document.addEventListener('visibilitychange', handleVisibility);
+};
+
+// תיעוד צפייה במסך
+const trackScreen = (screenName) => {
+  if (!analyticsCurrentUser || !screenName) return;
+  if (!analyticsBuffer) initAnalyticsBuffer();
+  analyticsBuffer.screens[screenName] = (analyticsBuffer.screens[screenName] || 0) + 1;
+  analyticsBuffer.lastSeenTime = new Date().toISOString();
+};
+
+// תיעוד פעולה
+const trackAction = (actionName) => {
+  if (!analyticsCurrentUser || !actionName) return;
+  if (!analyticsBuffer) initAnalyticsBuffer();
+  analyticsBuffer.actions[actionName] = (analyticsBuffer.actions[actionName] || 0) + 1;
+  analyticsBuffer.lastSeenTime = new Date().toISOString();
+};
+
+// טעינת היסטוריה לתצוגת הדוח (וגם מחיקה אוטומטית של ישנים מעל 180 יום)
+const loadAnalyticsHistory = async (days = 180) => {
+  const result = [];
+  const today = new Date();
+  const cutoffDate = new Date(today);
+  cutoffDate.setDate(cutoffDate.getDate() - ANALYTICS_RETENTION_DAYS);
+  const cutoffKey = getAnalyticsDateKey(cutoffDate);
+  
+  // טעינת ימי הנתונים (עד days ימים אחורה)
+  const daysToLoad = Math.min(days, ANALYTICS_RETENTION_DAYS);
+  for (let i = 0; i < daysToLoad; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const key = getAnalyticsDateKey(date);
+    const docKey = `${ANALYTICS_KEY_PREFIX}::${key}`;
+    try {
+      const data = await fbLoadState(docKey);
+      if (data) result.push(data);
+    } catch {
+      // ממשיכים גם אם יום בודד נכשל
+    }
+  }
+  
+  // 🗑️ מחיקה אוטומטית - חיפוש מסמכים ישנים מ-180 יום ומחיקתם
+  // מנסים למחוק עד 30 ימי קצה - אם יש יותר, ימחקו בהפעלה הבאה
+  for (let i = ANALYTICS_RETENTION_DAYS; i < ANALYTICS_RETENTION_DAYS + 30; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const key = getAnalyticsDateKey(date);
+    const docKey = `${ANALYTICS_KEY_PREFIX}::${key}`;
+    try {
+      const data = await fbLoadState(docKey);
+      if (data) {
+        // מחיקה ע"י שמירת אובייקט ריק/null - תלוי איך firebase.js עובד
+        // בטוח יותר לדרוס במחרוזת ריקה כי לא ידוע אם יש פונקציית delete
+        await fbSaveState(null, docKey);
+      }
+    } catch {}
+  }
+  
+  return result;
 };
 
 // בודק האם השעה כעת בישראל היא בין 19:00-23:59
@@ -1555,6 +1788,529 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// ============================================================
+// 📊 מסך ניתוח שימוש - סופר אדמין בלבד
+// מציג סטטיסטיקות מצטברות של שימוש המשתמשים באפליקציה
+// טווחים: 7 / 30 / 90 / 180 ימים אחרונים
+// ============================================================
+
+// ===== מילון תרגום למסכים ופעולות =====
+const ANALYTICS_SCREEN_LABELS = {
+  dashboard: '🏠 דשבורד',
+  table: '🏆 טבלת דירוג',
+  periodic: '📅 תקופות',
+  champions: '🏆 MVP',
+  charts: '📈 תובנות',
+  gallery: '🖼️ גלריה',
+  history: '📜 היסטוריה',
+  quotes: '🪶 אמרות כנף',
+  registration: '📝 רישום לערב',
+  hosting: '🏠 לוח אירוחים',
+};
+
+const ANALYTICS_ACTION_LABELS = {
+  register_evening: '✅ הרשמה לערב',
+  unregister_evening: '❌ ביטול הרשמה',
+  open_combos: '🃏 פתח קומבינציות',
+  view_player_stats: '👤 לחץ על שחקן',
+  change_year_filter: '📅 שינוי שנה',
+  change_player_filter: '🔄 שינוי שחקן בגרף',
+  open_admin_menu: '👑 פתח תפריט אדמין',
+  push_subscribe: '🔔 הפעיל התראות',
+  upload_photo: '📸 העלה תמונה',
+  add_quote: '💬 הוסיף ציטוט',
+  view_yearly_report: '📊 דוח שנתי',
+  open_live_session: '🎰 פתח לייב',
+  toggle_landscape: '📱 תצוגה אופקית',
+  toggle_fullscreen: '⛶ מסך מלא בגרף',
+};
+
+const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) => {
+  const [days, setDays] = useState(7);
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [expandedUser, setExpandedUser] = useState(null);
+  
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const data = await loadAnalyticsHistory(days);
+        if (!cancelled) setHistory(data || []);
+      } catch (e) {
+        console.warn('שגיאה בטעינת היסטוריית שימוש:', e);
+        if (!cancelled) setHistory([]);
+      }
+      if (!cancelled) setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [isOpen, days]);
+  
+  // אגרגציה של הנתונים
+  const aggregated = useMemo(() => {
+    const result = {
+      totalSessions: 0,
+      totalUsers: new Set(),
+      totalSeconds: 0,
+      perUser: {},          // { userName: { sessions, seconds, screens, actions, lastSeen, days, device } }
+      screenCounts: {},     // { screenName: count }
+      actionCounts: {},     // { actionName: count }
+      hourlyActivity: Array(24).fill(0), // פעילות לפי שעה
+      dailyTimeline: [],    // [{ date, sessions, users }]
+    };
+    
+    history.forEach(dayData => {
+      const dayUsers = new Set();
+      let daySessions = 0;
+      
+      Object.entries(dayData.users || {}).forEach(([userName, userData]) => {
+        result.totalUsers.add(userName);
+        dayUsers.add(userName);
+        result.totalSessions += userData.sessions || 0;
+        result.totalSeconds += userData.totalSeconds || 0;
+        daySessions += userData.sessions || 0;
+        
+        if (!result.perUser[userName]) {
+          result.perUser[userName] = {
+            sessions: 0,
+            seconds: 0,
+            screens: {},
+            actions: {},
+            lastSeen: null,
+            firstSeen: null,
+            days: new Set(),
+            device: userData.device || 'Unknown',
+          };
+        }
+        const u = result.perUser[userName];
+        u.sessions += userData.sessions || 0;
+        u.seconds += userData.totalSeconds || 0;
+        u.days.add(dayData.date);
+        u.device = userData.device || u.device;
+        
+        // lastSeen - הכי אחרון
+        if (userData.lastSeen && (!u.lastSeen || userData.lastSeen > u.lastSeen)) {
+          u.lastSeen = userData.lastSeen;
+        }
+        if (userData.firstSeen && (!u.firstSeen || userData.firstSeen < u.firstSeen)) {
+          u.firstSeen = userData.firstSeen;
+        }
+        
+        // אגרגציה של מסכים
+        Object.entries(userData.screens || {}).forEach(([screen, count]) => {
+          u.screens[screen] = (u.screens[screen] || 0) + count;
+          result.screenCounts[screen] = (result.screenCounts[screen] || 0) + count;
+        });
+        
+        // אגרגציה של פעולות
+        Object.entries(userData.actions || {}).forEach(([action, count]) => {
+          u.actions[action] = (u.actions[action] || 0) + count;
+          result.actionCounts[action] = (result.actionCounts[action] || 0) + count;
+        });
+        
+        // שעת פעילות (לפי lastSeen)
+        if (userData.lastSeen) {
+          try {
+            const hour = new Date(userData.lastSeen).getHours();
+            if (hour >= 0 && hour < 24) result.hourlyActivity[hour]++;
+          } catch {}
+        }
+      });
+      
+      result.dailyTimeline.push({
+        date: dayData.date,
+        sessions: daySessions,
+        users: dayUsers.size,
+      });
+    });
+    
+    result.dailyTimeline.sort((a, b) => a.date.localeCompare(b.date));
+    
+    return result;
+  }, [history]);
+  
+  // המרה לרשימת משתמשים ממוינת (לפי מס' כניסות יורד)
+  const userList = useMemo(() => {
+    return Object.entries(aggregated.perUser)
+      .map(([name, data]) => ({
+        name,
+        ...data,
+        daysCount: data.days.size,
+        favoriteScreen: Object.entries(data.screens).sort((a, b) => b[1] - a[1])[0]?.[0] || null,
+      }))
+      .sort((a, b) => b.sessions - a.sessions);
+  }, [aggregated]);
+  
+  // שחקנים לא פעילים - מהרשימה של השחקנים הפעילים בקבוצה
+  const inactiveUsers = useMemo(() => {
+    return (activePlayers || []).filter(p => !aggregated.perUser[p]);
+  }, [aggregated, activePlayers]);
+  
+  // נתונים לגרף עוגה - מסכים פופולריים
+  const screenPieData = useMemo(() => {
+    return Object.entries(aggregated.screenCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([screen, count]) => ({
+        name: ANALYTICS_SCREEN_LABELS[screen] || screen,
+        value: count,
+      }));
+  }, [aggregated]);
+  
+  // נתונים לגרף עמודות - שעות פעילות
+  const hourlyBarData = useMemo(() => {
+    return aggregated.hourlyActivity.map((count, hour) => ({
+      hour: `${hour}:00`,
+      פעילות: count,
+    }));
+  }, [aggregated]);
+  
+  // נתונים לגרף קווי - פעילות לאורך זמן
+  const timelineData = useMemo(() => {
+    return aggregated.dailyTimeline.map(d => ({
+      date: d.date.slice(5), // MM-DD
+      'כניסות': d.sessions,
+      'משתמשים': d.users,
+    }));
+  }, [aggregated]);
+  
+  // תובנות אוטומטיות
+  const insights = useMemo(() => {
+    const items = [];
+    if (userList.length === 0) return items;
+    
+    // המשתמש הכי פעיל
+    if (userList[0]) {
+      items.push(`👑 הכי פעיל: ${userList[0].name} (${userList[0].sessions} כניסות)`);
+    }
+    
+    // זמן ממוצע למשתמש
+    const avgMinutes = aggregated.totalUsers.size > 0 
+      ? Math.round((aggregated.totalSeconds / aggregated.totalUsers.size) / 60) 
+      : 0;
+    if (avgMinutes > 0) {
+      items.push(`⏱️ ממוצע ${avgMinutes} דקות למשתמש`);
+    }
+    
+    // שעת שיא
+    const peakHour = aggregated.hourlyActivity.indexOf(Math.max(...aggregated.hourlyActivity));
+    if (aggregated.hourlyActivity[peakHour] > 0) {
+      items.push(`🕐 שעת שיא: ${peakHour}:00`);
+    }
+    
+    // המסך הפופולרי ביותר
+    const topScreen = Object.entries(aggregated.screenCounts).sort((a, b) => b[1] - a[1])[0];
+    if (topScreen) {
+      items.push(`📊 מסך מועדף: ${ANALYTICS_SCREEN_LABELS[topScreen[0]] || topScreen[0]} (${topScreen[1]} צפיות)`);
+    }
+    
+    // שחקנים לא פעילים
+    if (inactiveUsers.length > 0) {
+      items.push(`👻 ${inactiveUsers.length} שחקנים לא נכנסו ב-${days} הימים האחרונים`);
+    }
+    
+    return items;
+  }, [userList, aggregated, inactiveUsers, days]);
+  
+  if (!isSuperAdmin || !isOpen) return null;
+  
+  // צבעים לגרף עוגה
+  const PIE_COLORS = ['#fbbf24', '#10b981', '#3b82f6', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#84cc16'];
+  
+  // פורמט זמן - דקות:שניות
+  const formatTime = (seconds) => {
+    if (!seconds) return '0 ד׳';
+    const minutes = Math.round(seconds / 60);
+    if (minutes < 60) return `${minutes} ד׳`;
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours}:${String(mins).padStart(2, '0')} ש׳`;
+  };
+  
+  // פורמט תאריך אחרון
+  const formatLastSeen = (iso) => {
+    if (!iso) return 'לא ידוע';
+    try {
+      const date = new Date(iso);
+      const now = new Date();
+      const diffMs = now - date;
+      const diffMin = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+      if (diffMin < 1) return 'עכשיו';
+      if (diffMin < 60) return `לפני ${diffMin} ד׳`;
+      if (diffHours < 24) return `לפני ${diffHours} ש׳`;
+      if (diffDays < 7) return `לפני ${diffDays} ימים`;
+      return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    } catch {
+      return iso.slice(0, 10);
+    }
+  };
+  
+  return (
+    <div dir="rtl" className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-2 md:p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-stone-950 rounded-2xl border-2 border-amber-700/50 w-full max-w-3xl my-4" onClick={e => e.stopPropagation()}>
+        {/* כותרת */}
+        <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-amber-950/40 to-stone-950 rounded-t-2xl">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">📊</span>
+            <div>
+              <h2 className="text-lg font-extrabold text-amber-200">ניתוח שימוש</h2>
+              <div className="text-xs text-stone-400">סופר אדמין בלבד 👑</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-white p-1">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        
+        <div className="p-4 space-y-4">
+          {/* בורר טווח */}
+          <div className="flex flex-wrap gap-2">
+            {[7, 30, 90, 180].map(d => (
+              <button
+                key={d}
+                onClick={() => setDays(d)}
+                className={`rounded-lg py-1.5 px-3 text-xs font-bold transition ${
+                  days === d
+                    ? 'bg-amber-700 text-white'
+                    : 'bg-stone-800 text-stone-400 hover:bg-stone-700'
+                }`}
+              >
+                {d} ימים
+              </button>
+            ))}
+          </div>
+          
+          {loading ? (
+            <div className="text-center py-12 text-stone-400">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+              טוען נתונים...
+            </div>
+          ) : history.length === 0 || aggregated.totalSessions === 0 ? (
+            <div className="rounded-lg bg-stone-900/40 border border-stone-700 p-6 text-center">
+              <div className="text-3xl mb-2">📭</div>
+              <div className="text-sm text-stone-300 font-bold mb-1">אין נתונים עדיין</div>
+              <div className="text-xs text-stone-500">
+                המערכת התחילה לתעד שימוש מרגע העדכון.<br/>
+                חזור לכאן בעוד יום-יומיים לראות נתונים ראשונים.
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* סקירה כללית */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="rounded-lg bg-stone-900 border border-stone-700 p-3 text-center">
+                  <div className="text-xs text-stone-400 mb-1">משתמשים</div>
+                  <div className="text-2xl font-extrabold text-amber-300">{aggregated.totalUsers.size}</div>
+                </div>
+                <div className="rounded-lg bg-stone-900 border border-stone-700 p-3 text-center">
+                  <div className="text-xs text-stone-400 mb-1">סה״כ כניסות</div>
+                  <div className="text-2xl font-extrabold text-emerald-300">{aggregated.totalSessions}</div>
+                </div>
+                <div className="rounded-lg bg-stone-900 border border-stone-700 p-3 text-center">
+                  <div className="text-xs text-stone-400 mb-1">זמן כולל</div>
+                  <div className="text-2xl font-extrabold text-blue-300">{formatTime(aggregated.totalSeconds)}</div>
+                </div>
+                <div className="rounded-lg bg-stone-900 border border-stone-700 p-3 text-center">
+                  <div className="text-xs text-stone-400 mb-1">לא פעילים</div>
+                  <div className="text-2xl font-extrabold text-rose-300">{inactiveUsers.length}</div>
+                </div>
+              </div>
+              
+              {/* תובנות */}
+              {insights.length > 0 && (
+                <div className="rounded-lg bg-amber-950/20 border border-amber-800/40 p-3">
+                  <div className="text-xs text-amber-300 font-bold mb-2">💡 תובנות</div>
+                  <div className="space-y-1">
+                    {insights.map((tip, i) => (
+                      <div key={i} className="text-xs text-stone-300">{tip}</div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* גרף עוגה - מסכים פופולריים */}
+              {screenPieData.length > 0 && (
+                <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3">
+                  <div className="text-xs text-stone-400 font-bold mb-2">📊 מסכים פופולריים</div>
+                  <div style={{ width: '100%', height: 200 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={screenPieData}
+                          cx="50%"
+                          cy="50%"
+                          outerRadius={70}
+                          dataKey="value"
+                          label={({ name, value }) => `${value}`}
+                        >
+                          {screenPieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '11px' }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '11px', fontFamily: 'Assistant' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+              
+              {/* גרף עמודות - שעות שיא */}
+              {hourlyBarData.some(d => d.פעילות > 0) && (
+                <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3">
+                  <div className="text-xs text-stone-400 font-bold mb-2">⏰ שעות שיא של פעילות</div>
+                  <div style={{ width: '100%', height: 180 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={hourlyBarData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
+                        <XAxis dataKey="hour" stroke="#78716c" style={{ fontSize: '9px' }} interval={2} />
+                        <YAxis stroke="#78716c" style={{ fontSize: '10px' }} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '11px' }}
+                        />
+                        <Bar dataKey="פעילות" fill="#fbbf24" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+              
+              {/* גרף קווי - פעילות לאורך זמן */}
+              {timelineData.length > 1 && (
+                <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3">
+                  <div className="text-xs text-stone-400 font-bold mb-2">📈 פעילות לאורך זמן</div>
+                  <div style={{ width: '100%', height: 180 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={timelineData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
+                        <XAxis dataKey="date" stroke="#78716c" style={{ fontSize: '9px' }} />
+                        <YAxis stroke="#78716c" style={{ fontSize: '10px' }} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '11px' }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: '11px', fontFamily: 'Assistant' }} />
+                        <Line type="monotone" dataKey="כניסות" stroke="#fbbf24" strokeWidth={2} />
+                        <Line type="monotone" dataKey="משתמשים" stroke="#10b981" strokeWidth={2} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+              
+              {/* פירוט לפי משתמש */}
+              {userList.length > 0 && (
+                <div className="rounded-lg bg-stone-900/50 border border-stone-700">
+                  <div className="text-xs text-stone-400 font-bold p-3 border-b border-stone-800">
+                    👥 פירוט לפי משתמש ({userList.length})
+                  </div>
+                  <div className="divide-y divide-stone-800 max-h-96 overflow-y-auto">
+                    {userList.map((user, idx) => {
+                      const isExpanded = expandedUser === user.name;
+                      return (
+                        <div key={user.name} className="p-3">
+                          <button 
+                            onClick={() => setExpandedUser(isExpanded ? null : user.name)}
+                            className="w-full text-right"
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-stone-500 text-xs w-5">#{idx + 1}</span>
+                                <span className="font-bold text-amber-200">{user.name}</span>
+                                {user.device === 'Mobile' && <span className="text-xs">📱</span>}
+                                {user.device === 'Desktop' && <span className="text-xs">💻</span>}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className="text-emerald-400 font-bold">{user.sessions} כניסות</span>
+                                <span className="text-blue-400">{formatTime(user.seconds)}</span>
+                                <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-[10px] text-stone-500">
+                              <span>📅 {formatLastSeen(user.lastSeen)}</span>
+                              <span>📆 {user.daysCount} ימים</span>
+                              {user.favoriteScreen && (
+                                <span>⭐ {ANALYTICS_SCREEN_LABELS[user.favoriteScreen] || user.favoriteScreen}</span>
+                              )}
+                            </div>
+                          </button>
+                          
+                          {isExpanded && (
+                            <div className="mt-3 pt-3 border-t border-stone-800 space-y-2">
+                              {/* מסכים */}
+                              {Object.keys(user.screens).length > 0 && (
+                                <div>
+                                  <div className="text-[10px] text-stone-500 font-bold mb-1">מסכים שצפה:</div>
+                                  <div className="space-y-0.5">
+                                    {Object.entries(user.screens).sort((a, b) => b[1] - a[1]).map(([s, c]) => (
+                                      <div key={s} className="flex justify-between text-xs">
+                                        <span className="text-stone-300">{ANALYTICS_SCREEN_LABELS[s] || s}</span>
+                                        <span className="text-amber-400 font-bold">{c}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {/* פעולות */}
+                              {Object.keys(user.actions).length > 0 && (
+                                <div>
+                                  <div className="text-[10px] text-stone-500 font-bold mb-1 mt-2">פעולות:</div>
+                                  <div className="space-y-0.5">
+                                    {Object.entries(user.actions).sort((a, b) => b[1] - a[1]).map(([a, c]) => (
+                                      <div key={a} className="flex justify-between text-xs">
+                                        <span className="text-stone-300">{ANALYTICS_ACTION_LABELS[a] || a}</span>
+                                        <span className="text-emerald-400 font-bold">{c}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              
+              {/* רשימת לא פעילים */}
+              {inactiveUsers.length > 0 && (
+                <details className="rounded-lg bg-stone-900/40 border border-stone-700/50 overflow-hidden">
+                  <summary className="cursor-pointer p-3 text-sm text-stone-300 font-bold hover:bg-stone-900/60 transition select-none">
+                    👻 לא נכנסו ב-{days} הימים האחרונים ({inactiveUsers.length})
+                  </summary>
+                  <div className="p-3 pt-0 flex flex-wrap gap-1.5">
+                    {inactiveUsers.map(name => (
+                      <span key={name} className="text-xs bg-stone-950 border border-stone-800 rounded-full px-2.5 py-1 text-stone-400">
+                        {name}
+                      </span>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </>
+          )}
+        </div>
+        
+        <div className="p-4 border-t border-stone-800">
+          <button
+            onClick={onClose}
+            className="w-full rounded-lg bg-stone-800 hover:bg-stone-700 px-4 py-2.5 text-stone-300 font-bold text-sm transition"
+          >
+            סגור
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -11701,6 +12457,18 @@ export default function PokerApp() {
   const [permissionsManagerOpen, setPermissionsManagerOpen] = useState(false);
   // 📢 שליחת התראה מותאמת
   const [customNotificationOpen, setCustomNotificationOpen] = useState(false);
+  // 📊 ניתוח שימוש (סופר אדמין) - אתחול הסשן בכניסת משתמש
+  useEffect(() => {
+    if (!currentUser) return;
+    // Wrap ב-try/catch כדי לוודא שאם משהו נכשל זה לא ישבור את האפליקציה
+    try {
+      startAnalyticsSession(currentUser);
+    } catch (e) {
+      console.warn('Analytics init failed:', e);
+    }
+  }, [currentUser]);
+  // 📊 ניתוח שימוש (סופר אדמין) - מסך ניתוח שימוש (סופר אדמין)
+  const [analyticsModalOpen, setAnalyticsModalOpen] = useState(false);
   // 🏆 פופ-אפ ברכת MVP - מופיע פעם אחת לכל סבב
   const [mvpPopupData, setMvpPopupData] = useState(null); // { monthly, quarterly, yearly } או null
   // 🆕 רשימת המנהלים - נטענת מ-Firebase
@@ -11743,6 +12511,13 @@ export default function PokerApp() {
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false); // תפריט המבורגר
+  // 📊 ניתוח שימוש - תיעוד מעבר בין טאבים
+  useEffect(() => {
+    if (!currentUser || !tab) return;
+    try {
+      trackScreen(tab);
+    } catch {}
+  }, [tab, currentUser]);
   const [selectedChartPlayers, setSelectedChartPlayers] = useState([]);
   // 🆕 רשימה נפרדת לגרף בלשונית תובנות - כדי שלא תושפע משינויים בדשבורד
   const [insightsChartPlayers, setInsightsChartPlayers] = useState([]);
@@ -13012,6 +13787,14 @@ export default function PokerApp() {
 
   // 🆕 עדכון רישום למפגש הבא (כתיבה ל-Firebase)
   const handleUpdateRegistration = async (newReg) => {
+    // 📊 תיעוד אנליטיקה - השוואה לפני/אחרי לזיהוי הרשמה/ביטול
+    try {
+      const wasRegistered = registration?.players?.includes(currentUser);
+      const isRegistered = newReg?.players?.includes(currentUser);
+      if (!wasRegistered && isRegistered) trackAction('register_evening');
+      else if (wasRegistered && !isRegistered) trackAction('unregister_evening');
+    } catch {}
+    
     setRegistration(newReg);
     try {
       await saveState(newReg, REGISTRATION_KEY);
@@ -13268,6 +14051,7 @@ export default function PokerApp() {
     
     if (result.success) {
       setNotificationPermission('granted');
+      try { trackAction('push_subscribe'); } catch {}
       alert('✅ התראות מופעלות!\nתקבל הודעה כשהרישום למפגש נפתח, או כשמישהו מבטל הרשמה.');
     } else if (result.reason === 'unsupported') {
       alert('⚠️ הדפדפן שלך לא תומך בהתראות.\nאם אתה ב-iPhone, וודא שהאפליקציה מותקנת על מסך הבית.');
@@ -13627,7 +14411,7 @@ export default function PokerApp() {
 
             <div className="flex items-center gap-2 flex-wrap">
               {/* כפתור המבורגר - פותח תפריט */}
-              <button onClick={() => setMenuOpen(true)}
+              <button onClick={() => { setMenuOpen(true); try { trackAction('open_admin_menu'); } catch {} }}
                 className="rounded-lg bg-stone-900/70 border border-stone-700 p-2 text-stone-300 hover:bg-stone-800 hover:text-amber-300 transition"
                 title="תפריט">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -14156,6 +14940,14 @@ export default function PokerApp() {
                     <span>שלח התראה</span>
                   </button>
                 )}
+                {/* 📊 כפתור חדש: ניתוח שימוש (סופר אדמין בלבד) */}
+                {isSuperAdmin && (
+                  <button onClick={() => { setMenuOpen(false); setAnalyticsModalOpen(true); try { trackAction('open_admin_menu'); } catch {} }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-fuchsia-700/80 to-purple-800/80 border border-fuchsia-700/50 px-4 py-3 text-white font-bold hover:from-fuchsia-600 hover:to-purple-700 transition text-sm">
+                    <span className="text-xl">📊</span>
+                    <span>ניתוח שימוש</span>
+                  </button>
+                )}
                 {/* 🔑 שינוי סיסמת סופר אדמין - רק לסופר אדמין */}
                 {isSuperAdmin && (
                   <button onClick={() => { setMenuOpen(false); handleChangeSuperAdminPassword(); }}
@@ -14300,6 +15092,14 @@ export default function PokerApp() {
         registration={registration}
         adminNamesList={adminNamesList}
         onSend={handleSendCustomNotification}
+      />
+      
+      {/* 📊 מודל ניתוח שימוש (סופר אדמין בלבד) */}
+      <AnalyticsModal
+        isOpen={analyticsModalOpen}
+        onClose={() => setAnalyticsModalOpen(false)}
+        isSuperAdmin={isSuperAdmin}
+        activePlayers={players}
       />
       
       {/* 🏆 פופ-אפ ברכת MVP (מופיע פעם אחת לכל סבב) */}
