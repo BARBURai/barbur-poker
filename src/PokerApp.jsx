@@ -5,14 +5,18 @@ import QUOTES_DATA from './data/quotes.json';
 import PLAYER_AVATARS from './data/avatars.json';
 import BARBUR_LOGO from './assets/barbur-logo.webp';
 import SWAN_IMG from './assets/swan.png';
+// 🦢 3 תמונות של ברבורים בתעופה - לקונפטי מגוון
+import SWAN_FLY_1 from './assets/swan-fly-1.png';
+import SWAN_FLY_2 from './assets/swan-fly-2.png';
+import SWAN_FLY_3 from './assets/swan-fly-3.png';
 import { loadState as fbLoadState, saveState as fbSaveState } from './firebase';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.13';
-const APP_BUILD_TIME = '01/05/2026 17:30';
-const APP_NOTES = '🆕 תמיכה במפגש בלי מארח + סנכרון מארח דרך לוח האירוחים (אדמין שעורך מקבל דיאלוג)';
+const APP_VERSION = 'v2.33.20';
+const APP_BUILD_TIME = '02/05/2026 11:30';
+const APP_NOTES = '🦢 קונפטי עם 3 ברבורים שונים בגדלים מעורבים 80-140px + לוגו בערב חי';
 
 
 // ===== הרשאות מנהל =====
@@ -125,6 +129,8 @@ const REGISTRATION_ENABLED_KEY = 'poker_registration_feature_enabled_v1';
 const IRON_REGISTRATION_KEY = 'poker_iron_registration_v1';
 // 📅 תזכורות מארחים - מי אישר, מי דחה, מי לא ענה
 const HOST_REMINDERS_KEY = 'poker_host_reminders_v1';
+// 🏆 תוצאות MVP - שמירת ה-MVP של כל חודש/רבעון/שנה לצורך התראות
+const MVP_RESULTS_KEY = 'poker_mvp_results_v1';
 // 🔐 נעילת מכשיר לכל משתמש - {playerName: {deviceId, lockedAt, userAgent}}
 const DEVICE_LOCKS_KEY = 'poker_device_locks_v1';
 // 🆔 מזהה ייחודי של המכשיר הנוכחי (נוצר פעם אחת ונשמר ב-localStorage)
@@ -660,7 +666,7 @@ const SplashScreen = ({ onEnter }) => {
 // ============================================================
 // 🆕 ניהול רשימת מנהלים - הוספה/הסרה
 // ============================================================
-const ManageAdminsModal = ({ isOpen, onClose, adminNames, currentAdminName, allPlayers, onAdd, onRemove }) => {
+const ManageAdminsModal = ({ isOpen, onClose, adminNames, currentAdminName, allPlayers, onAdd, onRemove, onSwitchToPermissions }) => {
   const [selectedNew, setSelectedNew] = useState('');
   
   if (!isOpen) return null;
@@ -683,13 +689,30 @@ const ManageAdminsModal = ({ isOpen, onClose, adminNames, currentAdminName, allP
         {/* כותרת */}
         <div className="flex items-center justify-between p-5 border-b border-stone-800">
           <h3 className="text-xl font-bold text-amber-200 flex items-center gap-2">
-            🔐 ניהול מנהלים
+            👑 ניהול אדמינים
           </h3>
           <button onClick={onClose}
             className="rounded-full bg-stone-800 hover:bg-stone-700 border border-stone-700 w-8 h-8 flex items-center justify-center text-stone-400">
             <X className="h-4 w-4" />
           </button>
         </div>
+        
+        {/* 🆕 סאב-טאבים - מעבר מהיר להרשאות */}
+        {onSwitchToPermissions && (
+          <div className="flex gap-2 rounded-xl bg-stone-900/50 border border-stone-800 p-1 m-5 mb-0">
+            <button
+              className="flex-1 rounded-lg py-2 px-3 text-xs font-bold bg-gradient-to-r from-amber-700 to-amber-800 text-white shadow"
+            >
+              👑 מנהלים
+            </button>
+            <button
+              onClick={onSwitchToPermissions}
+              className="flex-1 rounded-lg py-2 px-3 text-xs font-bold text-stone-400 hover:text-stone-200 hover:bg-stone-800/50 transition"
+            >
+              ⚙️ הרשאות
+            </button>
+          </div>
+        )}
         
         {/* תוכן */}
         <div className="p-5 space-y-4">
@@ -2844,7 +2867,7 @@ const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
 };
 
 // ===== מודל ניהול הרשאות (סופר אדמין בלבד) =====
-const PermissionsManager = ({ isOpen, onClose, permissions, onUpdate, adminNamesList }) => {
+const PermissionsManager = ({ isOpen, onClose, permissions, onUpdate, adminNamesList, onSwitchToAdmins }) => {
   const [localPerms, setLocalPerms] = useState(permissions);
   const [saving, setSaving] = useState(false);
   
@@ -2892,6 +2915,23 @@ const PermissionsManager = ({ isOpen, onClose, permissions, onUpdate, adminNames
             <X className="h-5 w-5" />
           </button>
         </div>
+        
+        {/* 🆕 סאב-טאבים - מעבר מהיר למנהלים */}
+        {onSwitchToAdmins && (
+          <div className="flex gap-2 rounded-xl bg-stone-900/50 border border-stone-800 p-1 m-4 mb-0">
+            <button
+              onClick={onSwitchToAdmins}
+              className="flex-1 rounded-lg py-2 px-3 text-xs font-bold text-stone-400 hover:text-stone-200 hover:bg-stone-800/50 transition"
+            >
+              👑 מנהלים
+            </button>
+            <button
+              className="flex-1 rounded-lg py-2 px-3 text-xs font-bold bg-gradient-to-r from-amber-700 to-amber-800 text-white shadow"
+            >
+              ⚙️ הרשאות
+            </button>
+          </div>
+        )}
         
         {/* הסבר */}
         <div className="px-4 py-3 bg-stone-900/50 border-b border-stone-800">
@@ -2976,7 +3016,7 @@ const PermissionsManager = ({ isOpen, onClose, permissions, onUpdate, adminNames
 };
 
 // ===== מודל ניהול נעילות מכשירים (אדמין בלבד) =====
-const DeviceLocksManager = ({ isOpen, onClose, deviceLocks, currentDeviceId, onRelease, players }) => {
+const DeviceLocksManager = ({ isOpen, onClose, deviceLocks, currentDeviceId, onRelease, players, onSwitchToUsers }) => {
   const [search, setSearch] = useState('');
   
   if (!isOpen) return null;
@@ -3017,6 +3057,23 @@ const DeviceLocksManager = ({ isOpen, onClose, deviceLocks, currentDeviceId, onR
             <X className="h-5 w-5" />
           </button>
         </div>
+        
+        {/* 🆕 סאב-טאבים - מעבר מהיר לניהול משתמשים */}
+        {onSwitchToUsers && (
+          <div className="flex gap-2 rounded-xl bg-stone-900/50 border border-stone-800 p-1 m-4 mb-0">
+            <button
+              onClick={onSwitchToUsers}
+              className="flex-1 rounded-lg py-2 px-3 text-xs font-bold text-stone-400 hover:text-stone-200 hover:bg-stone-800/50 transition"
+            >
+              👥 משתמשים
+            </button>
+            <button
+              className="flex-1 rounded-lg py-2 px-3 text-xs font-bold bg-gradient-to-r from-rose-700 to-rose-800 text-white shadow"
+            >
+              🔒 נעילות מכשירים
+            </button>
+          </div>
+        )}
         
         {/* הסבר */}
         <div className="px-4 py-3 bg-stone-900/50 border-b border-stone-800">
@@ -6269,7 +6326,10 @@ const Confetti = ({ active, onComplete, message }) => {
           flipped: directionMultiplier < 0,
           bobDelay: Math.random() * 1.5,
           bobDuration: 1.2 + Math.random() * 0.8,
-          size: 44 + Math.random() * 16,
+          // 🆕 גודל מעורב בין קטן (80-110) ובינוני (100-140)
+          size: 80 + Math.random() * 60,
+          // 🆕 תמונה אקראית מתוך 3 הברבורים השונים
+          variant: Math.floor(Math.random() * 3),
         });
       }
     });
@@ -6442,14 +6502,15 @@ const Confetti = ({ active, onComplete, message }) => {
             transformOrigin: 'center',
           }}>
             <img 
-              src={SWAN_IMG}
+              src={[SWAN_FLY_1, SWAN_FLY_2, SWAN_FLY_3][s.variant]}
               alt="ברבור"
               width={s.size}
               height={s.size}
               style={{ 
                 transform: s.flipped ? 'scaleX(-1)' : 'none', 
                 display: 'block',
-                filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+                filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))',
+                objectFit: 'contain',
               }}
             />
           </div>
@@ -6655,6 +6716,370 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
 // ============================================================
 // 📡 צופה בשידור חי - מסך נפרד שעולה אוטומטית למשתמשים
 // ============================================================
+// 📢 מסך שליחת התראה מותאמת אישית - לסופר אדמין בלבד
+// בחירת נמענים (קבוצות או פרטני) + כותרת + תוכן + שליחה
+// ============================================================
+const CustomNotificationModal = ({ isOpen, onClose, players, registration, adminNamesList, onSend }) => {
+  const [recipientMode, setRecipientMode] = useState('all'); // 'all' | 'registered' | 'admins' | 'custom'
+  const [customRecipients, setCustomRecipients] = useState([]);
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  
+  if (!isOpen) return null;
+  
+  // חישוב נמענים בפועל
+  const finalRecipients = (() => {
+    if (recipientMode === 'all') return [...new Set(players)];
+    if (recipientMode === 'registered') {
+      const entries = registration?.entries || [];
+      return entries.map(e => e.name);
+    }
+    if (recipientMode === 'admins') return [...adminNamesList];
+    return customRecipients;
+  })();
+  
+  const handleSend = async () => {
+    if (!title.trim() || !body.trim()) {
+      alert('נא למלא כותרת ותוכן');
+      return;
+    }
+    if (finalRecipients.length === 0) {
+      alert('נא לבחור לפחות נמען אחד');
+      return;
+    }
+    
+    const confirmMsg = `לשלוח התראה ל-${finalRecipients.length} נמענים?\n\nכותרת: ${title}\nתוכן: ${body}`;
+    if (!confirm(confirmMsg)) return;
+    
+    setSending(true);
+    try {
+      await onSend(finalRecipients, title, body);
+      // איפוס וסגירה
+      setTitle('');
+      setBody('');
+      setCustomRecipients([]);
+      setRecipientMode('all');
+      onClose();
+    } catch (e) {
+      console.error('שגיאה בשליחה:', e);
+      alert('❌ שגיאה בשליחה - נסה שוב');
+    } finally {
+      setSending(false);
+    }
+  };
+  
+  const toggleCustomRecipient = (name) => {
+    setCustomRecipients(prev => 
+      prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+    );
+  };
+  
+  return (
+    <div dir="rtl" className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={onClose}>
+      <div className="bg-stone-950 rounded-2xl border-2 border-blue-700 w-full max-w-lg my-8" onClick={e => e.stopPropagation()}>
+        {/* כותרת */}
+        <div className="flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-blue-950/40 to-stone-950">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">📢</span>
+            <div>
+              <h2 className="text-lg font-extrabold text-blue-200">שלח התראה</h2>
+              <div className="text-xs text-stone-400">סופר אדמין בלבד 👑</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-white p-1">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        
+        <div className="p-4 space-y-4">
+          {/* בחירת נמענים - קבוצות */}
+          <div>
+            <label className="text-xs text-stone-400 font-bold mb-2 block">נמענים:</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => setRecipientMode('all')}
+                className={`rounded-lg py-2 px-3 text-xs font-bold transition ${
+                  recipientMode === 'all' 
+                    ? 'bg-blue-700 text-white shadow' 
+                    : 'bg-stone-800 text-stone-400 hover:bg-stone-700'
+                }`}
+              >
+                👥 כולם ({players.length})
+              </button>
+              <button
+                onClick={() => setRecipientMode('registered')}
+                className={`rounded-lg py-2 px-3 text-xs font-bold transition ${
+                  recipientMode === 'registered' 
+                    ? 'bg-blue-700 text-white shadow' 
+                    : 'bg-stone-800 text-stone-400 hover:bg-stone-700'
+                }`}
+              >
+                📝 רק נרשמים ({registration?.entries?.length || 0})
+              </button>
+              <button
+                onClick={() => setRecipientMode('admins')}
+                className={`rounded-lg py-2 px-3 text-xs font-bold transition ${
+                  recipientMode === 'admins' 
+                    ? 'bg-blue-700 text-white shadow' 
+                    : 'bg-stone-800 text-stone-400 hover:bg-stone-700'
+                }`}
+              >
+                👑 רק אדמינים ({adminNamesList.length})
+              </button>
+              <button
+                onClick={() => setRecipientMode('custom')}
+                className={`rounded-lg py-2 px-3 text-xs font-bold transition ${
+                  recipientMode === 'custom' 
+                    ? 'bg-blue-700 text-white shadow' 
+                    : 'bg-stone-800 text-stone-400 hover:bg-stone-700'
+                }`}
+              >
+                ✏️ בחירה ידנית ({customRecipients.length})
+              </button>
+            </div>
+          </div>
+          
+          {/* בחירה ידנית - מציג רק במצב custom */}
+          {recipientMode === 'custom' && (
+            <div className="rounded-lg border border-stone-800 bg-stone-900/40 p-3 max-h-48 overflow-y-auto">
+              <div className="text-xs text-stone-400 mb-2 font-bold">בחר שחקנים:</div>
+              <div className="grid grid-cols-2 gap-1">
+                {players.map(name => (
+                  <label key={name} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-stone-800/50 rounded p-1">
+                    <input 
+                      type="checkbox"
+                      checked={customRecipients.includes(name)}
+                      onChange={() => toggleCustomRecipient(name)}
+                      className="rounded"
+                    />
+                    <span className="text-stone-200">{name}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* כותרת */}
+          <div>
+            <label className="text-xs text-stone-400 font-bold mb-1 block">כותרת:</label>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="לדוגמה: הודעה חשובה"
+              maxLength={100}
+              className="w-full rounded-lg bg-stone-900 border border-stone-700 px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
+            />
+            <div className="text-[10px] text-stone-500 mt-1">{title.length}/100</div>
+          </div>
+          
+          {/* תוכן */}
+          <div>
+            <label className="text-xs text-stone-400 font-bold mb-1 block">תוכן:</label>
+            <textarea
+              value={body}
+              onChange={e => setBody(e.target.value)}
+              placeholder="תוכן ההתראה..."
+              maxLength={300}
+              rows={4}
+              className="w-full rounded-lg bg-stone-900 border border-stone-700 px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none resize-none"
+            />
+            <div className="text-[10px] text-stone-500 mt-1">{body.length}/300</div>
+          </div>
+          
+          {/* תצוגה מקדימה של נמענים */}
+          {finalRecipients.length > 0 && (
+            <div className="rounded-lg bg-emerald-950/30 border border-emerald-800/50 p-3">
+              <div className="text-xs text-emerald-300 font-bold mb-1">
+                ✓ ההתראה תישלח ל-{finalRecipients.length} נמענים:
+              </div>
+              <div className="text-xs text-emerald-400/80 leading-relaxed">
+                {finalRecipients.slice(0, 10).join(', ')}
+                {finalRecipients.length > 10 && ` ועוד ${finalRecipients.length - 10}...`}
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* כפתורי פעולה */}
+        <div className="p-4 border-t border-stone-800 flex gap-2">
+          <button
+            onClick={onClose}
+            disabled={sending}
+            className="flex-1 rounded-lg bg-stone-800 hover:bg-stone-700 px-4 py-2.5 text-stone-300 font-bold text-sm transition disabled:opacity-50"
+          >
+            ביטול
+          </button>
+          <button
+            onClick={handleSend}
+            disabled={sending || !title.trim() || !body.trim() || finalRecipients.length === 0}
+            className="flex-2 rounded-lg bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-600 hover:to-indigo-600 px-4 py-2.5 text-white font-bold text-sm transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {sending ? '⏳ שולח...' : '📤 שלח התראה'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
+// 🏆 פופ-אפ ברכה ל-MVP - מציג חודשי/רבעוני/שנתי בסוויפר
+// מופיע פעם אחת לכל משתמש (נשמר ב-localStorage)
+// ============================================================
+const MVPCelebrationPopup = ({ data, onClose, currentUser }) => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [confettiActive, setConfettiActive] = useState(false);
+  
+  if (!data) return null;
+  
+  // איסוף הכרטיסים שיש להציג
+  const cards = [];
+  if (data.monthly) cards.push({ ...data.monthly, label: `MVP חודשי - ${data.monthly.monthName}`, color: 'amber', emoji: '⭐' });
+  if (data.quarterly) cards.push({ ...data.quarterly, label: `MVP רבעוני - Q${data.quarterly.quarter}`, color: 'blue', emoji: '🥈' });
+  if (data.yearly) cards.push({ ...data.yearly, label: `MVP שנתי - ${data.yearly.year}`, color: 'purple', emoji: '🏆' });
+  
+  if (cards.length === 0) return null;
+  
+  // 🎉 קונפטי - אם המשתמש הנוכחי הוא אחד הזוכים
+  useEffect(() => {
+    const isWinner = cards.some(c => c.name === currentUser);
+    if (isWinner) {
+      // עיכוב קטן כדי שהפופ-אפ יספיק להיפתח
+      const timer = setTimeout(() => setConfettiActive(true), 400);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+  
+  // כותרת ראשית
+  let mainTitle;
+  if (data.yearly) mainTitle = `🏆 סיכום עונת ${data.yearly.year}!`;
+  else if (data.quarterly && data.monthly) mainTitle = `🏆 סיכום ${data.monthly.monthName} ורבעון ${data.quarterly.quarter}!`;
+  else if (data.quarterly) mainTitle = `🏆 סיכום רבעון ${data.quarterly.quarter}!`;
+  else mainTitle = `🏆 ה-MVP של ${data.monthly.monthName}!`;
+  
+  const card = cards[activeIndex];
+  const colorClasses = {
+    amber: 'from-amber-700 to-orange-700 border-amber-500',
+    blue: 'from-blue-700 to-indigo-700 border-blue-500',
+    purple: 'from-purple-700 to-fuchsia-700 border-purple-500',
+  };
+  
+  const isWinnerView = card.name === currentUser;
+  
+  return (
+    <div dir="rtl" className="fixed inset-0 z-[200] bg-black/85 backdrop-blur-md flex items-center justify-center p-4" style={{ fontFamily: 'Assistant, sans-serif' }}>
+      {/* 🎉 קונפטי לזוכה */}
+      <Confetti 
+        active={confettiActive} 
+        onComplete={() => setConfettiActive(false)}
+        message={isWinnerView ? `🎉 כל הכבוד ${currentUser}!` : ''}
+      />
+      
+      <div className="max-w-md w-full bg-gradient-to-br from-stone-900 to-stone-950 border-2 border-amber-700/60 rounded-3xl shadow-2xl overflow-hidden">
+        {/* כותרת ראשית */}
+        <div className="bg-gradient-to-l from-amber-950/50 to-stone-900 p-5 border-b border-amber-800/40 text-center">
+          <div className="text-2xl font-extrabold text-amber-200">{mainTitle}</div>
+          {cards.length > 1 && (
+            <div className="text-xs text-amber-400/70 mt-1">החלק לראות עוד ({activeIndex + 1}/{cards.length})</div>
+          )}
+        </div>
+        
+        {/* כרטיס פעיל */}
+        <div className="p-6 space-y-4">
+          <div className="text-center">
+            <div className="text-xs text-stone-400 mb-2 font-bold">{card.label}</div>
+            <div className="text-4xl mb-3">{card.emoji}</div>
+            
+            {/* תמונה גדולה */}
+            <div className="flex justify-center mb-3">
+              {PLAYER_AVATARS[card.name] ? (
+                <img 
+                  src={`data:image/jpeg;base64,${PLAYER_AVATARS[card.name]}`}
+                  alt={card.name}
+                  className="rounded-full object-cover"
+                  style={{ width: 120, height: 120, border: '4px solid rgba(251,191,36,0.8)' }}
+                />
+              ) : (
+                <div 
+                  className={`rounded-full flex items-center justify-center bg-gradient-to-br ${colorClasses[card.color]} border-4 border-amber-500/80 text-white text-5xl font-extrabold`}
+                  style={{ width: 120, height: 120 }}
+                >
+                  {card.name.charAt(0)}
+                </div>
+              )}
+            </div>
+            
+            {/* שם */}
+            <div className="text-2xl font-extrabold text-amber-100 mb-1">
+              {card.name}
+              {isWinnerView && <span className="text-base font-normal text-emerald-400 mr-2">(זה אתה! 🎉)</span>}
+            </div>
+            
+            {/* רווח */}
+            <div className="text-3xl font-extrabold text-emerald-400 mb-1">+{card.profit}₪</div>
+            
+            {/* מפגשים */}
+            <div className="text-sm text-stone-400">ב-{card.sessionsCount} מפגשים</div>
+          </div>
+          
+          {/* נקודות סוויפר (אם יש כמה כרטיסים) */}
+          {cards.length > 1 && (
+            <div className="flex justify-center gap-2 pt-2">
+              {cards.map((_, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveIndex(idx)}
+                  className={`w-2.5 h-2.5 rounded-full transition ${
+                    idx === activeIndex ? 'bg-amber-400 w-8' : 'bg-stone-600 hover:bg-stone-500'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+          
+          {/* כפתורי ניווט (אם יש כמה כרטיסים) */}
+          {cards.length > 1 && (
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => setActiveIndex(Math.max(0, activeIndex - 1))}
+                disabled={activeIndex === 0}
+                className="flex-1 rounded-lg bg-stone-800 hover:bg-stone-700 disabled:opacity-30 px-3 py-2 text-stone-300 font-bold text-sm transition"
+              >
+                ← הקודם
+              </button>
+              <button
+                onClick={() => setActiveIndex(Math.min(cards.length - 1, activeIndex + 1))}
+                disabled={activeIndex === cards.length - 1}
+                className="flex-1 rounded-lg bg-stone-800 hover:bg-stone-700 disabled:opacity-30 px-3 py-2 text-stone-300 font-bold text-sm transition"
+              >
+                הבא →
+              </button>
+            </div>
+          )}
+          
+          {/* כל הכבוד */}
+          <div className="text-center text-lg font-bold text-amber-300 pt-2">
+            כל הכבוד! 🎉
+          </div>
+        </div>
+        
+        {/* כפתור סגירה */}
+        <div className="p-4 border-t border-stone-800">
+          <button
+            onClick={onClose}
+            className="w-full rounded-xl bg-gradient-to-r from-amber-700 to-orange-700 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-base py-3 px-4 transition shadow-lg"
+          >
+            סבבה 👍
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
 // 🍻 מסך אישור אירוח - למארח שצריך לאשר אירוח עתידי
 // מופיע כשהמשתמש לוחץ על התראת תזכורת או כשנכנס לאפליקציה
 // ============================================================
@@ -6766,7 +7191,7 @@ const LiveBroadcastViewer = ({ broadcast, onClose, currentUser }) => {
         {/* תיבה ראשית */}
         <div className="rounded-3xl border-2 border-amber-700/40 bg-gradient-to-br from-amber-950/40 via-stone-950/80 to-stone-950 backdrop-blur p-6 md:p-8 text-center space-y-4">
           <div className="flex flex-col items-center gap-2">
-            <img src={SWAN_IMG} alt="ברבור" width={56} height={56} className="opacity-90" />
+            <img src={BARBUR_LOGO} alt="ברבור" width={120} height={120} className="opacity-95" style={{ filter: 'drop-shadow(0 4px 12px rgba(251,191,36,0.3))' }} />
             <h1 className="text-2xl md:text-3xl font-extrabold text-amber-200">
               ערב פוקר ברבורי תל מונד
             </h1>
@@ -9939,7 +10364,7 @@ const BackupsModal = ({ isOpen, onClose, backupsList, onCreateBackup, onDownload
 
 
 // ===== מודל מנהל - ניהול פרטי תשלום של כל השחקנים =====
-const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlayers = [], onToggleHidden, onAddPlayer, birthdays = {}, onSaveBirthday, lastLogins = {} }) => {
+const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlayers = [], onToggleHidden, onAddPlayer, birthdays = {}, onSaveBirthday, lastLogins = {}, onSwitchToLocks, locksCount = 0 }) => {
   // 🆕 helper - פורמט כניסה אחרונה: "אתמול (28/04)" + צבע לפי פעילות
   const formatLastLogin = (timestamp) => {
     if (!timestamp) return { text: 'טרם נכנס', color: 'text-stone-600 bg-stone-900/30 border-stone-800/40' };
@@ -10069,6 +10494,24 @@ const AdminPhonesModal = ({ isOpen, onClose, players, phones, onSave, hiddenPlay
             <X className="h-5 w-5" />
           </button>
         </div>
+        
+        {/* 🆕 סאב-טאבים - מעבר מהיר לנעילות מכשירים */}
+        {onSwitchToLocks && (
+          <div className="flex gap-2 rounded-xl bg-stone-900/50 border border-stone-800 p-1 mb-4">
+            <button
+              className="flex-1 rounded-lg py-2 px-3 text-xs font-bold bg-gradient-to-r from-purple-700 to-purple-800 text-white shadow"
+            >
+              👥 משתמשים
+            </button>
+            <button
+              onClick={onSwitchToLocks}
+              className="flex-1 rounded-lg py-2 px-3 text-xs font-bold text-stone-400 hover:text-stone-200 hover:bg-stone-800/50 transition flex items-center justify-center gap-1"
+            >
+              🔒 נעילות מכשירים
+              {locksCount > 0 && <span className="bg-rose-950/50 rounded-full px-1.5 text-[10px]">{locksCount}</span>}
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2 mb-4">
           <div className="rounded-lg bg-emerald-950/30 border border-emerald-700/40 p-3 text-center">
@@ -10629,6 +11072,10 @@ export default function PokerApp() {
   }, [permissionsToast]);
   // 🔓 מסך ניהול הרשאות (רק לסופר אדמין)
   const [permissionsManagerOpen, setPermissionsManagerOpen] = useState(false);
+  // 📢 שליחת התראה מותאמת
+  const [customNotificationOpen, setCustomNotificationOpen] = useState(false);
+  // 🏆 פופ-אפ ברכת MVP - מופיע פעם אחת לכל סבב
+  const [mvpPopupData, setMvpPopupData] = useState(null); // { monthly, quarterly, yearly } או null
   // 🆕 רשימת המנהלים - נטענת מ-Firebase
   const [adminNamesList, setAdminNamesList] = useState(ADMIN_NAMES);
   const [manageAdminsOpen, setManageAdminsOpen] = useState(false);
@@ -10831,6 +11278,195 @@ export default function PokerApp() {
     
     checkHostReminder();
   }, [currentUser]);
+  
+  // 🏆 חישוב ושמירה של MVP - רץ כשהאפליקציה נטענת ויש sessions
+  // בודק האם MVP של החודש/רבעון/שנה שעברו כבר חושב ונשמר ב-Firestore
+  // אם לא - מחשב ושומר. ה-Cloud Function תקרא את הנתונים האלה ותשלח התראה.
+  useEffect(() => {
+    if (!allSessions || allSessions.length === 0) return;
+    
+    const calculateAndSaveMVPs = async () => {
+      try {
+        const existing = (await fbLoadState(MVP_RESULTS_KEY)) || {};
+        let updated = false;
+        
+        // 🛠️ פונקציית עזר - חישוב MVP
+        const computeMVPLocal = (sessions) => {
+          if (sessions.length === 0) return null;
+          const totals = {};
+          sessions.forEach(s => {
+            Object.entries(s.results || {}).forEach(([name, amount]) => {
+              totals[name] = (totals[name] || 0) + Number(amount);
+            });
+          });
+          const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
+          if (sorted.length === 0) return null;
+          const [winner, profit] = sorted[0];
+          return { name: winner, profit, sessionsCount: sessions.length };
+        };
+        
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); // 0-11
+        const currentQuarter = Math.floor(currentMonth / 3) + 1; // 1-4
+        
+        // 🏆 MVP חודשי - של החודש שעבר
+        const lastMonthDate = new Date(currentYear, currentMonth - 1, 1);
+        const lastMonthYear = lastMonthDate.getFullYear();
+        const lastMonth = lastMonthDate.getMonth();
+        const monthKey = `month_${lastMonthYear}_${String(lastMonth + 1).padStart(2, '0')}`;
+        
+        if (!existing[monthKey]) {
+          // לא חושב עדיין - מחשבים
+          const lastMonthSessions = allSessions.filter(s => {
+            if (!s.date) return false;
+            const d = new Date(s.date);
+            return d.getFullYear() === lastMonthYear && d.getMonth() === lastMonth;
+          });
+          
+          if (lastMonthSessions.length > 0) {
+            const mvp = computeMVPLocal(lastMonthSessions);
+            if (mvp) {
+              const monthName = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'][lastMonth];
+              existing[monthKey] = {
+                type: 'monthly',
+                year: lastMonthYear,
+                month: lastMonth + 1,
+                monthName,
+                ...mvp,
+                computedAt: new Date().toISOString(),
+                notificationSent: false,
+              };
+              updated = true;
+              console.log(`🏆 MVP חודשי נוסף: ${monthName} ${lastMonthYear} - ${mvp.name} (+${mvp.profit})`);
+            }
+          }
+        }
+        
+        // 🏆 MVP רבעוני - של הרבעון שעבר (אם החודש הוא 1, 4, 7, 10)
+        if ([0, 3, 6, 9].includes(currentMonth)) {
+          // אנחנו בתחילת רבעון חדש - בודקים את הרבעון הקודם
+          let lastQuarter, lastQuarterYear;
+          if (currentMonth === 0) {
+            lastQuarter = 4;
+            lastQuarterYear = currentYear - 1;
+          } else {
+            lastQuarter = currentQuarter - 1;
+            lastQuarterYear = currentYear;
+          }
+          const quarterKey = `quarter_${lastQuarterYear}_Q${lastQuarter}`;
+          
+          if (!existing[quarterKey]) {
+            const startMonth = (lastQuarter - 1) * 3;
+            const endMonth = startMonth + 2;
+            const quarterSessions = allSessions.filter(s => {
+              if (!s.date) return false;
+              const d = new Date(s.date);
+              return d.getFullYear() === lastQuarterYear && d.getMonth() >= startMonth && d.getMonth() <= endMonth;
+            });
+            
+            if (quarterSessions.length > 0) {
+              const mvp = computeMVPLocal(quarterSessions);
+              if (mvp) {
+                existing[quarterKey] = {
+                  type: 'quarterly',
+                  year: lastQuarterYear,
+                  quarter: lastQuarter,
+                  ...mvp,
+                  computedAt: new Date().toISOString(),
+                  notificationSent: false,
+                };
+                updated = true;
+                console.log(`🏆 MVP רבעוני נוסף: Q${lastQuarter} ${lastQuarterYear} - ${mvp.name} (+${mvp.profit})`);
+              }
+            }
+          }
+        }
+        
+        // 🏆 MVP שנתי - אם זה ינואר
+        if (currentMonth === 0) {
+          const lastYear = currentYear - 1;
+          const yearKey = `year_${lastYear}`;
+          
+          if (!existing[yearKey]) {
+            const yearSessions = allSessions.filter(s => {
+              if (!s.date) return false;
+              const d = new Date(s.date);
+              return d.getFullYear() === lastYear;
+            });
+            
+            if (yearSessions.length > 0) {
+              const mvp = computeMVPLocal(yearSessions);
+              if (mvp) {
+                existing[yearKey] = {
+                  type: 'yearly',
+                  year: lastYear,
+                  ...mvp,
+                  computedAt: new Date().toISOString(),
+                  notificationSent: false,
+                };
+                updated = true;
+                console.log(`🏆 MVP שנתי נוסף: ${lastYear} - ${mvp.name} (+${mvp.profit})`);
+              }
+            }
+          }
+        }
+        
+        if (updated) {
+          await fbSaveState(existing, MVP_RESULTS_KEY);
+          console.log('✅ MVP results נשמרו ב-Firestore');
+        }
+      } catch (e) {
+        console.error('שגיאה בחישוב MVP:', e);
+      }
+    };
+    
+    calculateAndSaveMVPs();
+  }, [allSessions]);
+  
+  // 🏆 בדיקה: האם יש MVPs ש-currentUser לא ראה עדיין? (פופ-אפ ברכה)
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const checkMVPPopup = async () => {
+      try {
+        const mvpData = await fbLoadState(MVP_RESULTS_KEY);
+        if (!mvpData || typeof mvpData !== 'object') return;
+        
+        // localStorage key לכל משתמש - איזה MVPs כבר ראה
+        const seenKey = `mvp_seen_${currentUser}`;
+        const seenIds = JSON.parse(localStorage.getItem(seenKey) || '[]');
+        
+        // איסוף MVPs שעדיין לא ראינו
+        const monthly = Object.entries(mvpData)
+          .filter(([k, v]) => v.type === 'monthly' && !seenIds.includes(k))
+          .sort(([, a], [, b]) => new Date(b.computedAt) - new Date(a.computedAt))[0];
+        
+        const quarterly = Object.entries(mvpData)
+          .filter(([k, v]) => v.type === 'quarterly' && !seenIds.includes(k))
+          .sort(([, a], [, b]) => new Date(b.computedAt) - new Date(a.computedAt))[0];
+        
+        const yearly = Object.entries(mvpData)
+          .filter(([k, v]) => v.type === 'yearly' && !seenIds.includes(k))
+          .sort(([, a], [, b]) => new Date(b.computedAt) - new Date(a.computedAt))[0];
+        
+        if (!monthly && !quarterly && !yearly) return;
+        
+        // יש דברים להראות
+        setMvpPopupData({
+          monthly: monthly ? { key: monthly[0], ...monthly[1] } : null,
+          quarterly: quarterly ? { key: quarterly[0], ...quarterly[1] } : null,
+          yearly: yearly ? { key: yearly[0], ...yearly[1] } : null,
+        });
+      } catch (e) {
+        console.error('שגיאה בבדיקת MVP popup:', e);
+      }
+    };
+    
+    // מעט עיכוב כדי שהאפליקציה תספיק להיטען
+    const timer = setTimeout(checkMVPPopup, 2000);
+    return () => clearTimeout(timer);
+  }, [currentUser, allSessions]);
   
   // 💸 סנכרון אוטומטי - כל מכשיר יוצר תזכורות לעצמו על ערבים מ-7 ימים אחרונים
   // רץ כשהערבים מתעדכנים (טעינה ראשונה / סנכרון מ-Firebase)
@@ -11800,6 +12436,26 @@ export default function PokerApp() {
   // 🔔 שליחת התראה ידנית "הרישום נפתח" - לשימוש סופר אדמין
   // (לדוגמה: ב-12:00 בצהריים, או אחרי חופש, או במקרה חירום)
   // טכנית: מבצע toggle off+on מהיר של הפיצ'ר כדי לטריגר את Cloud Function notifyRegistrationOpen
+  // 📢 שליחת התראה מותאמת אישית - כותב ל-Firestore, Cloud Function תשלח
+  const handleSendCustomNotification = async (recipients, title, body) => {
+    try {
+      const notificationKey = 'poker_custom_notification_v1';
+      const payload = {
+        recipients,
+        title,
+        body,
+        sentBy: currentUser,
+        timestamp: new Date().toISOString(),
+        id: `custom_${Date.now()}`, // מזהה ייחודי כדי שהפונקציה תזהה שזו הודעה חדשה
+      };
+      await saveState(payload, notificationKey);
+      alert(`✅ התראה נשלחה ל-${recipients.length} נמענים`);
+    } catch (e) {
+      console.error('שגיאה בשליחת התראה מותאמת:', e);
+      throw e;
+    }
+  };
+  
   const handleManualSendNotification = async () => {
     // מחשבים את המפגש הבא מתוך לוח האירוחים
     const todayStr = new Date().toISOString().split('T')[0];
@@ -12803,12 +13459,22 @@ export default function PokerApp() {
                     <span>עדכון ערב בתמונה</span>
                   </button>
                 )}
-                {/* 🆕 כפתור ניהול משתמשים (טלפונים + הסתרה + הוספה) */}
-                {can('managePlayers') && (
-                  <button onClick={() => { setMenuOpen(false); setAdminPhonesOpen(true); }}
+                {/* 🆕 כפתור מאוחד: ניהול משתמשים + נעילות */}
+                {(can('managePlayers') || can('deviceLocks')) && (
+                  <button onClick={() => { 
+                    setMenuOpen(false); 
+                    if (can('managePlayers')) {
+                      setAdminPhonesOpen(true);
+                    } else {
+                      setDeviceLocksManagerOpen(true);
+                    }
+                  }}
                     className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-purple-700/80 to-purple-800/80 border border-purple-700/50 px-4 py-3 text-white font-bold hover:from-purple-600 hover:to-purple-700 transition text-sm">
                     <span className="text-xl">👥</span>
                     <span>ניהול משתמשים</span>
+                    {Object.keys(deviceLocks).length > 0 && (
+                      <span className="mr-auto text-xs bg-rose-950/50 rounded-full px-2 py-0.5">🔒 {Object.keys(deviceLocks).length}</span>
+                    )}
                   </button>
                 )}
                 {/* 🆕 כפתור גיבוי ושחזור */}
@@ -12819,31 +13485,28 @@ export default function PokerApp() {
                     <span>גיבוי ושחזור</span>
                   </button>
                 )}
-                {/* 🆕 כפתור ניהול מנהלים - רק לסופר אדמין */}
-                {can('manageAdmins') && (
-                  <button onClick={() => { setMenuOpen(false); setManageAdminsOpen(true); }}
+                {/* 🆕 כפתור מאוחד: ניהול מנהלים + הרשאות (סופר אדמין בלבד) */}
+                {(can('manageAdmins') || can('managePermissions')) && (
+                  <button onClick={() => { 
+                    setMenuOpen(false); 
+                    if (can('manageAdmins')) {
+                      setManageAdminsOpen(true);
+                    } else {
+                      setPermissionsManagerOpen(true);
+                    }
+                  }}
                     className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-amber-700/80 to-amber-800/80 border border-amber-700/50 px-4 py-3 text-white font-bold hover:from-amber-600 hover:to-amber-700 transition text-sm">
-                    <span className="text-xl">🔐</span>
-                    <span>ניהול מנהלים</span>
+                    <span className="text-xl">👑</span>
+                    <span>ניהול אדמינים</span>
                     <span className="mr-auto text-xs bg-amber-950/50 rounded-full px-2 py-0.5">{adminNamesList.length}</span>
                   </button>
                 )}
-                {/* 🆕 כפתור ניהול נעילות מכשירים */}
-                {can('deviceLocks') && (
-                  <button onClick={() => { setMenuOpen(false); setDeviceLocksManagerOpen(true); }}
-                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-rose-700/80 to-rose-800/80 border border-rose-700/50 px-4 py-3 text-white font-bold hover:from-rose-600 hover:to-rose-700 transition text-sm">
-                    <span className="text-xl">🔒</span>
-                    <span>נעילות מכשירים</span>
-                    <span className="mr-auto text-xs bg-rose-950/50 rounded-full px-2 py-0.5">{Object.keys(deviceLocks).length}</span>
-                  </button>
-                )}
-                {/* 👑 ניהול הרשאות - רק לסופר אדמין */}
-                {can('managePermissions') && (
-                  <button onClick={() => { setMenuOpen(false); setPermissionsManagerOpen(true); }}
-                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-yellow-600 to-amber-700 border-2 border-amber-500/50 px-4 py-3 text-white font-bold hover:from-yellow-500 hover:to-amber-600 transition text-sm shadow-lg shadow-amber-900/30">
-                    <span className="text-xl">⚙️</span>
-                    <span>ניהול הרשאות</span>
-                    <span className="mr-auto text-xs bg-amber-950/60 rounded-full px-2 py-0.5">👑</span>
+                {/* 📢 כפתור חדש: שליחת התראה מותאמת (סופר אדמין בלבד) */}
+                {isSuperAdmin && (
+                  <button onClick={() => { setMenuOpen(false); setCustomNotificationOpen(true); }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-blue-700/80 to-indigo-800/80 border border-blue-700/50 px-4 py-3 text-white font-bold hover:from-blue-600 hover:to-indigo-700 transition text-sm">
+                    <span className="text-xl">📢</span>
+                    <span>שלח התראה</span>
                   </button>
                 )}
                 {/* 🔑 שינוי סיסמת סופר אדמין - רק לסופר אדמין */}
@@ -12963,6 +13626,10 @@ export default function PokerApp() {
         currentDeviceId={deviceId}
         onRelease={handleReleaseLock}
         players={players}
+        onSwitchToUsers={can('managePlayers') ? () => {
+          setDeviceLocksManagerOpen(false);
+          setAdminPhonesOpen(true);
+        } : null}
       />
       
       {/* ⚙️ מודל ניהול הרשאות (סופר אדמין בלבד) */}
@@ -12972,7 +13639,41 @@ export default function PokerApp() {
         permissions={adminPermissions}
         onUpdate={handleUpdatePermissions}
         adminNamesList={adminNamesList}
+        onSwitchToAdmins={can('manageAdmins') ? () => {
+          setPermissionsManagerOpen(false);
+          setManageAdminsOpen(true);
+        } : null}
       />
+      
+      {/* 📢 מודל שליחת התראה מותאמת (סופר אדמין בלבד) */}
+      <CustomNotificationModal
+        isOpen={customNotificationOpen}
+        onClose={() => setCustomNotificationOpen(false)}
+        players={players}
+        registration={registration}
+        adminNamesList={adminNamesList}
+        onSend={handleSendCustomNotification}
+      />
+      
+      {/* 🏆 פופ-אפ ברכת MVP (מופיע פעם אחת לכל סבב) */}
+      {mvpPopupData && (
+        <MVPCelebrationPopup
+          data={mvpPopupData}
+          currentUser={currentUser}
+          onClose={() => {
+            // שמירה ב-localStorage שראינו את ה-MVPs האלה
+            try {
+              const seenKey = `mvp_seen_${currentUser}`;
+              const seenIds = JSON.parse(localStorage.getItem(seenKey) || '[]');
+              if (mvpPopupData.monthly) seenIds.push(mvpPopupData.monthly.key);
+              if (mvpPopupData.quarterly) seenIds.push(mvpPopupData.quarterly.key);
+              if (mvpPopupData.yearly) seenIds.push(mvpPopupData.yearly.key);
+              localStorage.setItem(seenKey, JSON.stringify([...new Set(seenIds)]));
+            } catch (e) {}
+            setMvpPopupData(null);
+          }}
+        />
+      )}
       
       {/* 📡 צופה בשידור חי - מופיע אוטומטית כשיש ערב חי בשעות מתאימות */}
       {broadcastViewerOpen && liveBroadcast && (
@@ -13065,6 +13766,10 @@ export default function PokerApp() {
         allPlayers={players}
         onAdd={handleAddAdmin}
         onRemove={handleRemoveAdmin}
+        onSwitchToPermissions={can('managePermissions') ? () => {
+          setManageAdminsOpen(false);
+          setPermissionsManagerOpen(true);
+        } : null}
       />
 
       {/* 🆕 מודל הזדהות (כניסה ראשונה - חובה למלא טלפון) */}
@@ -13097,6 +13802,11 @@ export default function PokerApp() {
         onSave={handleSavePhone}
         hiddenPlayers={hiddenPlayers}
         lastLogins={lastLogins}
+        onSwitchToLocks={can('deviceLocks') ? () => {
+          setAdminPhonesOpen(false);
+          setDeviceLocksManagerOpen(true);
+        } : null}
+        locksCount={Object.keys(deviceLocks).length}
         onToggleHidden={async (name) => {
           const newHidden = hiddenPlayers.includes(name)
             ? hiddenPlayers.filter(n => n !== name)
