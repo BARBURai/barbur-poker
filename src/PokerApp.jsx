@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.25';
-const APP_BUILD_TIME = '02/05/2026 16:00';
-const APP_NOTES = '🛡️ תיקון באג טבלת דירוג + מנגנון אימות תקינות + סינון מוסתרים';
+const APP_VERSION = 'v2.33.26';
+const APP_BUILD_TIME = '02/05/2026 16:30';
+const APP_NOTES = '🛡️ תיקון גלילה בטבלה + בורר שנים בדוח התקינות';
 
 
 // ===== הרשאות מנהל =====
@@ -548,15 +548,24 @@ const calculateStats = (sessions, players) => {
 // בערב פוקר - סכום הרווחים = סכום ההפסדים = 0
 // אם זה לא 0 - יש שחקן חסר/מזיק/בעיה בנתונים
 // ============================================================
-const validateTablesIntegrity = (allSessions, hiddenPlayers = []) => {
+const validateTablesIntegrity = (allSessions, hiddenPlayers = [], yearFilter = null) => {
   const issues = [];
   
   if (!allSessions || allSessions.length === 0) {
     return { isValid: true, issues: [], summary: 'אין נתונים לבדוק' };
   }
   
+  // 🔍 פילטר לפי שנה
+  let sessionsToCheck = allSessions;
+  if (yearFilter && yearFilter !== 'all') {
+    sessionsToCheck = allSessions.filter(s => {
+      if (!s.date) return false;
+      return new Date(s.date).getFullYear() === Number(yearFilter);
+    });
+  }
+  
   // 🔍 בדיקה 1: מאזן לכל ערב בנפרד (חובה להיות 0)
-  allSessions.forEach(session => {
+  sessionsToCheck.forEach(session => {
     if (!session.results) return;
     const sum = Object.values(session.results).reduce((acc, val) => acc + Number(val), 0);
     if (Math.abs(sum) > 0.01) { // רף לסטיות עיגול
@@ -571,7 +580,7 @@ const validateTablesIntegrity = (allSessions, hiddenPlayers = []) => {
   
   // 🔍 בדיקה 2: מאזן שנתי - סכום כל הערבים בשנה (חובה להיות 0)
   const sessionsByYear = {};
-  allSessions.forEach(s => {
+  sessionsToCheck.forEach(s => {
     if (!s.date) return;
     const year = new Date(s.date).getFullYear();
     if (!sessionsByYear[year]) sessionsByYear[year] = [];
@@ -599,7 +608,7 @@ const validateTablesIntegrity = (allSessions, hiddenPlayers = []) => {
   // 🔍 בדיקה 3: שחקנים מוסתרים שמופיעים ב-results
   if (hiddenPlayers.length > 0) {
     const playersWithResults = new Set();
-    allSessions.forEach(s => {
+    sessionsToCheck.forEach(s => {
       Object.keys(s.results || {}).forEach(name => playersWithResults.add(name));
     });
     
@@ -617,7 +626,7 @@ const validateTablesIntegrity = (allSessions, hiddenPlayers = []) => {
     isValid: issues.length === 0,
     issues,
     summary: issues.length === 0 
-      ? `✅ כל הטבלאות מאוזנות (${allSessions.length} ערבים)` 
+      ? `✅ כל הטבלאות מאוזנות (${sessionsToCheck.length} ערבים)` 
       : `⚠️ ${issues.length} בעיות נמצאו`,
   };
 };
@@ -1457,49 +1466,76 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
 // ============================================================
 // 🛡️ חיווי תקינות טבלאות - מציג ✓ ירוק או ⚠️ אדום
 // רק לסופר אדמין. אם יש בעיה - לחיצה פותחת מודל עם פירוט
+// ברירת מחדל - בדיקה רק לשנה הנוכחית
 // ============================================================
 const TableIntegrityIndicator = ({ allSessions, hiddenPlayers, isSuperAdmin }) => {
   const [showModal, setShowModal] = useState(false);
+  const currentYear = new Date().getFullYear();
+  const [yearFilter, setYearFilter] = useState(String(currentYear));
   
   // לא מציג למשתמשים רגילים
   if (!isSuperAdmin) return null;
   
+  // רשימת שנים זמינות מהמפגשים
+  const availableYears = useMemo(() => {
+    if (!allSessions) return [];
+    const years = new Set();
+    allSessions.forEach(s => {
+      if (s.date) years.add(new Date(s.date).getFullYear());
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [allSessions]);
+  
+  // התוצאה הנוכחית - לפי הפילטר
   const result = useMemo(
-    () => validateTablesIntegrity(allSessions, hiddenPlayers),
-    [allSessions, hiddenPlayers]
+    () => validateTablesIntegrity(allSessions, hiddenPlayers, yearFilter),
+    [allSessions, hiddenPlayers, yearFilter]
   );
   
-  if (result.isValid) {
-    // הכל תקין - חיווי ירוק קטן
+  // החיווי בכותרת מציג את הסטטוס לשנה הנוכחית בלבד
+  const currentYearResult = useMemo(
+    () => validateTablesIntegrity(allSessions, hiddenPlayers, String(currentYear)),
+    [allSessions, hiddenPlayers, currentYear]
+  );
+  
+  if (currentYearResult.isValid && !showModal) {
+    // הכל תקין השנה - חיווי ירוק קטן + לחיצה פותחת מודל לבדיקת שנים אחרות
     return (
-      <span 
-        title="כל הטבלאות מאוזנות"
-        className="inline-flex items-center gap-1 text-xs text-emerald-400 font-bold cursor-help"
+      <button 
+        onClick={() => setShowModal(true)}
+        title="לחץ לבדיקת שנים נוספות"
+        className="inline-flex items-center gap-1 text-xs text-emerald-400 font-bold cursor-pointer hover:text-emerald-300"
       >
         ✓ בדוק
-      </span>
+      </button>
     );
   }
   
-  // יש בעיות - חיווי אדום + מודל
+  // אם יש בעיות השנה או המודל פתוח
   return (
     <>
       <button
         onClick={() => setShowModal(true)}
-        className="inline-flex items-center gap-1 text-xs text-rose-400 font-bold animate-pulse cursor-pointer hover:text-rose-300"
-        title="לחץ לראות פירוט הבעיות"
+        className={`inline-flex items-center gap-1 text-xs font-bold cursor-pointer ${
+          currentYearResult.isValid 
+            ? 'text-emerald-400 hover:text-emerald-300' 
+            : 'text-rose-400 animate-pulse hover:text-rose-300'
+        }`}
+        title={currentYearResult.isValid ? 'לחץ לבדיקת שנים נוספות' : 'לחץ לראות פירוט הבעיות'}
       >
-        ⚠️ {result.issues.length} בעיות
+        {currentYearResult.isValid ? '✓ בדוק' : `⚠️ ${currentYearResult.issues.length} בעיות`}
       </button>
       
       {showModal && (
         <div dir="rtl" className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto" onClick={() => setShowModal(false)}>
-          <div className="bg-stone-950 rounded-2xl border-2 border-rose-700 w-full max-w-lg my-8" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-rose-950/40 to-stone-950">
+          <div className={`bg-stone-950 rounded-2xl border-2 ${result.isValid ? 'border-emerald-700' : 'border-rose-700'} w-full max-w-lg my-8`} onClick={e => e.stopPropagation()}>
+            <div className={`flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l ${result.isValid ? 'from-emerald-950/40' : 'from-rose-950/40'} to-stone-950`}>
               <div className="flex items-center gap-2">
-                <span className="text-2xl">⚠️</span>
+                <span className="text-2xl">{result.isValid ? '✅' : '⚠️'}</span>
                 <div>
-                  <h2 className="text-lg font-extrabold text-rose-200">בעיה בתקינות הטבלה</h2>
+                  <h2 className={`text-lg font-extrabold ${result.isValid ? 'text-emerald-200' : 'text-rose-200'}`}>
+                    בדיקת תקינות טבלאות
+                  </h2>
                   <div className="text-xs text-stone-400">סופר אדמין בלבד 👑</div>
                 </div>
               </div>
@@ -1509,33 +1545,77 @@ const TableIntegrityIndicator = ({ allSessions, hiddenPlayers, isSuperAdmin }) =
             </div>
             
             <div className="p-4 space-y-3">
-              <div className="rounded-lg bg-rose-950/30 border border-rose-800/50 p-3">
-                <div className="text-sm text-rose-200 font-bold mb-2">
-                  ⚠️ נמצאו {result.issues.length} בעיות
-                </div>
-                <div className="text-xs text-stone-400">
-                  כל ערב פוקר חייב להיות מאוזן (סכום = 0). אם יש סטייה - יש בעיה בנתונים או בקוד.
+              {/* בורר שנים */}
+              <div>
+                <label className="text-xs text-stone-400 font-bold mb-2 block">בדוק שנה:</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setYearFilter('all')}
+                    className={`rounded-lg py-1.5 px-3 text-xs font-bold transition ${
+                      yearFilter === 'all' 
+                        ? 'bg-amber-700 text-white' 
+                        : 'bg-stone-800 text-stone-400 hover:bg-stone-700'
+                    }`}
+                  >
+                    כל השנים
+                  </button>
+                  {availableYears.map(year => (
+                    <button
+                      key={year}
+                      onClick={() => setYearFilter(String(year))}
+                      className={`rounded-lg py-1.5 px-3 text-xs font-bold transition ${
+                        yearFilter === String(year) 
+                          ? 'bg-amber-700 text-white' 
+                          : 'bg-stone-800 text-stone-400 hover:bg-stone-700'
+                      }`}
+                    >
+                      {year}
+                    </button>
+                  ))}
                 </div>
               </div>
               
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {result.issues.map((issue, idx) => (
-                  <div key={idx} className="rounded-lg bg-stone-900 border border-stone-700 p-3">
-                    <div className="text-sm text-rose-300 font-bold mb-1">
-                      {issue.type === 'session_imbalance' && `🎲 ערב ${issue.date}`}
-                      {issue.type === 'year_imbalance' && `📅 שנת ${issue.year}`}
-                      {issue.type === 'hidden_players_active' && `👻 שחקנים מוסתרים פעילים`}
+              {/* תוצאה */}
+              {result.isValid ? (
+                <div className="rounded-lg bg-emerald-950/30 border border-emerald-800/50 p-3">
+                  <div className="text-sm text-emerald-200 font-bold mb-1">
+                    ✅ הכל תקין
+                  </div>
+                  <div className="text-xs text-stone-400">
+                    {result.summary}
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-lg bg-rose-950/30 border border-rose-800/50 p-3">
+                    <div className="text-sm text-rose-200 font-bold mb-2">
+                      ⚠️ נמצאו {result.issues.length} בעיות
                     </div>
-                    <div className="text-xs text-stone-300">
-                      {issue.message}
+                    <div className="text-xs text-stone-400">
+                      כל ערב פוקר חייב להיות מאוזן (סכום = 0). אם יש סטייה - יש בעיה בנתונים או בקוד.
                     </div>
                   </div>
-                ))}
-              </div>
-              
-              <div className="rounded-lg bg-amber-950/30 border border-amber-800/50 p-3 text-xs text-amber-200">
-                💡 <b>מה לעשות?</b> צלם את החלון הזה ושלח לרון. הוא יבדוק ויתקן בקוד.
-              </div>
+                  
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {result.issues.map((issue, idx) => (
+                      <div key={idx} className="rounded-lg bg-stone-900 border border-stone-700 p-3">
+                        <div className="text-sm text-rose-300 font-bold mb-1">
+                          {issue.type === 'session_imbalance' && `🎲 ערב ${issue.date}`}
+                          {issue.type === 'year_imbalance' && `📅 שנת ${issue.year}`}
+                          {issue.type === 'hidden_players_active' && `👻 שחקנים מוסתרים פעילים`}
+                        </div>
+                        <div className="text-xs text-stone-300">
+                          {issue.message}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <div className="rounded-lg bg-amber-950/30 border border-amber-800/50 p-3 text-xs text-amber-200">
+                    💡 <b>מה לעשות?</b> צלם את החלון הזה ושלח לרון. הוא יבדוק ויתקן בקוד.
+                  </div>
+                </>
+              )}
             </div>
             
             <div className="p-4 border-t border-stone-800">
@@ -1657,7 +1737,7 @@ const MainLeaderboard = ({ stats, sessions, hiddenPlayers = [], allSessions, isS
           )}
         </div>
       </div>
-      <div className="relative overflow-auto rounded-b-2xl" dir="rtl" style={{ maxHeight: '70vh', WebkitOverflowScrolling: 'touch' }}>
+      <div className="relative overflow-x-auto rounded-b-2xl" dir="rtl" style={{ WebkitOverflowScrolling: 'touch' }}>
         <table className="w-full text-sm border-collapse">
           <thead className="sticky top-0 z-40">
             <tr>
