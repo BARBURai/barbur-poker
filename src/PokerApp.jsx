@@ -14,7 +14,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.28';
+const APP_VERSION = 'v2.33.29';
 const APP_BUILD_TIME = '02/05/2026 17:30';
 const APP_NOTES = '🦢 ברבור גדול בגרף + תצוגה אופקית + תיקון padding + ⚠️ אזהרה בטבלה היומית';
 
@@ -1385,16 +1385,21 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
         </div>
         <div className="flex items-center gap-2">
           <PlayerPicker allPlayers={playersForPicker} selected={selectedPlayers} onChange={onPlayersChange} />
-          {/* 🆕 כפתור תצוגה אופקית - לראות הגרף בנוחות יותר */}
-          {isMobile && !fullscreen && (
+          {/* 🆕 כפתור תצוגה אופקית - מופיע רק במצב המוגדל (fullscreen) */}
+          {isMobile && fullscreen && (
             <button onClick={() => setLandscape(true)}
               className="rounded-lg border border-stone-700 bg-stone-900 p-2 text-stone-300 hover:bg-stone-800 transition" title="תצוגה אופקית">
               <span style={{ display: 'inline-block', transform: 'rotate(90deg)', fontSize: '14px' }}>📱</span>
             </button>
           )}
           <button onClick={onFullscreenToggle}
-            className="rounded-lg border border-stone-700 bg-stone-900 p-2 text-stone-300 hover:bg-stone-800 transition" title={fullscreen ? 'חזור' : 'מסך מלא'}>
-            {fullscreen ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            className={`rounded-lg border p-2 transition ${
+              fullscreen
+                ? 'border-red-600 bg-red-900/40 text-red-200 hover:bg-red-800/60'
+                : 'border-stone-700 bg-stone-900 text-stone-300 hover:bg-stone-800'
+            }`}
+            title={fullscreen ? 'סגור תצוגה מוגדלת' : 'מסך מלא'}>
+            {fullscreen ? <X className="h-5 w-5" /> : <Maximize2 className="h-4 w-4" />}
           </button>
         </div>
       </div>
@@ -1429,7 +1434,7 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
       
       <div style={{ width: '100%', height: chartHeight }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 10, right: 8, left: 8, bottom: isMobile ? 40 : 10 }}>
+          <LineChart data={data} margin={{ top: 10, right: 30, left: -15, bottom: isMobile ? 40 : 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
             <XAxis dataKey="label" stroke="#78716c" style={{ fontSize: isMobile ? '10px' : '11px' }} 
               angle={isMobile ? -45 : 0} textAnchor={isMobile ? 'end' : 'middle'} height={isMobile ? 50 : 30} />
@@ -1481,7 +1486,6 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
       {landscape && (
         <div 
           className="fixed inset-0 z-[200] bg-black flex items-center justify-center"
-          onClick={() => setLandscape(false)}
         >
           {/* תוכן הגרף מסובב 90 מעלות - תופס את כל המסך כאופקי */}
           <div 
@@ -1489,22 +1493,25 @@ const CumulativeChart = ({ sessions, allSessions, stats, fullscreen, onFullscree
               width: '100vh',
               height: '100vw',
               transform: 'rotate(90deg)',
+              position: 'relative',
             }}
             className="bg-stone-950 p-4"
-            onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between mb-3">
+            {/* כפתור X בולט בפינה - עיצוב אדום, גדול, עם z-index גבוה */}
+            <button 
+              onClick={() => setLandscape(false)}
+              style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 250 }}
+              className="rounded-lg border-2 border-red-600 bg-red-900/80 p-3 text-red-100 hover:bg-red-800 shadow-lg"
+              title="סגור תצוגה אופקית"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <div className="flex items-center justify-between mb-3 pr-16">
               <h3 className="text-lg font-bold text-amber-200">רווח מצטבר השנה - תצוגה אופקית</h3>
-              <button 
-                onClick={() => setLandscape(false)}
-                className="rounded-lg border border-stone-700 bg-stone-900 p-2 text-stone-300 hover:bg-stone-800"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
             <div style={{ width: '100%', height: 'calc(100% - 50px)' }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data} margin={{ top: 10, right: 8, left: 8, bottom: 30 }}>
+                <LineChart data={data} margin={{ top: 10, right: 30, left: -15, bottom: 30 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#292524" />
                   <XAxis dataKey="label" stroke="#78716c" style={{ fontSize: '12px' }} />
                   <YAxis stroke="#78716c" style={{ fontSize: '12px' }} width={45} />
