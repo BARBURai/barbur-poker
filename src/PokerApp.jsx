@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.31';
-const APP_BUILD_TIME = '02/05/2026 23:00';
-const APP_NOTES = '📊 ניתוח שימוש משתמשים (סופר אדמין) + תיקוני גרף + סימון בעיות ידועות';
+const APP_VERSION = 'v2.33.32';
+const APP_BUILD_TIME = '03/05/2026 22:00';
+const APP_NOTES = '📊 שיפור ניתוח שימוש: גרף עמודות אופקי + פורמט זמן מדויק';
 
 
 // ===== הרשאות מנהל =====
@@ -2023,14 +2023,23 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
   // צבעים לגרף עוגה
   const PIE_COLORS = ['#fbbf24', '#10b981', '#3b82f6', '#a855f7', '#ec4899', '#f97316', '#06b6d4', '#84cc16'];
   
-  // פורמט זמן - דקות:שניות
+  // פורמט זמן - שניות / דקות מדויקות / שעות
   const formatTime = (seconds) => {
-    if (!seconds) return '0 ד׳';
+    if (!seconds || seconds < 1) return '0 ש׳';
+    // פחות מדקה - שניות מלאות
+    if (seconds < 60) return `${Math.round(seconds)} ש׳`;
+    // פחות מ-10 דקות - דקות עם עשיריות
+    if (seconds < 600) {
+      const mins = (seconds / 60).toFixed(1);
+      return `${mins} ד׳`;
+    }
+    // פחות משעה - דקות שלמות
     const minutes = Math.round(seconds / 60);
     if (minutes < 60) return `${minutes} ד׳`;
+    // יותר משעה
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-    return `${hours}:${String(mins).padStart(2, '0')} ש׳`;
+    return `${hours}:${String(mins).padStart(2, '0')} ש״ע`;
   };
   
   // פורמט תאריך אחרון
@@ -2136,30 +2145,37 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
                 </div>
               )}
               
-              {/* גרף עוגה - מסכים פופולריים */}
+              {/* גרף עמודות אופקי - מסכים פופולריים */}
               {screenPieData.length > 0 && (
                 <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3">
                   <div className="text-xs text-stone-400 font-bold mb-2">📊 מסכים פופולריים</div>
-                  <div style={{ width: '100%', height: 200 }}>
+                  <div style={{ width: '100%', height: Math.max(180, screenPieData.length * 32 + 20) }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={screenPieData}
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={70}
-                          dataKey="value"
-                          label={({ name, value }) => `${value}`}
-                        >
+                      <BarChart 
+                        data={screenPieData} 
+                        layout="vertical"
+                        margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke="#292524" horizontal={false} />
+                        <XAxis type="number" stroke="#78716c" style={{ fontSize: '10px' }} />
+                        <YAxis 
+                          type="category" 
+                          dataKey="name" 
+                          stroke="#d6d3d1" 
+                          style={{ fontSize: '11px', fontFamily: 'Assistant' }} 
+                          width={110}
+                          interval={0}
+                        />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '11px' }}
+                          cursor={{ fill: 'rgba(251, 191, 36, 0.1)' }}
+                        />
+                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                           {screenPieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                           ))}
-                        </Pie>
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '11px' }}
-                        />
-                        <Legend wrapperStyle={{ fontSize: '11px', fontFamily: 'Assistant' }} />
-                      </PieChart>
+                        </Bar>
+                      </BarChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
