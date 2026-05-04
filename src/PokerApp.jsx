@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.33';
-const APP_BUILD_TIME = '04/05/2026 22:15';
-const APP_NOTES = '🚨 תיקון חירום: באג שגרם למסך ירוק ריק במסך הלייב + השבתת אנליטיקה';
+const APP_VERSION = 'v2.33.35';
+const APP_BUILD_TIME = '05/05/2026 01:30';
+const APP_NOTES = '🔧 תיקון באג מארח/אירוח: סנכרון אוטומטי + תיקון תזכורות שגויות בעת הטעינה';
 
 
 // ===== הרשאות מנהל =====
@@ -8648,12 +8648,17 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     setHasLoadedSaved(true);
   }, [isOpen, hasLoadedSaved]);
 
-  // 💸 סנכרון אוטומטי - אם נבחר מארח, hostingRecipient נטען איתו
+  // 💸 סנכרון אוטומטי - hostingRecipient תמיד עוקב אחרי המארח (host)
+  // 🔧 תיקון באג v2.33.35: לפני התיקון, אם hostingRecipient כבר היה מלא (מערב קודם בlocalStorage),
+  // הוא לא היה מתעדכן כשהמארח השתנה. עכשיו הוא מתעדכן בכל שינוי של host.
   useEffect(() => {
-    if (host && !hostingRecipient) {
-      setHostingRecipient(host);
+    if (host) {
+      // אם המארח השתנה - תמיד עדכן את hostingRecipient בהתאם
+      if (hostingRecipient !== host) {
+        setHostingRecipient(host);
+      }
     }
-  }, [host, hostingRecipient]);
+  }, [host]);
 
   // 📡 שידור חי ל-Firebase - כל פעם שמשתתפים/buy-ins משתנים
   useEffect(() => {
@@ -12583,6 +12588,44 @@ export default function PokerApp() {
     return () => clearInterval(interval);
   }, []);
   
+  // 🔧 v2.33.35 - תיקון אוטומטי של תזכורות אירוח שגויות
+  // הבעיה: בערבים שנשמרו לפני התיקון, hostingPayment.recipient יכול להיות שונה
+  // ממארח האמיתי של הערב (בגלל הבאג בסנכרון). מתקנים את התזכורות הקיימות לפי
+  // מקור האמת - הערב ההיסטורי ב-Firestore (שדה host).
+  useEffect(() => {
+    if (!allSessions || allSessions.length === 0) return;
+    if (!paymentReminders || paymentReminders.length === 0) return;
+    
+    // בונים מילון מהיר: date → host (הערב ההיסטורי, מקור האמת)
+    const sessionHostByDate = {};
+    allSessions.forEach(s => {
+      if (s.date && s.host) {
+        sessionHostByDate[s.date] = s.host;
+      }
+    });
+    
+    let needsUpdate = false;
+    const fixed = paymentReminders.map(r => {
+      // רק תזכורות אירוח (לא settlement)
+      if (r.type !== 'hosting') return r;
+      const correctHost = sessionHostByDate[r.sessionDate];
+      // אם הערב לא קיים בהיסטוריה - לא נוגעים
+      if (!correctHost) return r;
+      // אם המקבל בתזכורת לא תואם למארח בהיסטוריה - מתקנים
+      if (r.to !== correctHost) {
+        needsUpdate = true;
+        console.log(`🔧 תיקון תזכורת אירוח: ${r.sessionDate} - מקבל שונה מ-${r.to} ל-${correctHost}`);
+        return { ...r, to: correctHost, autoFixed: true };
+      }
+      return r;
+    });
+    
+    if (needsUpdate) {
+      savePaymentReminders(fixed);
+      setPaymentReminders(fixed);
+    }
+  }, [allSessions, paymentReminders.length]); // רץ כשהערבים נטענים או כשמספר התזכורות משתנה
+  
   // 🆕 רענון יומי - מאלץ re-render בחצות כדי שהמארח הבא יתעדכן
   // משתנה todayKey משתנה כשתאריך ישראל משתנה
   const [todayKey, setTodayKey] = useState(() => getTodayIsrael());
@@ -14532,54 +14575,75 @@ export default function PokerApp() {
         {/* Content */}
         {tab === 'dashboard' && (
           <>
-            {/* 🎂 כרטיס יום הולדת לחוגג היום (לכל מי שזה לא הוא) */}
+            {/* 🎂 כרטיסי יום הולדת לחוגגים היום (כל מי שזה לא הוא ולא מוסתר) */}
             {(() => {
               const today = new Date();
               const todayStr = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}`;
-              const birthdayPerson = Object.entries(birthdays).find(([n, d]) => d === todayStr && n !== currentUser);
-              if (!birthdayPerson) return null;
-              const [bdayName] = birthdayPerson;
-              const bdayPhone = phones[bdayName]?.phone;
+              const dismissKey = `poker_dismissed_birthdays_${today.getFullYear()}_${todayStr.replace('/', '_')}`;
               
-              const greetings = [
-                `${bdayName}, יום הולדת שמח אח! 🎉🎂 שתהיה לך שנה מלאה בניצחונות, צ'יפים, ופלאשים בריבר 🃏`,
-                `מזל טוב ${bdayName}! 🥳 שכל הקלפים יעבדו לטובתך השנה - הן בפוקר והן בחיים! 🍀`,
-                `${bdayName} יקר 🎁 יום הולדת שמח! מאחל לך שנה של אול-אינים מנצחים, שתחזור הביתה תמיד עם ערמה 🎊`,
-                `יומולדת שמח ${bdayName}! 🎈 שהשנה הזאת תהיה הכי טובה - אתה האלוף שלנו 🏆`,
+              // קריאת רשימת ימי הולדת שכבר נסגרו היום
+              let dismissedToday = [];
+              try {
+                const raw = window.localStorage.getItem(dismissKey);
+                if (raw) dismissedToday = JSON.parse(raw) || [];
+              } catch {}
+              
+              // מציאת כל החוגגים היום - מסנן: לא המשתמש הנוכחי, לא מוסתרים, לא נסגרו
+              const birthdayPeople = Object.entries(birthdays).filter(
+                ([n, d]) => d === todayStr && n !== currentUser && !hiddenPlayers.includes(n) && !dismissedToday.includes(n)
+              );
+              
+              if (birthdayPeople.length === 0) return null;
+              
+              const greetingTemplates = [
+                (name) => `${name}, יום הולדת שמח אח! 🎉🎂 שתהיה לך שנה מלאה בניצחונות, צ'יפים, ופלאשים בריבר 🃏`,
+                (name) => `מזל טוב ${name}! 🥳 שכל הקלפים יעבדו לטובתך השנה - הן בפוקר והן בחיים! 🍀`,
+                (name) => `${name} יקר 🎁 יום הולדת שמח! מאחל לך שנה של אול-אינים מנצחים, שתחזור הביתה תמיד עם ערמה 🎊`,
+                (name) => `יומולדת שמח ${name}! 🎈 שהשנה הזאת תהיה הכי טובה - אתה האלוף שלנו 🏆`,
               ];
               
-              const sendToGroup = async () => {
-                const greeting = greetings[Math.floor(Math.random() * greetings.length)];
+              const sendToGroup = async (bdayName) => {
+                const greeting = greetingTemplates[Math.floor(Math.random() * greetingTemplates.length)](bdayName);
                 
-                // ניסיון לשלוח דרך Web Share API (פותח את ה-share sheet של המכשיר - שם בוחרים את קבוצת ווטסאפ)
                 if (navigator.share) {
                   try {
                     await navigator.share({ text: greeting });
                     return;
-                  } catch (e) {
-                    // המשתמש סגר את ה-share sheet או שהמכשיר לא תומך
-                  }
+                  } catch (e) {}
                 }
                 
-                // Fallback - העתקה ללוח + הודעה
                 try {
                   await navigator.clipboard.writeText(greeting);
                   alert('✅ הברכה הועתקה!\n\nעכשיו תוכל לפתוח את קבוצת הוואטסאפ ולהדביק (לחיצה ארוכה → הדבק).');
                 } catch (e) {
-                  // Fallback אחרון - WhatsApp web ללא נמען
                   const text = encodeURIComponent(greeting);
                   window.open(`https://wa.me/?text=${text}`, '_blank');
                 }
               };
               
-              return (
-                <div className="mb-3 rounded-2xl p-4 relative overflow-hidden" style={{
+              const dismissBirthday = (name) => {
+                try {
+                  const updated = [...dismissedToday, name];
+                  window.localStorage.setItem(dismissKey, JSON.stringify(updated));
+                } catch {}
+                // טריגר רענון - שינוי דמה במצב
+                setBirthdays({...birthdays});
+              };
+              
+              return birthdayPeople.map(([bdayName]) => (
+                <div key={bdayName} className="mb-3 rounded-2xl p-4 relative overflow-hidden" style={{
                   background: 'linear-gradient(135deg, rgba(251,191,36,0.2) 0%, rgba(146,64,14,0.3) 50%, rgba(190,24,93,0.2) 100%)',
                   border: '2px solid rgba(251,191,36,0.5)',
                   boxShadow: '0 0 20px rgba(251,191,36,0.2)',
                 }}>
+                  {/* כפתור X לסגירה */}
+                  <button onClick={() => dismissBirthday(bdayName)}
+                    className="absolute top-2 left-2 z-10 rounded-full bg-stone-900/80 hover:bg-stone-800 text-stone-400 hover:text-white w-7 h-7 flex items-center justify-center transition"
+                    title="הסתר עד מחר">
+                    <X className="h-4 w-4" />
+                  </button>
                   <div className="absolute top-2 right-3 text-xl animate-bounce" style={{animationDelay: '0s'}}>🎉</div>
-                  <div className="absolute top-3 left-4 text-lg animate-bounce" style={{animationDelay: '0.5s'}}>🎊</div>
+                  <div className="absolute top-3 left-12 text-lg animate-bounce" style={{animationDelay: '0.5s'}}>🎊</div>
                   <div className="flex items-center gap-3">
                     <div className="text-4xl">🎂</div>
                     <div className="flex-1">
@@ -14590,7 +14654,7 @@ export default function PokerApp() {
                       <div className="text-xs text-stone-300 mt-0.5">אל תשכח לברך אותו!</div>
                     </div>
                   </div>
-                  <button onClick={sendToGroup}
+                  <button onClick={() => sendToGroup(bdayName)}
                     className="w-full mt-3 rounded-lg py-2.5 font-bold text-white text-sm transition hover:scale-[1.02] flex items-center justify-center gap-2"
                     style={{
                       background: 'linear-gradient(135deg, #25d366 0%, #128c7e 100%)',
@@ -14602,7 +14666,7 @@ export default function PokerApp() {
                     שלח ברכה לקבוצה
                   </button>
                 </div>
-              );
+              ));
             })()}
             
             <DashboardCarousel 
