@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.32';
-const APP_BUILD_TIME = '03/05/2026 22:00';
-const APP_NOTES = '📊 שיפור ניתוח שימוש: גרף עמודות אופקי + פורמט זמן מדויק';
+const APP_VERSION = 'v2.33.33';
+const APP_BUILD_TIME = '04/05/2026 22:15';
+const APP_NOTES = '🚨 תיקון חירום: באג שגרם למסך ירוק ריק במסך הלייב + השבתת אנליטיקה';
 
 
 // ===== הרשאות מנהל =====
@@ -420,8 +420,14 @@ const flushAnalytics = async () => {
 
 // API ציבורי לתיעוד אירועים
 
+// 🚨 v2.33.33 - אנליטיקה הושבתה זמנית עקב באג שגרם לקריסת האפליקציה
+// כל הפונקציות מטה הן no-op כדי לוודא שהאפליקציה עובדת.
+// נחזיר את האנליטיקה אחרי שנמצא את הסיבה.
+const ANALYTICS_DISABLED = true;
+
 // אתחול תיעוד - קוראים פעם אחת בכניסה
 const startAnalyticsSession = (userName) => {
+  if (ANALYTICS_DISABLED) return;
   if (!userName) return;
   if (analyticsSessionStarted && analyticsCurrentUser === userName) return; // כבר פעיל
   
@@ -478,6 +484,7 @@ const startAnalyticsSession = (userName) => {
 
 // תיעוד צפייה במסך
 const trackScreen = (screenName) => {
+  if (ANALYTICS_DISABLED) return;
   if (!analyticsCurrentUser || !screenName) return;
   if (!analyticsBuffer) initAnalyticsBuffer();
   analyticsBuffer.screens[screenName] = (analyticsBuffer.screens[screenName] || 0) + 1;
@@ -486,6 +493,7 @@ const trackScreen = (screenName) => {
 
 // תיעוד פעולה
 const trackAction = (actionName) => {
+  if (ANALYTICS_DISABLED) return;
   if (!analyticsCurrentUser || !actionName) return;
   if (!analyticsBuffer) initAnalyticsBuffer();
   analyticsBuffer.actions[actionName] = (analyticsBuffer.actions[actionName] || 0) + 1;
@@ -494,6 +502,7 @@ const trackAction = (actionName) => {
 
 // טעינת היסטוריה לתצוגת הדוח (וגם מחיקה אוטומטית של ישנים מעל 180 יום)
 const loadAnalyticsHistory = async (days = 180) => {
+  if (ANALYTICS_DISABLED) return [];
   const result = [];
   const today = new Date();
   const cutoffDate = new Date(today);
@@ -8423,6 +8432,8 @@ const HostReminderModal = ({ sessionDate, sessionHost, onConfirm, onDecline, onL
 // ============================================================
 // מציג רשימת משתתפים + buy-ins של ערב חי שמתנהל כעת
 const LiveBroadcastViewer = ({ broadcast, onClose, currentUser }) => {
+  const [sortByAlphabet, setSortByAlphabet] = useState(false);
+  
   if (!broadcast || !broadcast.active) return null;
   
   const participants = broadcast.participants || [];
