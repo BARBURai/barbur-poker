@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.35';
-const APP_BUILD_TIME = '05/05/2026 01:30';
-const APP_NOTES = '🔧 תיקון באג מארח/אירוח: סנכרון אוטומטי + תיקון תזכורות שגויות בעת הטעינה';
+const APP_VERSION = 'v2.33.36';
+const APP_BUILD_TIME = '05/05/2026 02:15';
+const APP_NOTES = '🔄 איפוס מיידי של רשימת נרשמים בשינוי מארח + כפתור Waze ליד כתובת המארח';
 
 
 // ===== הרשאות מנהל =====
@@ -4533,25 +4533,19 @@ const RegistrationTab = ({
     if (!isSuperAdmin) return;
     
     if (registration.sessionDate && registration.sessionDate !== nextSession.date) {
-      const oldDate = new Date(registration.sessionDate + 'T00:00:00');
-      const resetAt = new Date(oldDate);
-      resetAt.setDate(resetAt.getDate() + 1);
-      resetAt.setHours(6, 0, 0, 0);
-      
-      const now = new Date();
-      if (now >= resetAt) {
-        // איפוס + אכלוס מארח חדש אוטומטית
-        const fresh = {
-          sessionDate: nextSession.date,
-          host: nextSession.host,
-          entries: [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }],
-          resetAt: new Date().toISOString(),
-        };
-        onUpdate(fresh);
-        // 📌 איפוס רישום ברזל יחד עם איפוס המפגש
-        if (onIronUpdate && (ironRegistration?.players?.length || ironRegistration?.refused?.length)) {
-          onIronUpdate({ players: [], refused: [] });
-        }
+      // 🔧 v2.33.36: איפוס מיידי - ברגע שהמארח/תאריך משתנה (בלי לחכות ל-6:00 בבוקר)
+      const fresh = {
+        sessionDate: nextSession.date,
+        host: nextSession.host || '',
+        entries: nextSession.host
+          ? [{ name: nextSession.host, addedAt: new Date().toISOString(), isHost: true }]
+          : [],
+        resetAt: new Date().toISOString(),
+      };
+      onUpdate(fresh);
+      // 📌 איפוס רישום ברזל יחד עם איפוס המפגש
+      if (onIronUpdate && (ironRegistration?.players?.length || ironRegistration?.refused?.length)) {
+        onIronUpdate({ players: [], refused: [] });
       }
     }
   }, [nextSession, registration, onUpdate, isSuperAdmin]);
@@ -4766,9 +4760,20 @@ const RegistrationTab = ({
                 מארח: <span className="font-bold text-amber-300">{nextSession.host}</span>
               </div>
               {nextSession.address && (
-                <div className="text-xs text-stone-400 mt-0.5 flex items-center gap-1">
-                  <MapPin className="h-3 w-3 text-stone-500" />
-                  {nextSession.address}
+                <div className="text-xs text-stone-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3 w-3 text-stone-500" />
+                    {nextSession.address}
+                  </span>
+                  <a
+                    href={`https://waze.com/ul?q=${encodeURIComponent(nextSession.address)}&navigate=yes`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-600/40 hover:border-cyan-500 px-2 py-0.5 text-cyan-300 hover:text-cyan-200 transition text-[11px] font-bold"
+                    title="פתח ב-Waze"
+                  >
+                    🚗 Waze
+                  </a>
                 </div>
               )}
               {nextSession.notes && (
