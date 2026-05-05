@@ -1,9 +1,10 @@
-// 🔔 Service Worker להתראות Push - גרסה v5
+// 🔔 Service Worker להתראות Push - גרסה v6 (גישה משולבת)
 // קובץ זה רץ ברקע גם כשהאפליקציה סגורה
 //
-// תיקונים בגרסה v5:
-// - תמיד משתמש ב-openWindow במקום focus (כי focus לא עובד ב-PWA בטלפון)
-// - מקווה שזה יפתח את ה-PWA אם הוא מותקן
+// תיקונים בגרסה v6:
+// - שילוב של focus (לאפליקציה פתוחה) + openWindow (כשסגורה)
+// - ניסיון פתיחת ה-PWA דרך כל הדרכים האפשריות
+// - לוגים מפורטים לדיבאג
 
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.7.0/firebase-messaging-compat.js');
@@ -23,17 +24,17 @@ const APP_URL = 'https://barbur-poker.vercel.app/';
 
 // 🔔 Handler ראשי - מטפל בכל הודעת push שמגיעה
 self.addEventListener('push', (event) => {
-  console.log('[SW v5] 📥 Push event received');
+  console.log('[SW v6] 📥 Push event received');
   
   let payload = {};
   try {
     payload = event.data ? event.data.json() : {};
   } catch (e) {
-    console.error('[SW v5] Failed to parse payload:', e);
+    console.error('[SW v6] Failed to parse payload:', e);
     payload = { notification: { title: 'הודעה חדשה', body: 'יש לך הודעה חדשה' } };
   }
   
-  console.log('[SW v5] Payload:', JSON.stringify(payload));
+  console.log('[SW v6] Payload:', JSON.stringify(payload));
   
   const title = payload.notification?.title || payload.data?.title || 'פוקר ברבורי תל מונד';
   const body = payload.notification?.body || payload.data?.body || '';
@@ -56,14 +57,14 @@ self.addEventListener('push', (event) => {
   
   event.waitUntil(
     self.registration.showNotification(title, options)
-      .then(() => console.log('[SW v5] ✅ Notification displayed:', title))
-      .catch(err => console.error('[SW v5] ❌ Show notification failed:', err))
+      .then(() => console.log('[SW v6] ✅ Notification displayed:', title))
+      .catch(err => console.error('[SW v6] ❌ Show notification failed:', err))
   );
 });
 
-// 🆕 v5 - תמיד משתמש ב-openWindow (focus לא עובד ב-PWA)
+// 🆕 v6 - גישה משולבת: focus קודם (לאפליקציה פתוחה) ואז openWindow כ-fallback
 self.addEventListener('notificationclick', (event) => {
-  console.log('[SW v5] 👆 Notification clicked');
+  console.log('[SW v6] 👆 Notification clicked at', new Date().toISOString());
   
   event.notification.close();
   
@@ -72,41 +73,90 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     (async () => {
       try {
-        // 🪟 v5: תמיד פותח חלון חדש - זה אמור להפעיל את ה-PWA אם מותקן
-        // במקום focus (שלא עובד ב-PWA), אנחנו פותחים URL חדש
-        // הדפדפן/מערכת תזהה שיש PWA מותקן ותפתח אותו
+        // שלב 1: חיפוש חלון פתוח של האפליקציה
+        const allClients = await clients.matchAll({ 
+          type: 'window',
+          includeUncontrolled: true 
+        });
         
-        console.log('[SW v5] Opening:', targetUrl);
+        console.log('[SW v6] Found', allClients.length, 'client(s)');
+        allClients.forEach((c, i) => {
+          console.log(`[SW v6]   Client ${i}: url=${c.url}, focused=${c.focused}, visibility=${c.visibilityState}, frameType=${c.frameType || 'unknown'}`);
+        });
+        
+        // סינון רק לחלונות של האפליקציה
+        const matchingClients = allClients.filter(client => {
+          const clientUrl = client.url || '';
+          return (clientUrl.includes('barbur-poker') || 
+                  clientUrl.includes('vercel.app') ||
+                  clientUrl.includes('localhost')) && 
+                 'focus' in client;
+        });
+        
+        console.log('[SW v6] Matching clients:', matchingClients.length);
+        
+        // שלב 2: אם יש חלון פתוח - focus (זה עבד ב-v5 כשהאפליקציה פתוחה)
+        if (matchingClients.length > 0) {
+          // עדיפות לחלון נראה
+          const visibleClient = matchingClients.find(c => c.visibilityState === 'visible');
+          const targetClient = visibleClient || matchingClients[0];
+          
+          console.log('[SW v6] ✅ Found existing window, trying focus:', targetClient.url);
+          
+          try {
+            await targetClient.focus();
+            console.log('[SW v6] ✅ Focus successful');
+            return;
+          } catch (focusErr) {
+            console.error('[SW v6] ❌ Focus failed:', focusErr);
+            // ממשיכים ל-openWindow
+          }
+        }
+        
+        // שלב 3: אין חלון פתוח (או focus נכשל) - openWindow
+        console.log('[SW v6] 🪟 No window or focus failed, opening new:', targetUrl);
         
         if (clients.openWindow) {
-          const newWindow = await clients.openWindow(targetUrl);
-          if (newWindow) {
-            console.log('[SW v5] ✅ Window opened/focused');
-            return newWindow;
-          } else {
-            console.warn('[SW v5] ⚠️ openWindow returned null');
+          try {
+            const newWindow = await clients.openWindow(targetUrl);
+            if (newWindow) {
+              console.log('[SW v6] ✅ New window opened');
+              return;
+            } else {
+              console.warn('[SW v6] ⚠️ openWindow returned null - probably blocked');
+            }
+          } catch (openErr) {
+            console.error('[SW v6] ❌ openWindow failed:', openErr);
           }
-        } else {
-          console.error('[SW v5] ❌ clients.openWindow not available');
+        }
+        
+        // שלב 4: אם הכל נכשל - ניסיון אחרון לפתוח ב-URL אחר (מחזיק bypass לזיכרון cache)
+        console.log('[SW v6] 🔄 Last attempt with cache-busting URL');
+        try {
+          const fallbackUrl = APP_URL + '?fromNotif=' + Date.now();
+          await clients.openWindow(fallbackUrl);
+          console.log('[SW v6] ✅ Fallback window opened');
+        } catch (lastErr) {
+          console.error('[SW v6] ❌ All attempts failed:', lastErr);
         }
       } catch (err) {
-        console.error('[SW v5] ❌ Error:', err);
+        console.error('[SW v6] ❌ General error:', err);
       }
     })()
   );
 });
 
 self.addEventListener('notificationclose', (event) => {
-  console.log('[SW v5] 🗙 Notification closed');
+  console.log('[SW v6] 🗙 Notification closed');
 });
 
 self.addEventListener('install', (event) => {
-  console.log('[SW v5] 🔧 Installing v5...');
+  console.log('[SW v6] 🔧 Installing v6...');
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW v5] ✅ Activated v5');
+  console.log('[SW v6] ✅ Activated v6');
   event.waitUntil(self.clients.claim());
 });
 
