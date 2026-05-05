@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.39';
-const APP_BUILD_TIME = '05/05/2026 14:00';
-const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
+const APP_VERSION = 'v2.33.40';
+const APP_BUILD_TIME = '05/05/2026 14:30';
+const APP_NOTES = '⏰ עדכון טקסט: הרישום נפתח בין 10:00-12:00 + זמן מדויק לסופר אדמין ביום הרישום';
 
 
 // ===== הרשאות מנהל =====
@@ -4443,6 +4443,72 @@ const DeviceLocksManager = ({ isOpen, onClose, deviceLocks, currentDeviceId, onR
 };
 
 
+// 🎯 v2.33.40 - מציג לסופר אדמין את הזמן המדויק שנבחר לפתיחת הרישום
+// קורא את זמן הפתיחה מ-Firestore (poker_daily_random_time_v1)
+// מוצג רק לסופר אדמין, רק ביום הרישום
+const SuperAdminRandomTimeIndicator = ({ isSuperAdmin, registrationDateStr }) => {
+  const [randomTimeInfo, setRandomTimeInfo] = useState(null);
+  
+  useEffect(() => {
+    if (!isSuperAdmin || !registrationDateStr) return;
+    
+    // בדיקה אם היום הוא יום הרישום (התאריך בקוד תואם לתאריך היום)
+    const today = getTodayIsrael();
+    if (today !== registrationDateStr) return;
+    
+    // קריאה מ-Firestore דרך REST API (קריאה בלבד, לא כותב)
+    const fetchRandomTime = async () => {
+      try {
+        const response = await fetch(
+          'https://firestore.googleapis.com/v1/projects/barbur-poker/databases/(default)/documents/app_data/poker_daily_random_time_v1'
+        );
+        if (!response.ok) return;
+        const data = await response.json();
+        const valueStr = data?.fields?.value?.stringValue;
+        if (!valueStr) return;
+        const parsed = JSON.parse(valueStr);
+        // וודא שהתאריך תואם להיום
+        if (parsed.sessionDate && parsed.targetHourIsrael !== undefined) {
+          setRandomTimeInfo(parsed);
+        }
+      } catch (e) {
+        // אין מה לעשות - סתם לא נציג
+      }
+    };
+    
+    fetchRandomTime();
+  }, [isSuperAdmin, registrationDateStr]);
+  
+  if (!isSuperAdmin || !registrationDateStr) return null;
+  
+  // מציג רק ביום הרישום
+  const today = getTodayIsrael();
+  if (today !== registrationDateStr) return null;
+  
+  // אם אין זמן עדיין - מציג "ממתין לבחירה אוטומטית"
+  if (!randomTimeInfo) {
+    return (
+      <div className="text-[11px] text-amber-500/70 mt-1 flex items-center gap-1 font-bold">
+        🎯 ממתין לבחירה אוטומטית (גלוי רק לסופר אדמין)
+      </div>
+    );
+  }
+  
+  // מציג את הזמן המדויק
+  const hour = String(randomTimeInfo.targetHourIsrael).padStart(2, '0');
+  const minute = String(randomTimeInfo.targetMinuteIsrael).padStart(2, '0');
+  const wasSent = randomTimeInfo.sentNotification === true;
+  
+  return (
+    <div className="text-[11px] text-amber-500/90 mt-1 flex items-center gap-1 font-bold">
+      🎯 זמן מדויק היום: {hour}:{minute}
+      {wasSent && <span className="text-emerald-400">✓ נשלח</span>}
+      <span className="text-stone-500 font-normal">(גלוי רק לסופר אדמין)</span>
+    </div>
+  );
+};
+
+
 // המארח של המפגש הבא רשום אוטומטית במקום #1
 // שחקנים אחרים לוחצים "אני בא" כדי להירשם למקומות 2-11 או לסטנד ביי (12+)
 // הרישום נפתח ב-12:00 בצהריים למחרת המפגש האחרון
@@ -4740,7 +4806,7 @@ const RegistrationTab = ({
   
   const opensAtFormatted = registrationOpenInfo.opensAt ? 
     registrationOpenInfo.opensAt.toLocaleDateString('he-IL', {
-      weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit'
+      weekday: 'long', day: '2-digit', month: 'long'
     }) : null;
   
   return (
@@ -4804,9 +4870,15 @@ const RegistrationTab = ({
             </div>
             {opensAtFormatted && (
               <div className="text-xs text-stone-500 mt-1">
-                ⏰ הרישום נפתח: <span className="text-amber-400 font-bold">{opensAtFormatted}</span>
+                ⏰ הרישום נפתח: <span className="text-amber-400 font-bold">{opensAtFormatted} בשעה 10:00-12:00</span>
               </div>
             )}
+            
+            {/* 🎯 v2.33.40 - זמן מדויק לסופר אדמין בלבד (גלוי רק ביום הרישום) */}
+            <SuperAdminRandomTimeIndicator 
+              isSuperAdmin={isSuperAdmin}
+              registrationDateStr={registrationOpenInfo.opensAt ? registrationOpenInfo.opensAt.toISOString().split('T')[0] : null}
+            />
           </div>
         ) : (
           <div className="p-4 bg-emerald-950/30 border-t border-emerald-900/40">
@@ -5080,7 +5152,7 @@ const RegistrationTab = ({
         <div className="font-bold text-stone-300 mb-1">📜 כללי הרישום</div>
         <div>• {MAX_SLOTS} מקומות רשמיים • כל הקודם זוכה</div>
         <div>• מקום 12 ומעלה - סטנד ביי, יעלה אוטומטית אם מישהו יבטל</div>
-        <div>• הרישום נפתח ב-12:00 בצהריים למחרת המפגש הקודם</div>
+        <div>• הרישום נפתח בין 10:00-12:00 למחרת המפגש הקודם</div>
       </div>
     </div>
   );
