@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.36';
-const APP_BUILD_TIME = '05/05/2026 03:00';
-const APP_NOTES = '🎰 שיפור Flow ערב: סיכום בדשבורד + מסך לא נסגר בחצות + תיקון איפוס מארח';
+const APP_VERSION = 'v2.33.37';
+const APP_BUILD_TIME = '05/05/2026 11:00';
+const APP_NOTES = '🧪 ערב ניסיון יציג סיכום לסופר אדמין + תיקון כפתור "שמור ערב" שמשתנה ל"✓ נשמר"';
 
 
 // ===== הרשאות מנהל =====
@@ -7835,6 +7835,11 @@ const EveningSummaryCard = ({ playerName, isSuperAdmin }) => {
         if (!mounted) return;
         if (!data || !data.publishedAt) return;
         
+        // 🔒 v2.33.37: סיכום של ערב ניסיון - רק הסופר אדמין רואה
+        if (data.isTestEvening && !isSuperAdmin) {
+          return;
+        }
+        
         // 🔒 בדיקה: המשתמש השתתף בערב הזה?
         if (!data.results || data.results[playerName] === undefined) {
           // לא השתתף - אל תציג כלל
@@ -7885,27 +7890,32 @@ const EveningSummaryCard = ({ playerName, isSuperAdmin }) => {
   
   // האם זה הסיכום של האדמין שיצר אותו (= מצב בדיקה)?
   const isMyOwnSummary = summary.publishedBy === playerName;
+  const isTestSummary = summary.isTestEvening === true;
+  const showTestLabel = (isTestSummary || isMyOwnSummary) && isSuperAdmin;
+  const labelText = isTestSummary 
+    ? '🧪 ערב ניסיון • סיכום זה לא מוצג למשתתפים אחרים'
+    : '🧪 מצב בדיקה • זו התצוגה שהמשתתפים רואים';
   
   return (
     <div className="rounded-2xl border border-amber-700/40 bg-gradient-to-br from-amber-950/40 via-stone-950 to-stone-950 p-4 relative overflow-hidden" style={{
       boxShadow: '0 0 20px rgba(251,191,36,0.15)',
     }}>
-      {/* 🧪 תווית "מצב בדיקה" - מוצגת רק לסופר אדמין שרואה את הסיכום שיצר */}
-      {isMyOwnSummary && isSuperAdmin && (
+      {/* 🧪 תווית "מצב בדיקה" - מוצגת לסופר אדמין */}
+      {showTestLabel && (
         <div className="absolute top-0 right-0 left-0 bg-yellow-600/90 text-stone-900 text-[10px] font-extrabold tracking-widest px-3 py-1 text-center z-10">
-          🧪 מצב בדיקה • זו התצוגה שהמשתתפים רואים
+          {labelText}
         </div>
       )}
       
       {/* כפתור X לסגירה */}
       <button onClick={handleDismiss}
-        className={`absolute ${isMyOwnSummary && isSuperAdmin ? 'top-9' : 'top-2'} left-2 z-10 rounded-full bg-stone-900/80 hover:bg-stone-800 text-stone-400 hover:text-white w-7 h-7 flex items-center justify-center transition`}
+        className={`absolute ${showTestLabel ? 'top-9' : 'top-2'} left-2 z-10 rounded-full bg-stone-900/80 hover:bg-stone-800 text-stone-400 hover:text-white w-7 h-7 flex items-center justify-center transition`}
         title="הסתר">
         <X className="h-4 w-4" />
       </button>
       
       {/* כותרת */}
-      <div className={`flex items-start gap-3 mb-3 pr-8 ${isMyOwnSummary && isSuperAdmin ? 'mt-6' : ''}`}>
+      <div className={`flex items-start gap-3 mb-3 pr-8 ${showTestLabel ? 'mt-6' : ''}`}>
         <div className="text-3xl">🎰</div>
         <div className="flex-1">
           <div className="text-xs text-amber-300 font-bold tracking-widest mb-0.5">סיכום הערב</div>
@@ -9035,24 +9045,24 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     // 📡 ניקוי שידור חי - הערב נגמר
     clearLiveBroadcast().catch(() => {});
     
-    // 📢 v2.33.36: פרסום סיכום הערב לדשבורד של כל המשתתפים
-    if (!isTestEvening) {
-      try {
-        const transfers = calculateSettlements(results);
-        const summary = {
-          sessionDate,
-          host: host || '',
-          pot: totalPot,
-          results,
-          transfers,
-          hostingPayment,
-          publishedAt: new Date().toISOString(),
-          publishedBy: adminName,
-          id: `summary_${sessionDate}_${Date.now()}`,
-        };
-        saveState(summary, EVENING_SUMMARY_KEY).catch(() => {});
-      } catch (e) {}
-    }
+    // 📢 v2.33.37: פרסום סיכום הערב לדשבורד
+    // גם לערב ניסיון - הסיכום נשמר עם דגל. רק סופר אדמין יראה סיכום של ערב ניסיון
+    try {
+      const transfers = calculateSettlements(results);
+      const summary = {
+        sessionDate,
+        host: host || '',
+        pot: totalPot,
+        results,
+        transfers,
+        hostingPayment,
+        publishedAt: new Date().toISOString(),
+        publishedBy: adminName,
+        id: `summary_${sessionDate}_${Date.now()}`,
+        isTestEvening: isTestEvening || false, // 🧪 דגל לשלוט בתצוגה
+      };
+      saveState(summary, EVENING_SUMMARY_KEY).catch(() => {});
+    } catch (e) {}
     
     setSavedEvening(true);
     // 🔧 v2.33.36: לא מאפסים ולא סוגרים - האדמין נשאר עם הסיכום על המסך לצילום
@@ -9100,24 +9110,24 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     // 📡 ניקוי שידור חי - הערב נגמר
     clearLiveBroadcast().catch(() => {});
     
-    // 📢 v2.33.36: פרסום סיכום הערב לדשבורד של כל המשתתפים
-    if (!isTestEvening) {
-      try {
-        const transfers = calculateSettlements(results);
-        const summary = {
-          sessionDate,
-          host: host || '',
-          pot: totalPot,
-          results,
-          transfers,
-          hostingPayment,
-          publishedAt: new Date().toISOString(),
-          publishedBy: adminName,
-          id: `summary_${sessionDate}_${Date.now()}`,
-        };
-        saveState(summary, EVENING_SUMMARY_KEY).catch(() => {});
-      } catch (e) {}
-    }
+    // 📢 v2.33.37: פרסום סיכום הערב לדשבורד
+    // גם לערב ניסיון - הסיכום נשמר עם דגל. רק סופר אדמין יראה סיכום של ערב ניסיון
+    try {
+      const transfers = calculateSettlements(results);
+      const summary = {
+        sessionDate,
+        host: host || '',
+        pot: totalPot,
+        results,
+        transfers,
+        hostingPayment,
+        publishedAt: new Date().toISOString(),
+        publishedBy: adminName,
+        id: `summary_${sessionDate}_${Date.now()}`,
+        isTestEvening: isTestEvening || false, // 🧪 דגל לשלוט בתצוגה
+      };
+      saveState(summary, EVENING_SUMMARY_KEY).catch(() => {});
+    } catch (e) {}
     
     setSavedEvening(true);
   };
@@ -9560,9 +9570,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                 
                 <div className="flex gap-2">
                   <button onClick={() => setClosing(false)} className="flex-1 rounded-lg border border-stone-700 bg-stone-900 px-4 py-3 text-stone-300">חזור</button>
-                  <button onClick={handleFinalSave} disabled={!isBalanced}
+                  <button onClick={handleFinalSave} disabled={!isBalanced || savedEvening}
                     className="flex-1 rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-700 px-4 py-3 font-bold text-white hover:from-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                    <Check className="h-4 w-4" /> שמור ערב
+                    <Check className="h-4 w-4" /> {savedEvening ? '✓ נשמר' : 'שמור ערב'}
                   </button>
                 </div>
               </div>
