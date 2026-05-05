@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.38';
-const APP_BUILD_TIME = '05/05/2026 13:45';
-const APP_NOTES = '🐛 תיקון שני: "כבר העברתי" באמת נשמר - מנע יצירה מחדש של תזכורות עם to שונה';
+const APP_VERSION = 'v2.33.39';
+const APP_BUILD_TIME = '05/05/2026 14:00';
+const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
 
 // ===== הרשאות מנהל =====
@@ -13277,6 +13277,7 @@ export default function PokerApp() {
   
   // 🆕 גיבויים - מודל ניהול גיבויים
   const [backupsModalOpen, setBackupsModalOpen] = useState(false);
+  const [registrationManagerOpen, setRegistrationManagerOpen] = useState(false); // 🆕 v2.33.39 - דיאלוג ניהול רישום
   const [backupsList, setBackupsList] = useState([]); // רשימת snapshots ב-Firebase
   
   // האם יש ערב פעיל בניהול חי
@@ -15004,56 +15005,7 @@ export default function PokerApp() {
                 registration={registration} onRegistrationUpdate={handleUpdateRegistration} />
             ) : (
               <>
-            {/* 🔒 כפתור הפעלה/כיבוי - מי שיש לו הרשאת registrationToggle בלבד */}
-            {can('registrationToggle') && (
-              <div className={`rounded-xl p-3 border-2 ${
-                registrationEnabled 
-                  ? 'bg-emerald-950/30 border-emerald-700' 
-                  : 'bg-stone-900 border-amber-800/60'
-              }`}>
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-bold text-amber-400 mb-0.5">🔒 אדמין</div>
-                    <div className="text-sm text-stone-200">
-                      הפיצ'ר {registrationEnabled ? 
-                        <span className="text-emerald-300 font-bold">פעיל אצל כולם</span> : 
-                        <span className="text-stone-400 font-bold">מוסתר משאר המשתמשים</span>
-                      }
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleToggleRegistrationFeature}
-                    className={`rounded-lg px-4 py-2 text-sm font-bold transition ${
-                      registrationEnabled
-                        ? 'bg-stone-700 hover:bg-stone-600 text-stone-200'
-                        : 'bg-emerald-700 hover:bg-emerald-600 text-white'
-                    }`}
-                  >
-                    {registrationEnabled ? 'כבה גלובלית' : 'הפעל לכולם'}
-                  </button>
-                </div>
-                
-                {/* 🆕 2 כפתורי פעולה ידניים - גלוי רק לסופר אדמין */}
-                {isSuperAdmin && (
-                  <div className="mt-3 pt-3 border-t border-stone-700/50 grid grid-cols-2 gap-2">
-                    <button
-                      onClick={handleManualResetRegistration}
-                      className="rounded-lg px-3 py-2 text-xs font-bold bg-amber-900/40 hover:bg-amber-900/60 border border-amber-800 text-amber-200 transition flex items-center justify-center gap-1"
-                      title="מאפס את הרשימה ומאכלס את המארח של המפגש הבא"
-                    >
-                      🔄 אפס רישום
-                    </button>
-                    <button
-                      onClick={handleManualSendNotification}
-                      className="rounded-lg px-3 py-2 text-xs font-bold bg-blue-900/40 hover:bg-blue-900/60 border border-blue-800 text-blue-200 transition flex items-center justify-center gap-1"
-                      title="שולח התראה לכל מי שאישר התראות שהרישום נפתח"
-                    >
-                      🔔 שלח התראה
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* 🔧 v2.33.39 - הכרטיס של ניהול רישום הועבר להמבורגר תחת "📋 ניהול רישום" */}
             
             <RegistrationTab
               hostingSchedule={hostingSchedule}
@@ -15260,6 +15212,17 @@ export default function PokerApp() {
                     className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-cyan-700/80 to-cyan-800/80 border border-cyan-700/50 px-4 py-3 text-white font-bold hover:from-cyan-600 hover:to-cyan-700 transition text-sm">
                     <span className="text-xl">💾</span>
                     <span>גיבוי ושחזור</span>
+                  </button>
+                )}
+                {/* 🆕 v2.33.39 - כפתור ניהול רישום (הועבר מהמסך הראשי) */}
+                {can('registrationToggle') && (
+                  <button onClick={() => { setMenuOpen(false); setRegistrationManagerOpen(true); }}
+                    className="w-full flex items-center gap-3 rounded-lg bg-gradient-to-br from-rose-700/80 to-rose-800/80 border border-rose-700/50 px-4 py-3 text-white font-bold hover:from-rose-600 hover:to-rose-700 transition text-sm">
+                    <span className="text-xl">📋</span>
+                    <span>ניהול רישום</span>
+                    <span className={`mr-auto text-xs rounded-full px-2 py-0.5 ${registrationEnabled ? 'bg-emerald-950/50 text-emerald-300' : 'bg-stone-800 text-stone-400'}`}>
+                      {registrationEnabled ? '✓ פעיל' : '✗ כבוי'}
+                    </span>
                   </button>
                 )}
                 {/* 🆕 כפתור מאוחד: ניהול מנהלים + הרשאות (סופר אדמין בלבד) */}
@@ -15642,6 +15605,76 @@ export default function PokerApp() {
         onRestore={handleRestoreBackup}
         onUploadFile={handleUploadBackupFile}
         onRefresh={loadBackupsList} />
+      
+      {/* 🆕 v2.33.39 - דיאלוג ניהול רישום (הועבר מהמסך הראשי) */}
+      {registrationManagerOpen && can('registrationToggle') && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setRegistrationManagerOpen(false)}>
+          <div className="relative w-full max-w-md rounded-2xl border-2 border-rose-700/60 bg-gradient-to-br from-stone-900 to-stone-950 p-5 shadow-2xl"
+               onClick={e => e.stopPropagation()} dir="rtl">
+            {/* כפתור סגירה */}
+            <button onClick={() => setRegistrationManagerOpen(false)}
+              className="absolute top-3 left-3 rounded-full bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white w-8 h-8 flex items-center justify-center transition">
+              <X className="h-4 w-4" />
+            </button>
+            
+            {/* כותרת */}
+            <div className="flex items-center gap-2 mb-4 pl-8">
+              <span className="text-2xl">📋</span>
+              <div>
+                <div className="text-lg font-extrabold text-rose-200">ניהול רישום</div>
+                <div className="text-xs text-stone-400">פעולות אדמין על מערכת הרישום</div>
+              </div>
+            </div>
+            
+            {/* סטטוס + כפתור הפעל/כבה */}
+            <div className={`rounded-xl p-3 border-2 mb-3 ${
+              registrationEnabled 
+                ? 'bg-emerald-950/30 border-emerald-700' 
+                : 'bg-stone-900 border-amber-800/60'
+            }`}>
+              <div className="text-sm text-stone-200 mb-2">
+                סטטוס: {registrationEnabled ? 
+                  <span className="text-emerald-300 font-bold">✓ פעיל אצל כולם</span> : 
+                  <span className="text-stone-400 font-bold">✗ מוסתר משאר המשתמשים</span>
+                }
+              </div>
+              <button
+                onClick={() => { handleToggleRegistrationFeature(); }}
+                className={`w-full rounded-lg px-4 py-2.5 text-sm font-bold transition ${
+                  registrationEnabled
+                    ? 'bg-stone-700 hover:bg-stone-600 text-stone-200'
+                    : 'bg-emerald-700 hover:bg-emerald-600 text-white'
+                }`}
+              >
+                {registrationEnabled ? '🚫 כבה גלובלית' : '✅ הפעל לכולם'}
+              </button>
+            </div>
+            
+            {/* כפתורי פעולה - לסופר אדמין בלבד */}
+            {isSuperAdmin && (
+              <div className="space-y-2">
+                <div className="text-xs text-amber-400 font-bold tracking-wider mb-1">⚙️ פעולות סופר אדמין</div>
+                <button
+                  onClick={() => { handleManualResetRegistration(); }}
+                  className="w-full rounded-lg px-3 py-2.5 text-sm font-bold bg-amber-900/40 hover:bg-amber-900/60 border border-amber-800 text-amber-200 transition flex items-center justify-center gap-2"
+                  title="מאפס את הרשימה ומאכלס את המארח של המפגש הבא"
+                >
+                  <span>🔄</span>
+                  <span>אפס רישום</span>
+                </button>
+                <button
+                  onClick={() => { handleManualSendNotification(); }}
+                  className="w-full rounded-lg px-3 py-2.5 text-sm font-bold bg-blue-900/40 hover:bg-blue-900/60 border border-blue-800 text-blue-200 transition flex items-center justify-center gap-2"
+                  title="שולח התראה לכל מי שאישר התראות שהרישום נפתח"
+                >
+                  <span>🔔</span>
+                  <span>שלח התראה לכולם</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* 🎂 פופאפ יום הולדת */}
       {birthdayPopup && (
