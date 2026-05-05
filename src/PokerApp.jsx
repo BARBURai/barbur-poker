@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.37';
-const APP_BUILD_TIME = '05/05/2026 11:00';
-const APP_NOTES = '🧪 ערב ניסיון יציג סיכום לסופר אדמין + תיקון כפתור "שמור ערב" שמשתנה ל"✓ נשמר"';
+const APP_VERSION = 'v2.33.38';
+const APP_BUILD_TIME = '05/05/2026 13:30';
+const APP_NOTES = '🐛 תיקון: "כבר העברתי" לא נשמר אחרי רענון - התיקון האוטומטי דילג על ארכיון';
 
 
 // ===== הרשאות מנהל =====
@@ -12857,6 +12857,8 @@ export default function PokerApp() {
     const fixed = paymentReminders.map(r => {
       // רק תזכורות אירוח (לא settlement)
       if (r.type !== 'hosting') return r;
+      // 🔧 v2.33.38: לא מתקנים תזכורות ארכיוניות (כבר העברתי) או טופלו
+      if (r.status === 'archived' || r.status === 'confirmed') return r;
       const correctHost = sessionHostByDate[r.sessionDate];
       // אם הערב לא קיים בהיסטוריה - לא נוגעים
       if (!correctHost) return r;
