@@ -15,8 +15,8 @@ import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircl
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
 const APP_VERSION = 'v2.33.38';
-const APP_BUILD_TIME = '05/05/2026 13:30';
-const APP_NOTES = '🐛 תיקון: "כבר העברתי" לא נשמר אחרי רענון - התיקון האוטומטי דילג על ארכיון';
+const APP_BUILD_TIME = '05/05/2026 13:45';
+const APP_NOTES = '🐛 תיקון שני: "כבר העברתי" באמת נשמר - מנע יצירה מחדש של תזכורות עם to שונה';
 
 
 // ===== הרשאות מנהל =====
@@ -13224,6 +13224,15 @@ export default function PokerApp() {
       // 🆕 רשימת signatures שכבר טופלו (אסור ליצור מחדש)
       const handledSigs = loadHandledSignatures();
       
+      // 🔧 v2.33.38: רשימת ארכיונים מבוססת על sessionDate+from+type בלבד
+      // כך שאם המשתמש לחץ "כבר העברתי" על תזכורת שהיה לה to ישן,
+      // לא תיווצר תזכורת חדשה לאותו ערב גם אם ה-to השתנה (למשל ע"י תיקון אוטומטי)
+      const archivedKeys = new Set(
+        existing
+          .filter(r => r.status === 'archived' || r.status === 'confirmed')
+          .map(r => `${r.sessionDate}|${r.from}|${r.type}`)
+      );
+      
       const allNewReminders = [];
       recentSessions.forEach(session => {
         const reminders = buildRemindersFromSession(session);
@@ -13232,6 +13241,9 @@ export default function PokerApp() {
           // דלג אם כבר קיים או שטופל ידנית
           if (existingSigs.has(sig)) return;
           if (handledSigs[sig]) return; // 🆕 כבר טופל - לא ליצור מחדש
+          // 🔧 v2.33.38: דלג אם יש תזכורת ארכיונית לאותו ערב מאותו שולח (גם אם to שונה)
+          const archiveKey = `${r.sessionDate}|${r.from}|${r.type}`;
+          if (archivedKeys.has(archiveKey)) return;
           allNewReminders.push(r);
           existingSigs.add(sig);
         });
