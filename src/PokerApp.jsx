@@ -15,8 +15,8 @@ import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircl
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
 const APP_VERSION = 'v2.33.36';
-const APP_BUILD_TIME = '05/05/2026 02:15';
-const APP_NOTES = '🔄 איפוס מיידי של רשימת נרשמים בשינוי מארח + כפתור Waze ליד כתובת המארח';
+const APP_BUILD_TIME = '05/05/2026 03:00';
+const APP_NOTES = '🎰 שיפור Flow ערב: סיכום בדשבורד + מסך לא נסגר בחצות + תיקון איפוס מארח';
 
 
 // ===== הרשאות מנהל =====
@@ -7455,6 +7455,7 @@ const FlameIcon = ({ streak }) => {
 // ============================================================
 const PAYMENTS_STORAGE_KEY = 'poker_payment_reminders_v1';
 const PAYMENTS_HANDLED_KEY = 'poker_payment_handled_v1'; // 🆕 רשימת signatures שטופלו (כבר העברתי / קיבלתי)
+const EVENING_SUMMARY_KEY = 'poker_evening_summary_v1'; // 🆕 v2.33.36 - סיכום הערב האחרון לפרסום בדשבורד
 const PAYMENT_EXPIRY_DAYS = 7;
 
 const loadPaymentReminders = () => {
@@ -7805,6 +7806,197 @@ const Confetti = ({ active, onComplete, message, showPipes = true }) => {
           </div>
         </div>
       ))}
+    </div>
+  );
+};
+
+// ============================================================
+// 📢 v2.33.36 - כרטיס סיכום ערב בדשבורד
+// ============================================================
+// מוצג אחרי שאדמין שמר ערב + לחץ "שלח לכולם"
+// כל משתמש יכול לסגור עבור עצמו (ב-localStorage)
+// 🔒 בדיקות:
+//   - מוצג רק למי שהשתתף בערב (מופיע ב-results)
+//   - לא מוצג לאדמין שיצר את הסיכום (אלא אם הוא סופר אדמין - מצב בדיקה)
+//   - מתחלף אוטומטית כשערב חדש נשמר (כי משתמש את אותו KEY ב-Firestore)
+//   - לא מוצג לערב ניסיון (לא נשמר מלכתחילה)
+// ============================================================
+const EveningSummaryCard = ({ playerName, isSuperAdmin }) => {
+  const [summary, setSummary] = useState(null);
+  const [dismissed, setDismissed] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  
+  // טעינת הסיכום מ-Firebase
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const data = await fbLoadState(EVENING_SUMMARY_KEY);
+        if (!mounted) return;
+        if (!data || !data.publishedAt) return;
+        
+        // 🔒 בדיקה: המשתמש השתתף בערב הזה?
+        if (!data.results || data.results[playerName] === undefined) {
+          // לא השתתף - אל תציג כלל
+          return;
+        }
+        
+        // 🔒 בדיקה: האם המשתמש הוא האדמין שפרסם?
+        // אם כן - לא להציג, אלא אם הוא סופר אדמין (לצורכי בדיקה)
+        if (data.publishedBy && data.publishedBy === playerName && !isSuperAdmin) {
+          return;
+        }
+        
+        // האם המשתמש סגר את הסיכום הזה?
+        const dismissKey = `poker_dismissed_summary_${data.id || data.sessionDate}`;
+        const isDismissed = window.localStorage.getItem(dismissKey) === 'true';
+        if (isDismissed) {
+          setDismissed(true);
+          return;
+        }
+        
+        setSummary(data);
+      } catch (e) {}
+    })();
+    return () => { mounted = false; };
+  }, [playerName, isSuperAdmin]);
+  
+  const handleDismiss = () => {
+    if (!summary) return;
+    try {
+      const dismissKey = `poker_dismissed_summary_${summary.id || summary.sessionDate}`;
+      window.localStorage.setItem(dismissKey, 'true');
+      setDismissed(true);
+    } catch {}
+  };
+  
+  if (!summary || dismissed) return null;
+  
+  // הכנת הנתונים לתצוגה
+  const sortedResults = Object.entries(summary.results || {})
+    .sort(([, a], [, b]) => b - a);
+  const dateFormatted = new Date(summary.sessionDate).toLocaleDateString('he-IL', {
+    day: 'numeric', month: 'long', year: 'numeric'
+  });
+  const myResult = summary.results?.[playerName];
+  const myResultText = myResult !== undefined
+    ? (myResult > 0 ? `+${myResult}` : myResult === 0 ? '0' : `${myResult}`)
+    : null;
+  
+  // האם זה הסיכום של האדמין שיצר אותו (= מצב בדיקה)?
+  const isMyOwnSummary = summary.publishedBy === playerName;
+  
+  return (
+    <div className="rounded-2xl border border-amber-700/40 bg-gradient-to-br from-amber-950/40 via-stone-950 to-stone-950 p-4 relative overflow-hidden" style={{
+      boxShadow: '0 0 20px rgba(251,191,36,0.15)',
+    }}>
+      {/* 🧪 תווית "מצב בדיקה" - מוצגת רק לסופר אדמין שרואה את הסיכום שיצר */}
+      {isMyOwnSummary && isSuperAdmin && (
+        <div className="absolute top-0 right-0 left-0 bg-yellow-600/90 text-stone-900 text-[10px] font-extrabold tracking-widest px-3 py-1 text-center z-10">
+          🧪 מצב בדיקה • זו התצוגה שהמשתתפים רואים
+        </div>
+      )}
+      
+      {/* כפתור X לסגירה */}
+      <button onClick={handleDismiss}
+        className={`absolute ${isMyOwnSummary && isSuperAdmin ? 'top-9' : 'top-2'} left-2 z-10 rounded-full bg-stone-900/80 hover:bg-stone-800 text-stone-400 hover:text-white w-7 h-7 flex items-center justify-center transition`}
+        title="הסתר">
+        <X className="h-4 w-4" />
+      </button>
+      
+      {/* כותרת */}
+      <div className={`flex items-start gap-3 mb-3 pr-8 ${isMyOwnSummary && isSuperAdmin ? 'mt-6' : ''}`}>
+        <div className="text-3xl">🎰</div>
+        <div className="flex-1">
+          <div className="text-xs text-amber-300 font-bold tracking-widest mb-0.5">סיכום הערב</div>
+          <div className="text-base font-extrabold text-amber-100">
+            {dateFormatted}
+          </div>
+          <div className="text-xs text-stone-400 mt-0.5 flex items-center gap-2 flex-wrap">
+            {summary.host && <span>🏠 מארח: <span className="text-amber-300 font-bold">{summary.host}</span></span>}
+            {summary.pot > 0 && <span>💰 קופה: <span className="text-amber-300 font-bold">{summary.pot} ₪</span></span>}
+          </div>
+        </div>
+      </div>
+      
+      {/* התוצאה האישית של המשתמש */}
+      {myResultText !== null && (
+        <div className={`rounded-lg p-3 mb-3 text-center font-bold text-lg ${
+          myResult > 0 ? 'bg-emerald-950/40 border border-emerald-700/40 text-emerald-300'
+          : myResult < 0 ? 'bg-rose-950/40 border border-rose-700/40 text-rose-300'
+          : 'bg-stone-900 border border-stone-700 text-stone-300'
+        }`}>
+          {myResult > 0 ? `🎉 ` : myResult < 0 ? `💔 ` : ''}
+          התוצאה שלך: {myResultText} ₪
+        </div>
+      )}
+      
+      {/* כפתור הרחבה */}
+      <button onClick={() => setExpanded(!expanded)}
+        className="w-full rounded-lg bg-stone-900/60 hover:bg-stone-900 border border-stone-700 text-stone-300 px-3 py-2 text-sm font-bold transition flex items-center justify-center gap-2">
+        {expanded ? '▲ הסתר פירוט' : '▼ הצג פירוט מלא'}
+      </button>
+      
+      {/* תוכן מורחב */}
+      {expanded && (
+        <div className="mt-3 space-y-3">
+          {/* טבלת תוצאות */}
+          <div className="rounded-lg bg-black/30 border border-stone-800 p-3">
+            <div className="text-xs text-amber-300 font-bold mb-2">📊 תוצאות הערב</div>
+            <div className="space-y-1">
+              {sortedResults.map(([name, amount], idx) => {
+                const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '';
+                const isMe = name === playerName;
+                const colorClass = amount > 0 ? 'text-emerald-300' : amount < 0 ? 'text-rose-300' : 'text-stone-400';
+                return (
+                  <div key={name} className={`flex justify-between items-center text-sm py-1 ${isMe ? 'bg-amber-900/20 rounded px-2 -mx-1' : ''}`}>
+                    <span className="flex items-center gap-1">
+                      {medal && <span>{medal}</span>}
+                      <span className={isMe ? 'text-amber-200 font-bold' : 'text-stone-200'}>{name}</span>
+                      {isMe && <span className="text-xs text-amber-400">(אני)</span>}
+                    </span>
+                    <span className={`font-bold ${colorClass}`}>
+                      {amount > 0 ? `+${amount}` : amount}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* טבלת העברות */}
+          {summary.transfers && summary.transfers.length > 0 && (
+            <div className="rounded-lg bg-black/30 border border-stone-800 p-3">
+              <div className="text-xs text-amber-300 font-bold mb-2">💸 העברות</div>
+              <div className="space-y-1">
+                {summary.transfers.map((t, i) => {
+                  const isMe = t.from === playerName || t.to === playerName;
+                  return (
+                    <div key={i} className={`flex justify-between items-center text-sm py-1 ${isMe ? 'bg-amber-900/20 rounded px-2 -mx-1' : ''}`}>
+                      <span className="text-stone-200">
+                        <span className={t.from === playerName ? 'text-amber-200 font-bold' : ''}>{t.from}</span>
+                        {' → '}
+                        <span className={t.to === playerName ? 'text-amber-200 font-bold' : ''}>{t.to}</span>
+                      </span>
+                      <span className="text-amber-300 font-bold">{t.amount} ₪</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          
+          {/* תשלום אירוח */}
+          {summary.hostingPayment && summary.hostingPayment.amount > 0 && summary.hostingPayment.recipient && (
+            <div className="rounded-lg bg-purple-950/30 border border-purple-800/40 p-3">
+              <div className="text-xs text-purple-300 font-bold mb-1">🏠 תשלום אירוח</div>
+              <div className="text-sm text-stone-300">
+                כל משתתף → <span className="font-bold text-purple-300">{summary.hostingPayment.recipient}</span>: {summary.hostingPayment.amount} ₪
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -8721,6 +8913,9 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     setPendingAdditions([]); setShowAddPlayer(false);
     setSavedEvening(false);
     setSessionDate(new Date().toISOString().split('T')[0]);
+    // 🔧 v2.33.36: איפוס שדות אירוח שלא נוקו בעבר וגרמו לבאגים בערב הבא
+    setHostingRecipient('');
+    setHostingAmount(50);
     try { window.localStorage.removeItem(LIVE_SESSION_KEY); } catch {}
   };
 
@@ -8802,6 +8997,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
 
   const handleFinalSave = () => {
     if (!isBalanced) return alert(`הסכומים לא מאוזנים! יש פער של ${balance > 0 ? '+' : ''}${balance} ₪`);
+    if (savedEvening) return;
     
     const results = {};
     participants.forEach(p => {
@@ -8839,10 +9035,28 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     // 📡 ניקוי שידור חי - הערב נגמר
     clearLiveBroadcast().catch(() => {});
     
+    // 📢 v2.33.36: פרסום סיכום הערב לדשבורד של כל המשתתפים
+    if (!isTestEvening) {
+      try {
+        const transfers = calculateSettlements(results);
+        const summary = {
+          sessionDate,
+          host: host || '',
+          pot: totalPot,
+          results,
+          transfers,
+          hostingPayment,
+          publishedAt: new Date().toISOString(),
+          publishedBy: adminName,
+          id: `summary_${sessionDate}_${Date.now()}`,
+        };
+        saveState(summary, EVENING_SUMMARY_KEY).catch(() => {});
+      } catch (e) {}
+    }
+    
     setSavedEvening(true);
-    reset();
-    setHasLoadedSaved(false);
-    onClose();
+    // 🔧 v2.33.36: לא מאפסים ולא סוגרים - האדמין נשאר עם הסיכום על המסך לצילום
+    // האיפוס יקרה רק כשהאדמין ילחץ ידנית על "🗑️ נקה הכל"
   };
 
   // שמירה ממסך החלוקה - שומר בלי לסגור את המודל
@@ -8885,6 +9099,25 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
     
     // 📡 ניקוי שידור חי - הערב נגמר
     clearLiveBroadcast().catch(() => {});
+    
+    // 📢 v2.33.36: פרסום סיכום הערב לדשבורד של כל המשתתפים
+    if (!isTestEvening) {
+      try {
+        const transfers = calculateSettlements(results);
+        const summary = {
+          sessionDate,
+          host: host || '',
+          pot: totalPot,
+          results,
+          transfers,
+          hostingPayment,
+          publishedAt: new Date().toISOString(),
+          publishedBy: adminName,
+          id: `summary_${sessionDate}_${Date.now()}`,
+        };
+        saveState(summary, EVENING_SUMMARY_KEY).catch(() => {});
+      } catch (e) {}
+    }
     
     setSavedEvening(true);
   };
@@ -10884,7 +11117,7 @@ const PaymentArchive = ({ playerName, reminders, onUpdateReminders }) => {
 };
 
 // ===== דשבורד קומפקטי =====
-const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders }) => {
+const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders, isSuperAdmin }) => {
   // 🎉 Confetti בכניסה - אם המשתמש ניצח בערב האחרון ועוד לא ראה
   const [confettiActive, setConfettiActive] = useState(false);
   const [confettiMessage, setConfettiMessage] = useState('');
@@ -10918,6 +11151,7 @@ const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingS
         phones={phones || {}}
         onUpdateReminders={onUpdateReminders || (() => {})}
       />
+      <EveningSummaryCard playerName={currentUser} isSuperAdmin={isSuperAdmin} />
       <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
       {/* 📈 הגרף המצטבר - אחרי המיקום שלך בדירוג */}
       <div className="rounded-2xl border border-stone-800 bg-stone-950/40 backdrop-blur p-2">
@@ -12666,20 +12900,11 @@ export default function PokerApp() {
           return;
         }
         
-        // בדיקת תנאים: שעה + יום אירוח (במצב בדיקה - מדלגים על תנאים)
-        const testMode = !!broadcast.testMode;
-        const isInTimeWindow = testMode || isLiveBroadcastTime();
-        const isHostingToday = testMode || isHostingDay(hostingSchedule, broadcast.sessionDate);
-        
-        console.log('📺 viewer conditions: testMode=', testMode, 'isInTimeWindow=', isInTimeWindow, 'isHostingToday=', isHostingToday);
-        
-        if (!isInTimeWindow || !isHostingToday) {
-          console.log('📺 viewer: conditions not met');
-          // השידור לא רלוונטי כעת
-          setLiveBroadcast(null);
-          setBroadcastViewerOpen(false);
-          return;
-        }
+        // 🔧 v2.33.36: השידור פעיל כל עוד broadcast.active=true
+        // ללא תלות בשעה או ביום אירוח. זה מונע סגירה אוטומטית בחצות
+        // כשהמשחק עוד בעיצומו. הלייב מסתיים רק כשהאדמין לוחץ "שמור ערב"
+        // (clearLiveBroadcast עושה active=false).
+        // testMode עדיין קיים לצורכי בדיקה - אבל לא משפיע על התנאים יותר.
         
         setLiveBroadcast(broadcast);
         
@@ -14688,6 +14913,7 @@ export default function PokerApp() {
               paymentReminders={paymentReminders}
               phones={phones}
               onUpdateReminders={handleUpdateReminders}
+              isSuperAdmin={isSuperAdmin}
             />
           </>
         )}
