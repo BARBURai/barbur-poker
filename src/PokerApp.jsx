@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.40';
-const APP_BUILD_TIME = '05/05/2026 14:30';
-const APP_NOTES = '⏰ עדכון טקסט: הרישום נפתח בין 10:00-12:00 + זמן מדויק לסופר אדמין ביום הרישום';
+const APP_VERSION = 'v2.33.41';
+const APP_BUILD_TIME = '05/05/2026 14:00';
+const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
 
 // ===== הרשאות מנהל =====
@@ -4443,72 +4443,6 @@ const DeviceLocksManager = ({ isOpen, onClose, deviceLocks, currentDeviceId, onR
 };
 
 
-// 🎯 v2.33.40 - מציג לסופר אדמין את הזמן המדויק שנבחר לפתיחת הרישום
-// קורא את זמן הפתיחה מ-Firestore (poker_daily_random_time_v1)
-// מוצג רק לסופר אדמין, רק ביום הרישום
-const SuperAdminRandomTimeIndicator = ({ isSuperAdmin, registrationDateStr }) => {
-  const [randomTimeInfo, setRandomTimeInfo] = useState(null);
-  
-  useEffect(() => {
-    if (!isSuperAdmin || !registrationDateStr) return;
-    
-    // בדיקה אם היום הוא יום הרישום (התאריך בקוד תואם לתאריך היום)
-    const today = getTodayIsrael();
-    if (today !== registrationDateStr) return;
-    
-    // קריאה מ-Firestore דרך REST API (קריאה בלבד, לא כותב)
-    const fetchRandomTime = async () => {
-      try {
-        const response = await fetch(
-          'https://firestore.googleapis.com/v1/projects/barbur-poker/databases/(default)/documents/app_data/poker_daily_random_time_v1'
-        );
-        if (!response.ok) return;
-        const data = await response.json();
-        const valueStr = data?.fields?.value?.stringValue;
-        if (!valueStr) return;
-        const parsed = JSON.parse(valueStr);
-        // וודא שהתאריך תואם להיום
-        if (parsed.sessionDate && parsed.targetHourIsrael !== undefined) {
-          setRandomTimeInfo(parsed);
-        }
-      } catch (e) {
-        // אין מה לעשות - סתם לא נציג
-      }
-    };
-    
-    fetchRandomTime();
-  }, [isSuperAdmin, registrationDateStr]);
-  
-  if (!isSuperAdmin || !registrationDateStr) return null;
-  
-  // מציג רק ביום הרישום
-  const today = getTodayIsrael();
-  if (today !== registrationDateStr) return null;
-  
-  // אם אין זמן עדיין - מציג "ממתין לבחירה אוטומטית"
-  if (!randomTimeInfo) {
-    return (
-      <div className="text-[11px] text-amber-500/70 mt-1 flex items-center gap-1 font-bold">
-        🎯 ממתין לבחירה אוטומטית (גלוי רק לסופר אדמין)
-      </div>
-    );
-  }
-  
-  // מציג את הזמן המדויק
-  const hour = String(randomTimeInfo.targetHourIsrael).padStart(2, '0');
-  const minute = String(randomTimeInfo.targetMinuteIsrael).padStart(2, '0');
-  const wasSent = randomTimeInfo.sentNotification === true;
-  
-  return (
-    <div className="text-[11px] text-amber-500/90 mt-1 flex items-center gap-1 font-bold">
-      🎯 זמן מדויק היום: {hour}:{minute}
-      {wasSent && <span className="text-emerald-400">✓ נשלח</span>}
-      <span className="text-stone-500 font-normal">(גלוי רק לסופר אדמין)</span>
-    </div>
-  );
-};
-
-
 // המארח של המפגש הבא רשום אוטומטית במקום #1
 // שחקנים אחרים לוחצים "אני בא" כדי להירשם למקומות 2-11 או לסטנד ביי (12+)
 // הרישום נפתח ב-12:00 בצהריים למחרת המפגש האחרון
@@ -4806,7 +4740,7 @@ const RegistrationTab = ({
   
   const opensAtFormatted = registrationOpenInfo.opensAt ? 
     registrationOpenInfo.opensAt.toLocaleDateString('he-IL', {
-      weekday: 'long', day: '2-digit', month: 'long'
+      weekday: 'long', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit'
     }) : null;
   
   return (
@@ -4870,15 +4804,9 @@ const RegistrationTab = ({
             </div>
             {opensAtFormatted && (
               <div className="text-xs text-stone-500 mt-1">
-                ⏰ הרישום נפתח: <span className="text-amber-400 font-bold">{opensAtFormatted} בשעה 10:00-12:00</span>
+                ⏰ הרישום נפתח: <span className="text-amber-400 font-bold">{opensAtFormatted}</span>
               </div>
             )}
-            
-            {/* 🎯 v2.33.40 - זמן מדויק לסופר אדמין בלבד (גלוי רק ביום הרישום) */}
-            <SuperAdminRandomTimeIndicator 
-              isSuperAdmin={isSuperAdmin}
-              registrationDateStr={registrationOpenInfo.opensAt ? registrationOpenInfo.opensAt.toISOString().split('T')[0] : null}
-            />
           </div>
         ) : (
           <div className="p-4 bg-emerald-950/30 border-t border-emerald-900/40">
@@ -5152,7 +5080,7 @@ const RegistrationTab = ({
         <div className="font-bold text-stone-300 mb-1">📜 כללי הרישום</div>
         <div>• {MAX_SLOTS} מקומות רשמיים • כל הקודם זוכה</div>
         <div>• מקום 12 ומעלה - סטנד ביי, יעלה אוטומטית אם מישהו יבטל</div>
-        <div>• הרישום נפתח בין 10:00-12:00 למחרת המפגש הקודם</div>
+        <div>• הרישום נפתח ב-12:00 בצהריים למחרת המפגש הקודם</div>
       </div>
     </div>
   );
@@ -10043,21 +9971,26 @@ const getDayKey = (dateStr) => {
   return dateStr;
 };
 
+// 🛡️ פיצול מחרוזת התאריך ישירות - מונע בעיות Timezone של new Date()
+// new Date('2025-01-02') יכול להתפרש כ-31/12/2024 22:00 בזמן ישראל (UTC+2)
+// לכן עובדים ישירות עם YYYY-MM-DD
 const getMonthKey = (dateStr) => {
-  const d = new Date(dateStr);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const [y, m] = dateStr.split('-');
+  return `${y}-${m}`;
 };
 
 const getQuarterKey = (dateStr) => {
-  const d = new Date(dateStr);
-  const q = Math.floor(d.getMonth() / 3) + 1;
-  return `${d.getFullYear()}-Q${q}`;
+  const [y, m] = dateStr.split('-');
+  const month = parseInt(m, 10);
+  const q = Math.ceil(month / 3);
+  return `${y}-Q${q}`;
 };
 
 const getHalfKey = (dateStr) => {
-  const d = new Date(dateStr);
-  const h = d.getMonth() < 6 ? 1 : 2;
-  return `${d.getFullYear()}-H${h}`;
+  const [y, m] = dateStr.split('-');
+  const month = parseInt(m, 10);
+  const h = month <= 6 ? 1 : 2;
+  return `${y}-H${h}`;
 };
 
 const HEBREW_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
