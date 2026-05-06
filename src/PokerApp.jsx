@@ -14,7 +14,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.42';
+const APP_VERSION = 'v2.33.43';
 const APP_BUILD_TIME = '05/05/2026 14:00';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
@@ -9972,25 +9972,28 @@ const getDayKey = (dateStr) => {
 };
 
 // 🛡️ פיצול מחרוזת התאריך ישירות - מונע בעיות Timezone של new Date()
-// new Date('2025-01-02') יכול להתפרש כ-31/12/2024 22:00 בזמן ישראל (UTC+2)
-// לכן עובדים ישירות עם YYYY-MM-DD
-const getMonthKey = (dateStr) => {
+// בנוסף - אם יש session עם season, מעדיפים את ה-season על השנה מהתאריך
+// (זה מטפל בערבים שגויים שיש להם date='2024-01-13' אבל season=2025)
+const getMonthKey = (dateStr, session) => {
   const [y, m] = dateStr.split('-');
-  return `${y}-${m}`;
+  const year = session?.season || y;
+  return `${year}-${m}`;
 };
 
-const getQuarterKey = (dateStr) => {
+const getQuarterKey = (dateStr, session) => {
   const [y, m] = dateStr.split('-');
   const month = parseInt(m, 10);
   const q = Math.ceil(month / 3);
-  return `${y}-Q${q}`;
+  const year = session?.season || y;
+  return `${year}-Q${q}`;
 };
 
-const getHalfKey = (dateStr) => {
+const getHalfKey = (dateStr, session) => {
   const [y, m] = dateStr.split('-');
   const month = parseInt(m, 10);
   const h = month <= 6 ? 1 : 2;
-  return `${y}-H${h}`;
+  const year = session?.season || y;
+  return `${year}-H${h}`;
 };
 
 const HEBREW_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
@@ -10028,7 +10031,8 @@ const aggregateByPeriod = (sessions, players, keyFn) => {
   const allKeys = new Set();
   
   sessions.forEach(s => {
-    const key = keyFn(s.date);
+    // 🛡️ העברת ה-session המלא לפונקציה כדי שתוכל להשתמש ב-season אם קיים
+    const key = keyFn(s.date, s);
     allKeys.add(key);
     if (!byPeriod[key]) byPeriod[key] = {};
     if (!participated[key]) participated[key] = {};
