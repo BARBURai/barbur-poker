@@ -9996,6 +9996,12 @@ const getHalfKey = (dateStr, session) => {
   return `${year}-H${h}`;
 };
 
+const getYearKey = (dateStr, session) => {
+  const y = dateStr.split('-')[0];
+  return `${session?.season || y}`;
+};
+const getYearLabel = (key) => key;
+
 const HEBREW_MONTHS = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
 const HEBREW_MONTHS_SHORT = ['ינו', 'פבר', 'מרץ', 'אפר', 'מאי', 'יונ', 'יול', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ'];
 
@@ -10805,7 +10811,8 @@ const PeriodicTables = ({ allSessions, players }) => {
     if (viewMode === 'day') return { keyFn: getDayKey, getLabel: getDayLabel, viewLabel: 'יומית' };
     if (viewMode === 'month') return { keyFn: getMonthKey, getLabel: getMonthLabel, viewLabel: 'חודשית' };
     if (viewMode === 'quarter') return { keyFn: getQuarterKey, getLabel: getQuarterLabel, viewLabel: 'רבעונית' };
-    return { keyFn: getHalfKey, getLabel: getHalfLabel, viewLabel: 'חצי שנתית' };
+    if (viewMode === 'half') return { keyFn: getHalfKey, getLabel: getHalfLabel, viewLabel: 'חצי שנתית' };
+    return { keyFn: getYearKey, getLabel: getYearLabel, viewLabel: 'שנתית' };
   }, [viewMode]);
   
   const { sortedKeys, byPeriod, participated } = useMemo(() => 
@@ -10866,6 +10873,10 @@ const PeriodicTables = ({ allSessions, players }) => {
             <button onClick={() => setViewMode('half')}
               className={`px-3 py-1.5 text-xs rounded-md font-bold transition ${viewMode === 'half' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
               חצי שנתית
+            </button>
+            <button onClick={() => setViewMode('year')}
+              className={`px-3 py-1.5 text-xs rounded-md font-bold transition ${viewMode === 'year' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
+              שנתית
             </button>
           </div>
         </div>
@@ -13243,18 +13254,26 @@ export default function PokerApp() {
       );
       
       const allNewReminders = [];
+      // מניעת כפולות גם בתוך הריצה הנוכחית: sessionDate+from+to = מפתח ייחודי
+      const seenKeys = new Set(
+        existing.map(r => `${r.sessionDate}|${r.from}|${r.to}`)
+      );
       recentSessions.forEach(session => {
         const reminders = buildRemindersFromSession(session);
         reminders.forEach(r => {
           const sig = reminderSignature(r);
+          const uniqueKey = `${r.sessionDate}|${r.from}|${r.to}`;
           // דלג אם כבר קיים או שטופל ידנית
           if (existingSigs.has(sig)) return;
           if (handledSigs[sig]) return; // 🆕 כבר טופל - לא ליצור מחדש
           // 🔧 v2.33.38: דלג אם יש תזכורת ארכיונית לאותו ערב מאותו שולח (גם אם to שונה)
           const archiveKey = `${r.sessionDate}|${r.from}|${r.type}`;
           if (archivedKeys.has(archiveKey)) return;
+          // מניעת כפולות: לא ליצור 2 תזכורות לאותו sessionDate+from+to
+          if (seenKeys.has(uniqueKey)) return;
           allNewReminders.push(r);
           existingSigs.add(sig);
+          seenKeys.add(uniqueKey);
         });
       });
       
