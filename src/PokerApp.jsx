@@ -10776,12 +10776,21 @@ const PeriodicTables = ({ allSessions, players }) => {
   }, [allSessions]);
   
   const [selectedYear, setSelectedYear] = useState(availableYears[0] || 2026);
-  
-  // סינון לפי שנה
-  const sessions = useMemo(() => 
-    allSessions.filter(s => (s.season || new Date(s.date).getFullYear()) === selectedYear),
-    [allSessions, selectedYear]
-  );
+  const [selectedYears, setSelectedYears] = useState([availableYears[0] || 2026]);
+
+  const toggleYear = (y) => {
+    setSelectedYears(prev =>
+      prev.includes(y) ? (prev.length > 1 ? prev.filter(x => x !== y) : prev) : [...prev, y].sort((a,b) => a-b)
+    );
+  };
+
+  // סינון לפי שנה/שנים
+  const sessions = useMemo(() => {
+    if (viewMode === 'year') {
+      return allSessions.filter(s => selectedYears.includes(s.season || new Date(s.date).getFullYear()));
+    }
+    return allSessions.filter(s => (s.season || new Date(s.date).getFullYear()) === selectedYear);
+  }, [allSessions, selectedYear, selectedYears, viewMode]);
   
   // 🛡️ מיפוי תאריך → ערב לא מאוזן (רק לתצוגה היומית)
   const imbalancesByDate = useMemo(() => {
@@ -10850,13 +10859,24 @@ const PeriodicTables = ({ allSessions, players }) => {
     <div className="rounded-2xl border border-stone-800 bg-stone-950/50 backdrop-blur overflow-hidden">
       <div className="border-b border-stone-800 bg-gradient-to-r from-amber-950/40 to-stone-900/40 px-4 md:px-6 py-4 flex items-center justify-between flex-wrap gap-3">
         <h3 className="text-lg md:text-xl font-bold text-amber-200 flex items-center gap-2">
-          📊 טבלה {viewLabel} — {selectedYear}
+          📊 טבלה {viewLabel}{viewMode !== 'year' ? ` — ${selectedYear}` : selectedYears.length === availableYears.length ? ' — כל הזמנים' : ` — ${selectedYears.join(', ')}`}
         </h3>
         <div className="flex items-center gap-2 flex-wrap">
-          <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
-            className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-1.5 text-sm text-white font-bold">
-            {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
+          {viewMode === 'year' ? (
+            <div className="flex gap-1 flex-wrap">
+              {availableYears.map(y => (
+                <button key={y} onClick={() => toggleYear(y)}
+                  className={`px-2 py-1 text-xs rounded-md font-bold border transition ${selectedYears.includes(y) ? 'bg-amber-700 border-amber-600 text-white' : 'border-stone-700 bg-stone-900 text-stone-400 hover:text-stone-200'}`}>
+                  {y}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <select value={selectedYear} onChange={e => setSelectedYear(Number(e.target.value))}
+              className="rounded-lg border border-stone-700 bg-stone-900 px-3 py-1.5 text-sm text-white font-bold">
+              {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          )}
           <div className="flex rounded-lg border border-stone-700 bg-stone-900 p-1">
             <button onClick={() => setViewMode('day')}
               className={`px-3 py-1.5 text-xs rounded-md font-bold transition ${viewMode === 'day' ? 'bg-amber-700 text-white' : 'text-stone-400 hover:text-stone-200'}`}>
