@@ -423,7 +423,7 @@ const flushAnalytics = async () => {
 // 🚨 v2.33.33 - אנליטיקה הושבתה זמנית עקב באג שגרם לקריסת האפליקציה
 // כל הפונקציות מטה הן no-op כדי לוודא שהאפליקציה עובדת.
 // נחזיר את האנליטיקה אחרי שנמצא את הסיבה.
-const ANALYTICS_DISABLED = true;
+const ANALYTICS_DISABLED = false;
 
 // אתחול תיעוד - קוראים פעם אחת בכניסה
 const startAnalyticsSession = (userName) => {
