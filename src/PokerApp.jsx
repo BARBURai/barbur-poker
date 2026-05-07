@@ -7457,6 +7457,7 @@ const PAYMENTS_STORAGE_KEY = 'poker_payment_reminders_v1';
 const PAYMENTS_HANDLED_KEY = 'poker_payment_handled_v1'; // 🆕 רשימת signatures שטופלו (כבר העברתי / קיבלתי)
 const EVENING_SUMMARY_KEY = 'poker_evening_summary_v1'; // 🆕 v2.33.36 - סיכום הערב האחרון לפרסום בדשבורד
 const PAYMENT_EXPIRY_DAYS = 7;
+const PAYMENT_HANDLED_EXPIRY_DAYS = 30; // תזכורות שטופלו נשמרות 30 יום
 
 const loadPaymentReminders = () => {
   try {
@@ -7492,7 +7493,7 @@ const loadHandledSignatures = () => {
     if (typeof handled !== 'object' || handled === null) return {};
     // ניקוי signatures ישנות (אחרי 7 ימים)
     const now = Date.now();
-    const expiryMs = PAYMENT_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+    const expiryMs = PAYMENT_HANDLED_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
     const cleaned = {};
     Object.entries(handled).forEach(([sig, ts]) => {
       if (typeof ts === 'number' && (now - ts) < expiryMs) {
@@ -7519,7 +7520,7 @@ const markSignatureHandled = (sig) => {
 };
 
 const reminderSignature = (r) => 
-  `${r.sessionDate}|${r.from}|${r.to}|${r.amount}|${r.type}`;
+  `${r.sessionDate}|${r.from}|${r.to}|${r.type}`;
 
 const buildRemindersFromSession = (session) => {
   const reminders = [];
