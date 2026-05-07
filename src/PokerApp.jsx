@@ -15197,6 +15197,16 @@ export default function PokerApp() {
                     markSignatureHandled(reminderSignature(r));
                   });
                   // עכשיו מחיקה של התזכורות הנוכחיות
+                  // שמור את כל ה-signatures כ"טופלו" לפני המחיקה
+                  const toDelete = loadPaymentReminders();
+                  if (toDelete.length > 0) {
+                    const handled = loadHandledSignatures();
+                    toDelete.forEach(r => {
+                      const sig = reminderSignature(r);
+                      handled[sig] = Date.now();
+                    });
+                    saveHandledSignatures(handled);
+                  }
                   window.localStorage.removeItem(PAYMENTS_STORAGE_KEY);
                   setPaymentReminders([]);
                   setMenuOpen(false);
