@@ -13326,9 +13326,11 @@ export default function PokerApp() {
         // 🆕 מאחד את הסשנים מהקובץ (היסטוריה) עם הסשנים השמורים ב-Firebase
         // אם יש כפילויות לפי תאריך+עונה - הגרסה מ-Firebase מנצחת (עדכונים)
         const fileSessionsKey = (s) => `${s.date}_${s.season || 2026}`;
-        const savedKeys = new Set(saved.sessions.map(fileSessionsKey));
+        // רק סשנים מ-2026 ומעלה מ-Firestore גוברים על sessions.json
+        const firestoreSessions = saved.sessions.filter(s => (s.season || 2026) >= 2026);
+        const savedKeys = new Set(firestoreSessions.map(fileSessionsKey));
         const historyOnly = ALL_INITIAL_SESSIONS.filter(s => !savedKeys.has(fileSessionsKey(s)));
-        setAllSessions([...historyOnly, ...saved.sessions]);
+        setAllSessions([...historyOnly, ...firestoreSessions]);
         if (saved.players) setPlayers(saved.players);
       }
       if (saved?.hostingSchedule) setHostingSchedule(saved.hostingSchedule);
