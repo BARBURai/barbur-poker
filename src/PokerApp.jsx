@@ -14,8 +14,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.45';
-const APP_BUILD_TIME = '09/05/2026 09:10';
+const APP_VERSION = 'v2.33.46';
+const APP_BUILD_TIME = '09/05/2026 09:45';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
 
@@ -7549,8 +7549,9 @@ const buildRemindersFromSession = (session) => {
   
   const transfers = calculateSettlements(session.results);
   transfers.forEach(t => {
+    // id דטרמיניסטי - אותו ערב+אנשים = אותו id תמיד, מונע כפולות
     reminders.push({
-      id: `settle_${session.date}_${t.from}_${t.to}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: `settle_${session.date}_${t.from}_${t.to}`,
       sessionDate: session.date,
       type: 'settlement',
       from: t.from,
@@ -7567,8 +7568,9 @@ const buildRemindersFromSession = (session) => {
     const amount = session.hostingPayment.amount;
     participants.forEach(name => {
       if (name === hostRecipient) return;
+      // id דטרמיניסטי - אותו ערב+אנשים = אותו id תמיד, מונע כפולות
       reminders.push({
-        id: `host_${session.date}_${name}_${hostRecipient}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        id: `host_${session.date}_${name}_${hostRecipient}`,
         sessionDate: session.date,
         type: 'hosting',
         from: name,
