@@ -14,8 +14,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.49';
-const APP_BUILD_TIME = '08/05/2026 15:16';
+const APP_VERSION = 'v2.33.50';
+const APP_BUILD_TIME = '08/05/2026 15:22';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
 
@@ -128,6 +128,7 @@ const GALLERY_STORAGE_KEY = 'poker_gallery_state_v1';
 const REGISTRATION_KEY = 'poker_next_session_registration_v1';
 // 🔒 הפעלת/כיבוי טאב הרישום (אדמין בלבד) - גלובלי לכולם
 const REGISTRATION_ENABLED_KEY = 'poker_registration_feature_enabled_v1';
+const RANDOM_TIME_KEY = 'poker_daily_random_time_v1';
 // 📌 רישום ברזל - שחקנים שמסומנים מראש להצטרף אוטומטית (סופר אדמין בלבד)
 const IRON_REGISTRATION_KEY = 'poker_iron_registration_v1';
 // 📅 תזכורות מארחים - מי אישר, מי דחה, מי לא ענה
@@ -4490,15 +4491,18 @@ const RegistrationTab = ({
       return { isOpen: false, opensAt: null, reason: 'המפגש הסתיים' };
     }
     
-    // הרישום נפתח 12:00 ביום אחרי המפגש הקודם
+    // הרישום נפתח ביום אחרי המפגש הקודם - בשעה האקראית מ-Cloud Function
     let opensAt;
     if (lastSessionDate && lastSessionDate < nextSession.date) {
-      const lastDate = new Date(lastSessionDate + 'T00:00:00');
-      opensAt = new Date(lastDate);
-      opensAt.setDate(opensAt.getDate() + 1);
-      opensAt.setHours(12, 0, 0, 0);
+      if (randomOpenTimeRef.current) {
+        opensAt = randomOpenTimeRef.current;
+      } else {
+        const lastDate = new Date(lastSessionDate + 'T00:00:00');
+        opensAt = new Date(lastDate);
+        opensAt.setDate(opensAt.getDate() + 1);
+        opensAt.setHours(12, 0, 0, 0);
+      }
     } else {
-      // אין מפגש קודם - פתוח מיד
       opensAt = new Date(now.getTime() - 1000);
     }
     
@@ -12845,6 +12849,7 @@ export default function PokerApp() {
   const [ironRegistration, setIronRegistration] = useState({ players: [], refused: [] });
   // 🔒 הפעלת/כיבוי הטאב גלובלית (אדמין)
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
+  const randomOpenTimeRef = React.useRef(null); // זמן פתיחה אקראי — ref למניעת re-render
   // 🔐 נעילות מכשירים: {playerName: {deviceId, lockedAt, userAgent}}
   const [deviceLocks, setDeviceLocks] = useState({});
   // 🆔 מזהה המכשיר הנוכחי (קבוע)
@@ -13453,6 +13458,12 @@ export default function PokerApp() {
         if (savedReg) setRegistration(savedReg);
         const savedRegEnabled = await loadState(REGISTRATION_ENABLED_KEY);
         if (savedRegEnabled?.enabled) setRegistrationEnabled(true);
+        try {
+          const randomTimeData = await loadState(RANDOM_TIME_KEY);
+          if (randomTimeData?.targetTimestamp) {
+            randomOpenTimeRef.current = new Date(randomTimeData.targetTimestamp);
+          }
+        } catch {}
         // 📌 טעינת רישום ברזל
         const savedIron = await loadState(IRON_REGISTRATION_KEY);
         if (savedIron && typeof savedIron === 'object') {
@@ -14305,8 +14316,18 @@ export default function PokerApp() {
       // שלב 3: הפעלה מחדש - זה הטריגר להתראה
       await saveState({ enabled: true, toggledAt: new Date().toISOString(), toggledBy: adminName, manualTrigger: true }, REGISTRATION_ENABLED_KEY);
       setRegistrationEnabled(true);
-      
-      alert("✅ ההתראה נשלחה!\nהיא אמורה להגיע לכל המכשירים תוך 5-15 שניות.\n\n⚠️ שים לב: הפיצ'ר עכשיו מופעל לכולם.");
+      const manualOpenTime = new Date();
+      const manualTimeData = {
+        targetTimestamp: manualOpenTime.toISOString(),
+        sessionDate: computedNext.date,
+        sessionHost: computedNext.host,
+        sentNotification: true,
+        createdAt: manualOpenTime.toISOString(),
+        manualTrigger: true,
+      };
+      await saveState(manualTimeData, RANDOM_TIME_KEY);
+      randomOpenTimeRef.current = manualOpenTime;
+      alert("✅ ההתראה נשלחה והרישום נפתח!\nהיא אמורה להגיע לכל המכשירים תוך 5-15 שניות.");
     } catch (e) {
       console.error('Failed to send manual notification:', e);
       alert('❌ שגיאה בשליחת ההתראה');
