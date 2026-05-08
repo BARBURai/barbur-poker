@@ -14,7 +14,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.53';
+const APP_VERSION = 'v2.33.55';
 const APP_BUILD_TIME = '08/05/2026 15:22';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
@@ -2159,12 +2159,16 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
               {screenPieData.length > 0 && (
                 <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3">
                   <div className="text-xs text-stone-400 font-bold mb-2">📊 מסכים פופולריים</div>
-                  <div style={{ width: '100%', height: Math.max(200, screenPieData.length * 36 + 40) }}>
+                  {(() => {
+                    const maxNameLen = Math.max(...screenPieData.map(d => d.name.length));
+                    const yAxisWidth = Math.min(180, Math.max(120, maxNameLen * 9));
+                    return (
+                  <div style={{ width: '100%', height: Math.max(200, screenPieData.length * 36 + 50), paddingTop: '8px' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart 
                         data={screenPieData} 
                         layout="vertical"
-                        margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
+                        margin={{ top: 20, right: 20, left: 0, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke="#292524" horizontal={false} />
                         <XAxis type="number" stroke="#78716c" style={{ fontSize: '10px' }} />
@@ -2173,7 +2177,7 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
                           dataKey="name" 
                           stroke="#d6d3d1" 
                           style={{ fontFamily: 'Assistant' }} 
-                          width={150}
+                          width={yAxisWidth}
                           interval={0}
                           tick={{ fill: '#d6d3d1', fontSize: 11, fontFamily: 'Assistant' }}
                         />
@@ -2189,6 +2193,8 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
+                    );
+                  })()}
                 </div>
               )}
               
