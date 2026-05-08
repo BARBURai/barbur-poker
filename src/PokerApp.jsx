@@ -14,8 +14,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.46';
-const APP_BUILD_TIME = '09/05/2026 09:45';
+const APP_VERSION = 'v2.33.48';
+const APP_BUILD_TIME = '09/05/2026 10:30';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
 
@@ -7454,7 +7454,24 @@ const FlameIcon = ({ streak }) => {
 // 💸 מערכת תזכורות תשלום
 // ============================================================
 const PAYMENTS_STORAGE_KEY = 'poker_payment_reminders_v1';
-const PAYMENTS_HANDLED_KEY = 'poker_payment_handled_v1'; // 🆕 רשימת signatures שטופלו (כבר העברתי / קיבלתי)
+const PAYMENTS_HANDLED_KEY = 'poker_payment_handled_v1'; // legacy - localStorage
+// Firestore-based handled reminders - לפי שם משתמש
+const getHandledRemindersKey = (userName) => `poker_handled_v2_${userName}`;
+
+const loadHandledFromFirestore = async (userName) => {
+  if (!userName) return {};
+  try {
+    const data = await loadState(getHandledRemindersKey(userName));
+    return data || {};
+  } catch (e) { return {}; }
+};
+
+const saveHandledToFirestore = async (userName, handled) => {
+  if (!userName) return;
+  try {
+    await saveState(handled, getHandledRemindersKey(userName));
+  } catch (e) {}
+};
 const EVENING_SUMMARY_KEY = 'poker_evening_summary_v1'; // 🆕 v2.33.36 - סיכום הערב האחרון לפרסום בדשבורד
 const PAYMENT_EXPIRY_DAYS = 7;
 const PAYMENT_HANDLED_EXPIRY_DAYS = 30; // תזכורות שטופלו נשמרות 30 יום
@@ -7483,38 +7500,21 @@ const savePaymentReminders = (reminders) => {
 };
 
 // 🆕 רשימה של signatures שמשתמש סימן ידנית כ"טופלו"
-// מבנה: { 'sig1': timestamp, 'sig2': timestamp }
-// שומרים timestamp כדי לאפשר ניקוי אוטומטי אחרי 7 ימים
+// מבנה: { 'id1': timestamp, 'id2': timestamp }
+// id = דטרמיניסטי: host_date_from_to או settle_date_from_to
 const loadHandledSignatures = () => {
   try {
     const data = window.localStorage.getItem(PAYMENTS_HANDLED_KEY);
     if (!data) return {};
     const handled = JSON.parse(data);
-    // migration: הוסף מפתחות ללא amount לכל הישנים שיש בהם amount
-    const migrated = { ...handled };
-    let changed = false;
-    Object.keys(handled).forEach(key => {
-      // פורמט ישן: date|from|to|amount|type
-      const parts = key.split('|');
-      if (parts.length === 5) {
-        const newKey = `${parts[0]}|${parts[1]}|${parts[2]}|${parts[4]}`;
-        const uKey = `${parts[0]}|${parts[1]}|${parts[2]}`;
-        if (!migrated[newKey]) { migrated[newKey] = handled[key]; changed = true; }
-        if (!migrated[uKey]) { migrated[uKey] = handled[key]; changed = true; }
-      }
-    });
-    if (changed) {
-      window.localStorage.setItem(PAYMENTS_HANDLED_KEY, JSON.stringify(migrated));
-    }
-    return migrated;
     if (typeof handled !== 'object' || handled === null) return {};
-    // ניקוי signatures ישנות (אחרי 7 ימים)
+    // ניקוי ישנים (אחרי 30 ימים)
     const now = Date.now();
     const expiryMs = PAYMENT_HANDLED_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
     const cleaned = {};
-    Object.entries(handled).forEach(([sig, ts]) => {
+    Object.entries(handled).forEach(([key, ts]) => {
       if (typeof ts === 'number' && (now - ts) < expiryMs) {
-        cleaned[sig] = ts;
+        cleaned[key] = ts;
       }
     });
     return cleaned;
@@ -7532,9 +7532,9 @@ const saveHandledSignatures = (handled) => {
 // מסמן signature כ"טופל" - נמנע מסנכרון מחדש
 const markSignatureHandled = (sig, uniqueKey) => {
   const handled = loadHandledSignatures();
-  handled[sig] = Date.now();
-  // שמור גם לפי uniqueKey (sessionDate|from|to) לחסימה אמינה
-  if (uniqueKey) handled[uniqueKey] = Date.now();
+  const now = Date.now();
+  handled[sig] = now;
+  if (uniqueKey) handled[uniqueKey] = now;
   saveHandledSignatures(handled);
 };
 
@@ -8036,7 +8036,7 @@ const EveningSummaryCard = ({ playerName, isSuperAdmin }) => {
 // ============================================================
 // 💸 קומפוננטת תזכורות תשלום בדשבורד
 // ============================================================
-const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) => {
+const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders, handledReminders, onUpdateHandled }) => {
   // Hooks first - לפני early return!
   const filtered = useMemo(() => {
     if (!playerName || !reminders || reminders.length === 0) {
@@ -8059,8 +8059,11 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
   // עדכון סטטוס + העברה לארכיון אחרי "קיבלתי"
   const updateStatus = (id, newStatus) => {
     const target = reminders.find(r => r.id === id);
-    // 🆕 מסמן signature כטופל מיד - לפני שינוי state
     if ((newStatus === 'confirmed' || newStatus === 'archived') && target) {
+      // שמור ב-Firestore
+      const newHandled = { ...handledReminders, [target.id]: Date.now() };
+      onUpdateHandled(newHandled);
+      // גם localStorage legacy
       markSignatureHandled(reminderSignature(target), `${target.sessionDate}|${target.from}|${target.to}`);
     }
     const archivedAt = (newStatus === 'confirmed' || newStatus === 'archived') 
@@ -8080,8 +8083,11 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
   // 🆕 "כבר העברתי" - מעביר לארכיון במקום למחוק
   const archiveReminder = (id) => {
     const target = reminders.find(r => r.id === id);
-    // 🆕 מסמן signature כטופל מיד - לפני שינוי state
     if (target) {
+      // שמור ב-Firestore
+      const newHandled = { ...handledReminders, [target.id]: Date.now() };
+      onUpdateHandled(newHandled);
+      // גם localStorage legacy
       markSignatureHandled(reminderSignature(target), `${target.sessionDate}|${target.from}|${target.to}`);
     }
     const archivedAt = new Date().toISOString();
@@ -9057,7 +9063,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
         const newReminders = buildRemindersFromSession(sessionData);
         if (newReminders.length > 0) {
           const existing = loadPaymentReminders();
-          const existingSigs = new Set(existing.map(reminderSignature));
+          const existingSigs = new Set(existing.map(r => r.id)); // id דטרמיניסטי
           const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
           savePaymentReminders([...existing, ...toAdd]);
         }
@@ -9122,7 +9128,7 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
         const newReminders = buildRemindersFromSession(sessionData);
         if (newReminders.length > 0) {
           const existing = loadPaymentReminders();
-          const existingSigs = new Set(existing.map(reminderSignature));
+          const existingSigs = new Set(existing.map(r => r.id)); // id דטרמיניסטי
           const toAdd = newReminders.filter(r => !existingSigs.has(reminderSignature(r)));
           savePaymentReminders([...existing, ...toAdd]);
         }
@@ -11189,7 +11195,7 @@ const PaymentArchive = ({ playerName, reminders, onUpdateReminders }) => {
 };
 
 // ===== דשבורד קומפקטי =====
-const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders, isSuperAdmin }) => {
+const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders, isSuperAdmin, handledReminders, onUpdateHandled }) => {
   // 🎉 Confetti בכניסה - אם המשתמש ניצח בערב האחרון ועוד לא ראה
   const [confettiActive, setConfettiActive] = useState(false);
   const [confettiMessage, setConfettiMessage] = useState('');
@@ -11222,6 +11228,8 @@ const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingS
         reminders={paymentReminders || []}
         phones={phones || {}}
         onUpdateReminders={onUpdateReminders || (() => {})}
+        handledReminders={handledReminders || {}}
+        onUpdateHandled={onUpdateHandled || (() => {})}
       />
       <EveningSummaryCard playerName={currentUser} isSuperAdmin={isSuperAdmin} />
       <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
@@ -12772,6 +12780,7 @@ export default function PokerApp() {
   const [showSplash, setShowSplash] = useState(true);
   const [currentUser, setCurrentUser] = useState(null); // השם של המשתמש שנבחר
   const [allSessions, setAllSessions] = useState(ALL_INITIAL_SESSIONS);
+  const [handledReminders, setHandledReminders] = useState({}); // טעון מ-Firestore לפי משתמש
   const [hostingSchedule, setHostingSchedule] = useState(HOSTING_SCHEDULE);
   const [players, setPlayers] = useState(INITIAL_PLAYERS);
   const [selectedSeason, setSelectedSeason] = useState(2026);
@@ -12800,6 +12809,14 @@ export default function PokerApp() {
   const [permissionsManagerOpen, setPermissionsManagerOpen] = useState(false);
   // 📢 שליחת התראה מותאמת
   const [customNotificationOpen, setCustomNotificationOpen] = useState(false);
+  // 💸 טעינת handled reminders מ-Firestore כשמשתמש נכנס
+  useEffect(() => {
+    if (!currentUser) return;
+    loadHandledFromFirestore(currentUser).then(data => {
+      setHandledReminders(data || {});
+    });
+  }, [currentUser]);
+
   // 📊 ניתוח שימוש (סופר אדמין) - אתחול הסשן בכניסת משתמש
   useEffect(() => {
     if (!currentUser) return;
@@ -13264,71 +13281,44 @@ export default function PokerApp() {
     return () => clearTimeout(timer);
   }, [currentUser, allSessions]);
   
-  // 💸 סנכרון אוטומטי - כל מכשיר יוצר תזכורות לעצמו על ערבים מ-7 ימים אחרונים
-  // רץ כשהערבים מתעדכנים (טעינה ראשונה / סנכרון מ-Firebase)
-  // ⚠️ מדלג על תזכורות שמסומנות כטופלות (כבר העברתי / קיבלתי)
+  // 💸 סנכרון אוטומטי תזכורות - מבוסס Firestore לחלוטין
   useEffect(() => {
     if (!allSessions || allSessions.length === 0) return;
+    if (!currentUser) return;
     try {
       const sevenDaysAgo = new Date();
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
       const recentSessions = allSessions.filter(s => {
         if (!s.results || !s.date) return false;
-        if (s.isTestEvening) return false; // 🧪 ערבי ניסיון - לא יוצרים תזכורות
+        if (s.isTestEvening) return false;
         return new Date(s.date) >= sevenDaysAgo;
       });
       
       if (recentSessions.length === 0) return;
-      
-      const existing = loadPaymentReminders();
-      const existingSigs = new Set(existing.map(reminderSignature));
-      // 🆕 רשימת signatures שכבר טופלו (אסור ליצור מחדש)
-      const handledSigs = loadHandledSignatures();
-      
-      // 🔧 v2.33.38: רשימת ארכיונים מבוססת על sessionDate+from+type בלבד
-      // כך שאם המשתמש לחץ "כבר העברתי" על תזכורת שהיה לה to ישן,
-      // לא תיווצר תזכורת חדשה לאותו ערב גם אם ה-to השתנה (למשל ע"י תיקון אוטומטי)
-      const archivedKeys = new Set(
-        existing
-          .filter(r => r.status === 'archived' || r.status === 'confirmed')
-          .map(r => `${r.sessionDate}|${r.from}|${r.type}`)
-      );
-      
-      const allNewReminders = [];
-      // מניעת כפולות גם בתוך הריצה הנוכחית: sessionDate+from+to = מפתח ייחודי
-      const seenKeys = new Set(
-        existing.map(r => `${r.sessionDate}|${r.from}|${r.to}`)
-      );
+
+      // בניית כל התזכורות האפשריות
+      const allPossible = [];
+      const seenIds = new Set();
       recentSessions.forEach(session => {
         const reminders = buildRemindersFromSession(session);
         reminders.forEach(r => {
-          const sig = reminderSignature(r);
-          const uniqueKey = `${r.sessionDate}|${r.from}|${r.to}`;
-          // דלג אם כבר קיים או שטופל ידנית
-          if (existingSigs.has(sig)) return;
-          if (handledSigs[sig]) return; // כבר טופל לפי sig
-          if (handledSigs[uniqueKey]) return; // כבר טופל לפי uniqueKey
-          // 🔧 v2.33.38: דלג אם יש תזכורת ארכיונית לאותו ערב מאותו שולח (גם אם to שונה)
-          const archiveKey = `${r.sessionDate}|${r.from}|${r.type}`;
-          if (archivedKeys.has(archiveKey)) return;
-          // מניעת כפולות: לא ליצור 2 תזכורות לאותו sessionDate+from+to
-          if (seenKeys.has(uniqueKey)) return;
-          allNewReminders.push(r);
-          existingSigs.add(sig);
-          seenKeys.add(uniqueKey);
+          if (seenIds.has(r.id)) return; // מניעת כפולות לפי id דטרמיניסטי
+          seenIds.add(r.id);
+          allPossible.push(r);
         });
       });
-      
-      if (allNewReminders.length > 0) {
-        const updated = [...existing, ...allNewReminders];
-        savePaymentReminders(updated);
-        setPaymentReminders(updated);
-      }
+
+      // סינון: הסר תזכורות שכבר טופלו (לפי Firestore)
+      const filtered = allPossible.filter(r => !handledReminders[r.id]);
+
+      // שמור ב-localStorage לתצוגה
+      savePaymentReminders(filtered);
+      setPaymentReminders(filtered);
     } catch (e) {
       console.warn('Failed to auto-sync reminders:', e);
     }
-  }, [allSessions]);
+  }, [allSessions, currentUser, handledReminders]);
   
   const handleUpdateReminders = (newReminders) => {
     setPaymentReminders(newReminders);
@@ -15012,6 +15002,11 @@ export default function PokerApp() {
               phones={phones}
               onUpdateReminders={handleUpdateReminders}
               isSuperAdmin={isSuperAdmin}
+              handledReminders={handledReminders}
+              onUpdateHandled={async (newHandled) => {
+                setHandledReminders(newHandled);
+                await saveHandledToFirestore(currentUser, newHandled);
+              }}
             />
           </>
         )}
@@ -15219,18 +15214,14 @@ export default function PokerApp() {
                     markSignatureHandled(reminderSignature(r));
                   });
                   // עכשיו מחיקה של התזכורות הנוכחיות
-                  // שמור את כל ה-signatures כ"טופלו" לפני המחיקה
-                  const toDelete = loadPaymentReminders();
+                  // שמור ל-Firestore לפני המחיקה
+                  const toDelete = [...paymentReminders];
                   if (toDelete.length > 0) {
-                    const handled = loadHandledSignatures();
                     const now = Date.now();
-                    toDelete.forEach(r => {
-                      const sig = reminderSignature(r);
-                      const uKey = `${r.sessionDate}|${r.from}|${r.to}`;
-                      handled[sig] = now;
-                      handled[uKey] = now;
-                    });
-                    saveHandledSignatures(handled);
+                    const newHandled = { ...handledReminders };
+                    toDelete.forEach(r => { newHandled[r.id] = now; });
+                    setHandledReminders(newHandled);
+                    await saveHandledToFirestore(currentUser, newHandled);
                   }
                   window.localStorage.removeItem(PAYMENTS_STORAGE_KEY);
                   setPaymentReminders([]);
