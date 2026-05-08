@@ -14,8 +14,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.44';
-const APP_BUILD_TIME = '05/05/2026 14:00';
+const APP_VERSION = 'v2.33.45';
+const APP_BUILD_TIME = '09/05/2026 09:10';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
 
@@ -7490,6 +7490,23 @@ const loadHandledSignatures = () => {
     const data = window.localStorage.getItem(PAYMENTS_HANDLED_KEY);
     if (!data) return {};
     const handled = JSON.parse(data);
+    // migration: הוסף מפתחות ללא amount לכל הישנים שיש בהם amount
+    const migrated = { ...handled };
+    let changed = false;
+    Object.keys(handled).forEach(key => {
+      // פורמט ישן: date|from|to|amount|type
+      const parts = key.split('|');
+      if (parts.length === 5) {
+        const newKey = `${parts[0]}|${parts[1]}|${parts[2]}|${parts[4]}`;
+        const uKey = `${parts[0]}|${parts[1]}|${parts[2]}`;
+        if (!migrated[newKey]) { migrated[newKey] = handled[key]; changed = true; }
+        if (!migrated[uKey]) { migrated[uKey] = handled[key]; changed = true; }
+      }
+    });
+    if (changed) {
+      window.localStorage.setItem(PAYMENTS_HANDLED_KEY, JSON.stringify(migrated));
+    }
+    return migrated;
     if (typeof handled !== 'object' || handled === null) return {};
     // ניקוי signatures ישנות (אחרי 7 ימים)
     const now = Date.now();
@@ -7513,9 +7530,11 @@ const saveHandledSignatures = (handled) => {
 };
 
 // מסמן signature כ"טופל" - נמנע מסנכרון מחדש
-const markSignatureHandled = (sig) => {
+const markSignatureHandled = (sig, uniqueKey) => {
   const handled = loadHandledSignatures();
   handled[sig] = Date.now();
+  // שמור גם לפי uniqueKey (sessionDate|from|to) לחסימה אמינה
+  if (uniqueKey) handled[uniqueKey] = Date.now();
   saveHandledSignatures(handled);
 };
 
@@ -8040,7 +8059,7 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
     const target = reminders.find(r => r.id === id);
     // 🆕 מסמן signature כטופל מיד - לפני שינוי state
     if ((newStatus === 'confirmed' || newStatus === 'archived') && target) {
-      markSignatureHandled(reminderSignature(target));
+      markSignatureHandled(reminderSignature(target), `${target.sessionDate}|${target.from}|${target.to}`);
     }
     const archivedAt = (newStatus === 'confirmed' || newStatus === 'archived') 
       ? new Date().toISOString() 
@@ -8061,7 +8080,7 @@ const PaymentReminders = ({ playerName, reminders, phones, onUpdateReminders }) 
     const target = reminders.find(r => r.id === id);
     // 🆕 מסמן signature כטופל מיד - לפני שינוי state
     if (target) {
-      markSignatureHandled(reminderSignature(target));
+      markSignatureHandled(reminderSignature(target), `${target.sessionDate}|${target.from}|${target.to}`);
     }
     const archivedAt = new Date().toISOString();
     const updated = reminders.map(r => 
@@ -13286,7 +13305,8 @@ export default function PokerApp() {
           const uniqueKey = `${r.sessionDate}|${r.from}|${r.to}`;
           // דלג אם כבר קיים או שטופל ידנית
           if (existingSigs.has(sig)) return;
-          if (handledSigs[sig]) return; // 🆕 כבר טופל - לא ליצור מחדש
+          if (handledSigs[sig]) return; // כבר טופל לפי sig
+          if (handledSigs[uniqueKey]) return; // כבר טופל לפי uniqueKey
           // 🔧 v2.33.38: דלג אם יש תזכורת ארכיונית לאותו ערב מאותו שולח (גם אם to שונה)
           const archiveKey = `${r.sessionDate}|${r.from}|${r.type}`;
           if (archivedKeys.has(archiveKey)) return;
@@ -15201,9 +15221,12 @@ export default function PokerApp() {
                   const toDelete = loadPaymentReminders();
                   if (toDelete.length > 0) {
                     const handled = loadHandledSignatures();
+                    const now = Date.now();
                     toDelete.forEach(r => {
                       const sig = reminderSignature(r);
-                      handled[sig] = Date.now();
+                      const uKey = `${r.sessionDate}|${r.from}|${r.to}`;
+                      handled[sig] = now;
+                      handled[uKey] = now;
                     });
                     saveHandledSignatures(handled);
                   }
