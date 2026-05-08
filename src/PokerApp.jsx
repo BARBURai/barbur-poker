@@ -14,7 +14,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.52';
+const APP_VERSION = 'v2.33.53';
 const APP_BUILD_TIME = '08/05/2026 15:22';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
@@ -2164,7 +2164,7 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
                       <BarChart 
                         data={screenPieData} 
                         layout="vertical"
-                        margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
+                        margin={{ top: 10, right: 20, left: 0, bottom: 5 }}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke="#292524" horizontal={false} />
                         <XAxis type="number" stroke="#78716c" style={{ fontSize: '10px' }} />
@@ -2172,10 +2172,10 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
                           type="category" 
                           dataKey="name" 
                           stroke="#d6d3d1" 
-                          style={{ fontSize: '10px', fontFamily: 'Assistant' }} 
-                          width={130}
+                          style={{ fontFamily: 'Assistant' }} 
+                          width={150}
                           interval={0}
-                          tick={{ fill: '#d6d3d1', fontSize: 10 }}
+                          tick={{ fill: '#d6d3d1', fontSize: 11, fontFamily: 'Assistant' }}
                         />
                         <Tooltip 
                           contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '11px' }}
