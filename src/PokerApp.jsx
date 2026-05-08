@@ -4460,6 +4460,16 @@ const RegistrationTab = ({
   onIronUpdate
 }) => {
   const MAX_SLOTS = 11; // מספר מקומות רשמיים
+  const randomOpenTimeRef = React.useRef(null); // זמן פתיחה אקראי מ-Cloud Function
+  
+  // טעינת זמן פתיחה אקראי מ-Firestore
+  React.useEffect(() => {
+    loadState(RANDOM_TIME_KEY).then(data => {
+      if (data?.targetTimestamp) {
+        randomOpenTimeRef.current = new Date(data.targetTimestamp);
+      }
+    }).catch(() => {});
+  }, []);
   
   // 🗓️ זיהוי המפגש הבא מ-hostingSchedule - גם אם אין מארח עדיין
   const today = getTodayIsrael();
@@ -12849,7 +12859,7 @@ export default function PokerApp() {
   const [ironRegistration, setIronRegistration] = useState({ players: [], refused: [] });
   // 🔒 הפעלת/כיבוי הטאב גלובלית (אדמין)
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
-  const randomOpenTimeRef = React.useRef(null); // זמן פתיחה אקראי — ref למניעת re-render
+
   // 🔐 נעילות מכשירים: {playerName: {deviceId, lockedAt, userAgent}}
   const [deviceLocks, setDeviceLocks] = useState({});
   // 🆔 מזהה המכשיר הנוכחי (קבוע)
@@ -13458,12 +13468,7 @@ export default function PokerApp() {
         if (savedReg) setRegistration(savedReg);
         const savedRegEnabled = await loadState(REGISTRATION_ENABLED_KEY);
         if (savedRegEnabled?.enabled) setRegistrationEnabled(true);
-        try {
-          const randomTimeData = await loadState(RANDOM_TIME_KEY);
-          if (randomTimeData?.targetTimestamp) {
-            randomOpenTimeRef.current = new Date(randomTimeData.targetTimestamp);
-          }
-        } catch {}
+
         // 📌 טעינת רישום ברזל
         const savedIron = await loadState(IRON_REGISTRATION_KEY);
         if (savedIron && typeof savedIron === 'object') {
