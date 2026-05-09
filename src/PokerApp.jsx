@@ -14,7 +14,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.55';
+const APP_VERSION = 'v2.33.56';
 const APP_BUILD_TIME = '08/05/2026 15:22';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
@@ -2155,46 +2155,31 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
                 </div>
               )}
               
-              {/* גרף עמודות אופקי - מסכים פופולריים */}
+              {/* מסכים פופולריים - progress bars */}
               {screenPieData.length > 0 && (
                 <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3">
-                  <div className="text-xs text-stone-400 font-bold mb-2">📊 מסכים פופולריים</div>
-                  {(() => {
-                    const maxNameLen = Math.max(...screenPieData.map(d => d.name.length));
-                    const yAxisWidth = Math.min(180, Math.max(120, maxNameLen * 9));
-                    return (
-                  <div style={{ width: '100%', height: Math.max(200, screenPieData.length * 36 + 50), paddingTop: '8px' }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart 
-                        data={screenPieData} 
-                        layout="vertical"
-                        margin={{ top: 20, right: 20, left: 0, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#292524" horizontal={false} />
-                        <XAxis type="number" stroke="#78716c" style={{ fontSize: '10px' }} />
-                        <YAxis 
-                          type="category" 
-                          dataKey="name" 
-                          stroke="#d6d3d1" 
-                          style={{ fontFamily: 'Assistant' }} 
-                          width={yAxisWidth}
-                          interval={0}
-                          tick={{ fill: '#d6d3d1', fontSize: 11, fontFamily: 'Assistant' }}
-                        />
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '11px' }}
-                          cursor={{ fill: 'rgba(251, 191, 36, 0.1)' }}
-                        />
-                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                          {screenPieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div className="text-xs text-stone-400 font-bold mb-3">📊 מסכים פופולריים</div>
+                  <div className="space-y-2">
+                    {screenPieData.map((item, index) => {
+                      const maxVal = screenPieData[0]?.value || 1;
+                      const pct = Math.round((item.value / maxVal) * 100);
+                      const medals = ['🥇','🥈','🥉'];
+                      return (
+                        <div key={index} className="flex items-center gap-2">
+                          <span className="text-sm w-5 text-center flex-shrink-0">{medals[index] || ''}</span>
+                          <span className="text-xs text-stone-300 flex-shrink-0" style={{ width: '90px', textAlign: 'right' }}>{item.name}</span>
+                          <div className="flex-1 bg-stone-800 rounded-full h-5 overflow-hidden">
+                            <div
+                              className="h-5 rounded-full flex items-center justify-end pr-2"
+                              style={{ width: `${Math.max(pct, 15)}%`, backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
+                            >
+                              <span className="text-[11px] font-bold text-white">{item.value}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                    );
-                  })()}
                 </div>
               )}
               
