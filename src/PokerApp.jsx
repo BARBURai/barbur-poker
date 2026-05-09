@@ -14,8 +14,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.57';
-const APP_BUILD_TIME = '09/05/2026 07:55';
+const APP_VERSION = 'v2.33.58';
+const APP_BUILD_TIME = '09/05/2026 09:27';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
 
@@ -367,6 +367,21 @@ const flushAnalytics = async () => {
   const hasSeconds = analyticsBuffer.secondsAccumulated > 0;
   if (!hasScreens && !hasActions && !hasSession && !hasSeconds) return;
   
+  // שמירה מיידית ל-localStorage כגיבוי (לפני Firestore שהוא async)
+  try {
+    const lsKey = `analytics_pending_${analyticsCurrentUser}`;
+    const pending = JSON.parse(localStorage.getItem(lsKey) || '{}');
+    const buf = analyticsBuffer;
+    // מיזוג עם מה שיש
+    Object.entries(buf.screens || {}).forEach(([s,c]) => { pending.screens = pending.screens||{}; pending.screens[s] = (pending.screens[s]||0)+c; });
+    Object.entries(buf.actions || {}).forEach(([a,c]) => { pending.actions = pending.actions||{}; pending.actions[a] = (pending.actions[a]||0)+c; });
+    pending.sessions = (pending.sessions||0) + buf.sessionsAdded;
+    pending.totalSeconds = (pending.totalSeconds||0) + buf.secondsAccumulated;
+    pending.lastSeen = buf.lastSeenTime;
+    pending.date = getAnalyticsDateKey();
+    localStorage.setItem(lsKey, JSON.stringify(pending));
+  } catch {}
+
   try {
     const dateKey = getAnalyticsDateKey();
     const docKey = `${ANALYTICS_KEY_PREFIX}::${dateKey}`;
@@ -437,6 +452,20 @@ const startAnalyticsSession = (userName) => {
   
   if (!analyticsBuffer) initAnalyticsBuffer();
   analyticsBuffer.sessionsAdded += 1; // ספירת כניסה חדשה
+
+  // העלאת נתונים pending מ-localStorage (מכניסות קודמות שלא הועלו)
+  try {
+    const lsKey = `analytics_pending_${userName}`;
+    const pending = JSON.parse(localStorage.getItem(lsKey) || 'null');
+    if (pending && pending.sessions > 0) {
+      // מיזוג לbuffer הנוכחי
+      Object.entries(pending.screens || {}).forEach(([s,c]) => { analyticsBuffer.screens[s] = (analyticsBuffer.screens[s]||0)+c; });
+      Object.entries(pending.actions || {}).forEach(([a,c]) => { analyticsBuffer.actions[a] = (analyticsBuffer.actions[a]||0)+c; });
+      analyticsBuffer.sessionsAdded += pending.sessions;
+      analyticsBuffer.secondsAccumulated += pending.totalSeconds || 0;
+      localStorage.removeItem(lsKey); // נוקה — יועלה ב-flush הבא
+    }
+  } catch {}
   
   // Flush אוטומטי כל 60 שניות
   if (analyticsFlushTimer) clearInterval(analyticsFlushTimer);
