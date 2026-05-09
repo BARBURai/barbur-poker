@@ -14,8 +14,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.56';
-const APP_BUILD_TIME = '08/05/2026 15:22';
+const APP_VERSION = 'v2.33.57';
+const APP_BUILD_TIME = '09/05/2026 07:55';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
 
@@ -2073,10 +2073,10 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
   };
   
   return (
-    <div dir="rtl" className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-2 md:p-4 overflow-y-auto" onClick={onClose}>
-      <div className="bg-stone-950 rounded-2xl border-2 border-amber-700/50 w-full max-w-3xl my-4" onClick={e => e.stopPropagation()}>
+    <div dir="rtl" className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-2 md:p-4" onClick={onClose}>
+      <div className="bg-stone-950 rounded-2xl border-2 border-amber-700/50 w-full max-w-3xl my-4 flex flex-col" style={{ maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
         {/* כותרת */}
-        <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-amber-950/40 to-stone-950 rounded-t-2xl">
+        <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-amber-950/40 to-stone-950 rounded-t-2xl">
           <div className="flex items-center gap-2">
             <span className="text-2xl">📊</span>
             <div>
@@ -2089,7 +2089,7 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
           </button>
         </div>
         
-        <div className="p-4 space-y-4">
+        <div className="overflow-y-auto flex-1 p-4 space-y-4">
           {/* בורר טווח */}
           <div className="flex flex-wrap gap-2">
             {[7, 30, 90, 180].map(d => (
@@ -2157,7 +2157,7 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
               
               {/* מסכים פופולריים - progress bars */}
               {screenPieData.length > 0 && (
-                <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3">
+                <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3 mt-2">
                   <div className="text-xs text-stone-400 font-bold mb-3">📊 מסכים פופולריים</div>
                   <div className="space-y-2">
                     {screenPieData.map((item, index) => {
