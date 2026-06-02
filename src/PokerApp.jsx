@@ -12941,30 +12941,38 @@ export default function PokerApp() {
   const [chartFullscreen, setChartFullscreen] = useState(false);
 
   // 🔙 ניהול כפתור Back של אנדרואיד
-  // חייב להיות אחרי הגדרת chartFullscreen ו-menuOpen
   const tabHistoryStack = useRef(['dashboard']);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+
+  // refs שמשקפים תמיד את הערך הנוכחי בתוך popstate handler (פתרון closure)
+  const menuOpenRef = useRef(false);
+  const chartFullscreenRef = useRef(false);
+  const tabRef = useRef('dashboard');
+  useEffect(() => { menuOpenRef.current = menuOpen; }, [menuOpen]);
+  useEffect(() => { chartFullscreenRef.current = chartFullscreen; }, [chartFullscreen]);
+  useEffect(() => { tabRef.current = tab; }, [tab]);
 
   // פונקציה שמחליפה setTab ישיר — מוסיפה רשומה ל-browser history
   const navigateTo = (newTab) => {
-    if (newTab === tab) return;
+    if (newTab === tabRef.current) return;
     history.pushState({ pokerTab: newTab }, '');
     tabHistoryStack.current.push(newTab);
     setTab(newTab);
   };
 
-  // מאזין לכפתור Back
+  // מאזין לכפתור Back — נרשם פעם אחת, קורא מ-refs
   useEffect(() => {
     const handlePop = () => {
       // עדיפות 1: אם המבורגר פתוח — סגור אותו
-      if (menuOpen) {
+      if (menuOpenRef.current) {
         setMenuOpen(false);
-        history.pushState({ pokerTab: tab }, '');
+        history.pushState({ pokerTab: tabRef.current }, '');
         return;
       }
       // עדיפות 2: אם fullscreen פעיל — צא ממנו
-      if (chartFullscreen) {
+      if (chartFullscreenRef.current) {
         setChartFullscreen(false);
-        history.pushState({ pokerTab: tab }, '');
+        history.pushState({ pokerTab: tabRef.current }, '');
         return;
       }
       // עדיפות 3: חזור לטאב הקודם ב-stack
@@ -12974,18 +12982,15 @@ export default function PokerApp() {
         const prev = stack[stack.length - 1];
         setTab(prev);
       } else {
-        // כבר בדשבורד — שאל אם לצאת
-        if (window.confirm('לצאת מהאפליקציה?')) {
-          history.back();
-        } else {
-          history.pushState({ pokerTab: 'dashboard' }, '');
-        }
+        // כבר בדשבורד — הצג dialog יציאה (לא window.confirm שחסום ב-PWA)
+        history.pushState({ pokerTab: 'dashboard' }, ''); // שמור מיקום כדי שלא ייסגר
+        setExitConfirmOpen(true);
       }
     };
 
     window.addEventListener('popstate', handlePop);
     return () => window.removeEventListener('popstate', handlePop);
-  }, [menuOpen, chartFullscreen, tab]);
+  }, []); // נרשם פעם אחת בלבד — קורא מ-refs
   
   // 📡 שידור חי - מצב מקומי
   const [liveBroadcast, setLiveBroadcast] = useState(null);
@@ -15920,6 +15925,29 @@ export default function PokerApp() {
               <button onClick={() => setPermissionsToast(null)}
                 className="text-stone-500 hover:text-white shrink-0">
                 <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔙 Dialog יציאה מהאפליקציה (כפתור Back מהדשבורד) */}
+      {exitConfirmOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" dir="rtl">
+          <div className="w-full max-w-xs rounded-2xl border-2 border-stone-700 bg-stone-950 p-6 shadow-2xl text-center">
+            <div className="text-4xl mb-3">🃏</div>
+            <div className="text-lg font-extrabold text-stone-100 mb-2">לצאת מהאפליקציה?</div>
+            <div className="text-sm text-stone-400 mb-5">תוכל לחזור בכל זמן</div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setExitConfirmOpen(false); }}
+                className="flex-1 rounded-xl border border-stone-700 bg-stone-900 py-3 font-bold text-stone-300 hover:bg-stone-800 transition">
+                ביטול
+              </button>
+              <button
+                onClick={() => { setExitConfirmOpen(false); history.back(); }}
+                className="flex-1 rounded-xl bg-rose-700 hover:bg-rose-600 py-3 font-bold text-white transition">
+                יציאה
               </button>
             </div>
           </div>
