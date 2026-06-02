@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.73';
-const APP_BUILD_TIME = '02/06/2026 22:20';
-const APP_NOTES = '🔙 Back — dialog בכל מקום כולל דשבורד';
+const APP_VERSION = 'v2.33.74';
+const APP_BUILD_TIME = '02/06/2026 22:35';
+const APP_NOTES = '🔙 Back — לוגיקה נכונה סופית';
 
 
 // ===== הרשאות מנהל =====
@@ -12944,9 +12944,10 @@ export default function PokerApp() {
   useEffect(() => { menuOpenRef.current = menuOpen; }, [menuOpen]);
   useEffect(() => { chartFullscreenRef.current = chartFullscreen; }, [chartFullscreen]);
 
-  // פונקציה שמחליפה setTab ישיר
+  // פונקציה שמחליפה setTab ישיר — דוחפת entry כדי שה-Back יירה
   const navigateTo = (newTab) => {
     setTab(newTab);
+    history.pushState({}, '');
   };
 
   useEffect(() => {
@@ -12964,19 +12965,18 @@ export default function PokerApp() {
         history.pushState({}, '');
         return;
       }
-      // עדיפות 3: dialog פתוח — Back שני, סגור dialog ותן לדפדפן לצאת
+      // עדיפות 3: dialog כבר פתוח — Back שני, צא
       if (exitConfirmOpenRef.current) {
         exitingRef.current = true;
         setExitConfirmOpen(false);
-        return;
+        return; // לא דוחפים — הדפדפן יוצא
       }
-      // dialog יציאה — דוחף entry כדי שה-Back הבא (לסגירת dialog) יירה
-      history.pushState({}, '');
+      // פתח dialog — לא דוחפים entry, כך שה-Back הבא יצא
       setExitConfirmOpen(true);
     };
 
     window.addEventListener('popstate', handlePop);
-    // דחוף entry אחד בלבד — כדי שה-popstate יירה לפני יציאה
+    // entry ראשוני עבור כניסה ישירה לדשבורד (ללא navigateTo)
     history.pushState({}, '');
 
     return () => window.removeEventListener('popstate', handlePop);
@@ -15929,7 +15929,7 @@ export default function PokerApp() {
             <div className="text-lg font-extrabold text-stone-100 mb-2">לצאת מהאפליקציה?</div>
             <div className="text-sm text-stone-400 mb-5">לחץ שוב על כפתור החזרה לסגירה</div>
             <button
-              onClick={() => { setExitConfirmOpen(false); history.pushState({}, ''); }}
+              onClick={() => { setExitConfirmOpen(false); }}
               className="w-full rounded-xl border border-stone-700 bg-stone-900 py-3 font-bold text-stone-300 hover:bg-stone-800 transition">
               סגור
             </button>
