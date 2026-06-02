@@ -611,14 +611,6 @@ const getTodayIsrael = () => {
   }
 };
 
-// 🗺️ בונה URL לניווט ב-Waze — אם הכתובת היא URL מלא (מתחיל ב-http) משתמש בו ישירות,
-// אחרת בונה URL חיפוש מהטקסט
-const buildWazeUrl = (address) => {
-  if (!address) return null;
-  if (address.startsWith('http')) return address;
-  return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
-};
-
 // 🖼️ אווטר שחקן - תמונה אמיתית או אות ראשונה עם רקע צבעוני
 const PlayerAvatar = ({ name, size = 40, className = '' }) => {
   const avatar = PLAYER_AVATARS[name];
@@ -4821,7 +4813,7 @@ const RegistrationTab = ({
                     {nextSession.address}
                   </span>
                   <a
-                    href={buildWazeUrl(nextSession.address)}
+                    href={`https://waze.com/ul?q=${encodeURIComponent(nextSession.address)}&navigate=yes`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-md bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-600/40 hover:border-cyan-500 px-2 py-0.5 text-cyan-300 hover:text-cyan-200 transition text-[11px] font-bold"
@@ -5507,7 +5499,7 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
           const dateObj = new Date(h.date);
           const dayNum = dateObj.getDate();
           const monthShort = dateObj.toLocaleDateString('he-IL', { month: 'short' });
-          const wazeUrl = buildWazeUrl(h.address);
+          const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address)}&navigate=yes` : null;
           const isHolidayConflict = h.notes && h.notes.includes('לטיפול');
           return (
             <div key={h.date} className={`border-b border-stone-900 p-4 ${isFuture ? '' : 'opacity-60'} ${
@@ -11378,7 +11370,7 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
           {upcoming.map((h, i) => {
             const date = new Date(h.date);
             const isFirst = i === 0;
-            const wazeUrl = buildWazeUrl(h.address);
+            const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address)}&navigate=yes` : null;
             return (
               <div key={h.date} className="min-w-full snap-center px-1">
                 <div className={`rounded-2xl border ${
@@ -12952,6 +12944,14 @@ export default function PokerApp() {
   useEffect(() => { chartFullscreenRef.current = chartFullscreen; }, [chartFullscreen]);
   useEffect(() => { tabRef.current = tab; }, [tab]);
 
+  // בטעינה ראשונה — מוסיפים entry לhistory כדי שה-popstate יורה לפני יציאה
+  useEffect(() => {
+    // replaceState על הentry הנוכחי (סימון שזה dashboard)
+    history.replaceState({ pokerTab: 'dashboard', isBase: true }, '');
+    // pushState נוסף — זה מה שה-Back ידרוס, ויגרום ל-popstate לירות
+    history.pushState({ pokerTab: 'dashboard' }, '');
+  }, []);
+
   // פונקציה שמחליפה setTab ישיר — מוסיפה רשומה ל-browser history
   const navigateTo = (newTab) => {
     if (newTab === tabRef.current) return;
@@ -12962,7 +12962,7 @@ export default function PokerApp() {
 
   // מאזין לכפתור Back — נרשם פעם אחת, קורא מ-refs
   useEffect(() => {
-    const handlePop = () => {
+    const handlePop = (e) => {
       // עדיפות 1: אם המבורגר פתוח — סגור אותו
       if (menuOpenRef.current) {
         setMenuOpen(false);
@@ -12981,9 +12981,11 @@ export default function PokerApp() {
         stack.pop();
         const prev = stack[stack.length - 1];
         setTab(prev);
+        // דחוף entry חדש כדי שה-Back הבא יירה שוב
+        history.pushState({ pokerTab: prev }, '');
       } else {
-        // כבר בדשבורד — הצג dialog יציאה (לא window.confirm שחסום ב-PWA)
-        history.pushState({ pokerTab: 'dashboard' }, ''); // שמור מיקום כדי שלא ייסגר
+        // כבר בדשבורד — הצג dialog יציאה
+        history.pushState({ pokerTab: 'dashboard' }, '');
         setExitConfirmOpen(true);
       }
     };
