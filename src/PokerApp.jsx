@@ -14,8 +14,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.58';
-const APP_BUILD_TIME = '09/05/2026 09:27';
+const APP_VERSION = 'v2.33.60';
+const APP_BUILD_TIME = '02/06/2026 02:42';
 const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
 
 
@@ -3681,7 +3681,7 @@ const UserSelectScreen = ({ players, onSelect, deviceLocks = {}, currentDeviceId
 };
 
 // ===== כרטיסי תובנות אישיות =====
-const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
+const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule, hiddenPlayers = [] }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const scrollRef = useRef(null);
   
@@ -3695,7 +3695,9 @@ const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
     );
   }
 
-  const myRank = stats.findIndex(s => s.name === playerName) + 1;
+  // סינון שחקנים מוסתרים - כדי שהדירוג יתאים לטבלה הראשית
+  const visibleStats = stats.filter(s => !hiddenPlayers.includes(s.name));
+  const myRank = visibleStats.findIndex(s => s.name === playerName) + 1;
   
   // המארח האהוב עליי
   const hostStats = {};
@@ -3979,7 +3981,7 @@ const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
       label: 'המקום שלך בדירוג',
       value: `#${myRank}`,
       valueClass: 'text-amber-300',
-      sub: `מתוך ${stats.length} שחקנים בעונה`,
+      sub: `מתוך ${visibleStats.length} שחקנים בעונה`,
       bgClass: 'from-amber-900/40 to-stone-900/50',
       borderClass: 'border-amber-700/50',
     },
@@ -4482,14 +4484,24 @@ const RegistrationTab = ({
 }) => {
   const MAX_SLOTS = 11; // מספר מקומות רשמיים
   const randomOpenTimeRef = React.useRef(null); // זמן פתיחה אקראי מ-Cloud Function
+  const [, forceUpdate] = React.useState(0); // re-render כשהזמן מתעדכן
   
-  // טעינת זמן פתיחה אקראי מ-Firestore
+  // טעינת זמן פתיחה אקראי מ-Firestore + polling כל דקה
   React.useEffect(() => {
-    loadState(RANDOM_TIME_KEY).then(data => {
-      if (data?.targetTimestamp) {
-        randomOpenTimeRef.current = new Date(data.targetTimestamp);
-      }
-    }).catch(() => {});
+    const checkRandomTime = () => {
+      loadState(RANDOM_TIME_KEY).then(data => {
+        if (data?.targetTimestamp) {
+          const t = new Date(data.targetTimestamp);
+          if (!randomOpenTimeRef.current || randomOpenTimeRef.current.getTime() !== t.getTime()) {
+            randomOpenTimeRef.current = t;
+            forceUpdate(n => n + 1);
+          }
+        }
+      }).catch(() => {});
+    };
+    checkRandomTime();
+    const interval = setInterval(checkRandomTime, 60000);
+    return () => clearInterval(interval);
   }, []);
   
   // 🗓️ זיהוי המפגש הבא מ-hostingSchedule - גם אם אין מארח עדיין
@@ -5897,7 +5909,7 @@ const calculateStreakHelper = (playerName, sessions) => {
 // 🦢 תובנות אישיות - על המשתמש המחובר בלבד
 // ============================================================
 // תובנות מעולם המשחק, מגמה, והשוואה לקבוצה
-const PersonalInsightsBox = ({ sessions, allSessions, stats, currentUser }) => {
+const PersonalInsightsBox = ({ sessions, allSessions, stats, currentUser, hiddenPlayers = [] }) => {
   const insights = useMemo(() => {
     if (!currentUser || !sessions || sessions.length === 0 || !stats) return [];
     
@@ -6081,7 +6093,7 @@ const PersonalInsightsBox = ({ sessions, allSessions, stats, currentUser }) => {
     // ========================================================
     
     // המקום שלך בדירוג
-    const sortedStats = [...stats].sort((a, b) => b.total - a.total);
+    const sortedStats = [...stats].filter(s => !hiddenPlayers.includes(s.name)).sort((a, b) => b.total - a.total);
     const myRank = sortedStats.findIndex(s => s.name === currentUser) + 1;
     const totalActive = sortedStats.length;
     
@@ -11230,7 +11242,7 @@ const PaymentArchive = ({ playerName, reminders, onUpdateReminders }) => {
 };
 
 // ===== דשבורד קומפקטי =====
-const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders, isSuperAdmin, handledReminders, onUpdateHandled }) => {
+const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders, isSuperAdmin, handledReminders, onUpdateHandled, hiddenPlayers = [] }) => {
   // 🎉 Confetti בכניסה - אם המשתמש ניצח בערב האחרון ועוד לא ראה
   const [confettiActive, setConfettiActive] = useState(false);
   const [confettiMessage, setConfettiMessage] = useState('');
@@ -11267,7 +11279,7 @@ const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingS
         onUpdateHandled={onUpdateHandled || (() => {})}
       />
       <EveningSummaryCard playerName={currentUser} isSuperAdmin={isSuperAdmin} />
-      <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
+      <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} hiddenPlayers={hiddenPlayers} />
       {/* 📈 הגרף המצטבר - אחרי המיקום שלך בדירוג */}
       <div className="rounded-2xl border border-stone-800 bg-stone-950/40 backdrop-blur p-2">
         <CumulativeChart sessions={sessions} stats={stats} fullscreen={false}
@@ -13113,6 +13125,9 @@ export default function PokerApp() {
   // אם לא - מחשב ושומר. ה-Cloud Function תקרא את הנתונים האלה ותשלח התראה.
   useEffect(() => {
     if (!allSessions || allSessions.length === 0) return;
+    // הגנה: אם נטענו מעט מדי ערבים, הנתונים כנראה עוד לא הגיעו במלואם מ-Firestore
+    // (מונע חישוב MVP חלקי שגוי כמו שקרה עם מאי 2026)
+    if (allSessions.length < 10) return;
     
     const calculateAndSaveMVPs = async () => {
       try {
@@ -13168,6 +13183,22 @@ export default function PokerApp() {
               };
               updated = true;
               console.log(`🏆 MVP חודשי נוסף: ${monthName} ${lastMonthYear} - ${mvp.name} (+${mvp.profit})`);
+            }
+          }
+        } else if (existing[monthKey] && !existing[monthKey].notificationSent) {
+          // כבר חושב אבל ההתראה עוד לא נשלחה - בדוק אם מספר הערבים גדל (חישוב חלקי קודם)
+          const lastMonthSessions = allSessions.filter(s => {
+            if (!s.date) return false;
+            const d = new Date(s.date);
+            return d.getFullYear() === lastMonthYear && d.getMonth() === lastMonth;
+          });
+          if (lastMonthSessions.length > (existing[monthKey].sessionsCount || 0)) {
+            // יש יותר ערבים עכשיו - מחשבים מחדש (החישוב הקודם היה חלקי)
+            const mvp = computeMVPLocal(lastMonthSessions);
+            if (mvp) {
+              existing[monthKey] = { ...existing[monthKey], ...mvp, computedAt: new Date().toISOString() };
+              updated = true;
+              console.log(`🔄 MVP חודשי עודכן (היה חלקי): ${existing[monthKey].monthName} - ${mvp.name} (+${mvp.profit}) ב-${mvp.sessionsCount} ערבים`);
             }
           }
         }
@@ -15050,6 +15081,7 @@ export default function PokerApp() {
               onUpdateReminders={handleUpdateReminders}
               isSuperAdmin={isSuperAdmin}
               handledReminders={handledReminders}
+              hiddenPlayers={hiddenPlayers}
               onUpdateHandled={async (newHandled) => {
                 setHandledReminders(newHandled);
                 await saveHandledToFirestore(currentUser, newHandled);
@@ -15070,7 +15102,8 @@ export default function PokerApp() {
               sessions={sessions} 
               allSessions={allSessions}
               stats={stats} 
-              currentUser={currentUser} />
+              currentUser={currentUser}
+              hiddenPlayers={hiddenPlayers} />
             <CumulativeChart sessions={sessions} allSessions={allSessions} stats={stats} fullscreen={false}
               onFullscreenToggle={() => setChartFullscreen(true)}
               selectedPlayers={insightsChartPlayers}
