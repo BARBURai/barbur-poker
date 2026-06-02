@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.68';
-const APP_BUILD_TIME = '02/06/2026 20:00';
-const APP_NOTES = '🔙 Back — יציאה תקינה מ-PWA';
+const APP_VERSION = 'v2.33.69';
+const APP_BUILD_TIME = '02/06/2026 20:30';
+const APP_NOTES = '🔙 יציאה עם window.close';
 
 
 // ===== הרשאות מנהל =====
@@ -15926,7 +15926,7 @@ export default function PokerApp() {
                 ביטול
               </button>
               <button
-                onClick={() => { exitingRef.current = true; setExitConfirmOpen(false); history.back(); }}
+                onClick={() => { exitingRef.current = true; setExitConfirmOpen(false); window.close(); }}
                 className="flex-1 rounded-xl bg-rose-700 hover:bg-rose-600 py-3 font-bold text-white transition">
                 יציאה
               </button>
