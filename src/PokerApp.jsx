@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.71';
-const APP_BUILD_TIME = '02/06/2026 21:57';
-const APP_NOTES = '🔙 סגור לא דוחף history';
+const APP_VERSION = 'v2.33.72';
+const APP_BUILD_TIME = '02/06/2026 22:10';
+const APP_NOTES = '🔙 Back עובד מכל טאב כולל דשבורד';
 
 
 // ===== הרשאות מנהל =====
@@ -12947,6 +12947,7 @@ export default function PokerApp() {
   // פונקציה שמחליפה setTab ישיר
   const navigateTo = (newTab) => {
     setTab(newTab);
+    history.pushState({}, '');
   };
 
   useEffect(() => {
