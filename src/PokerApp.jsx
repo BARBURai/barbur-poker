@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.66';
-const APP_BUILD_TIME = '02/06/2026 19:00';
-const APP_NOTES = '🔙 תיקון יציאה מהאפליקציה | 🗺️ Waze כתובת נקייה';
+const APP_VERSION = 'v2.33.67';
+const APP_BUILD_TIME = '02/06/2026 19:30';
+const APP_NOTES = '🔙 Back — dialog יציאה + יציאה תקינה';
 
 
 // ===== הרשאות מנהל =====
@@ -12949,7 +12949,7 @@ export default function PokerApp() {
 
   useEffect(() => {
     const handlePop = () => {
-      if (exitingRef.current) return; // בתהליך יציאה — לא לעשות כלום
+      if (exitingRef.current) return;
       // עדיפות 1: המבורגר פתוח — סגור
       if (menuOpenRef.current) {
         setMenuOpen(false);
@@ -12962,13 +12962,13 @@ export default function PokerApp() {
         history.pushState({}, '');
         return;
       }
-      // תמיד — dialog יציאה
+      // אחרת — dialog יציאה, ודחוף entry כדי לעצור את היציאה
       history.pushState({}, '');
       setExitConfirmOpen(true);
     };
 
     window.addEventListener('popstate', handlePop);
-    history.replaceState({}, '');
+    // דחוף entry אחד בלבד — כדי שה-popstate יירה לפני יציאה
     history.pushState({}, '');
 
     return () => window.removeEventListener('popstate', handlePop);
@@ -15927,7 +15927,7 @@ export default function PokerApp() {
                 ביטול
               </button>
               <button
-                onClick={() => { exitingRef.current = true; setExitConfirmOpen(false); history.back(); history.back(); }}
+                onClick={() => { exitingRef.current = true; setExitConfirmOpen(false); history.back(); }}
                 className="flex-1 rounded-xl bg-rose-700 hover:bg-rose-600 py-3 font-bold text-white transition">
                 יציאה
               </button>
