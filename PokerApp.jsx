@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.48';
-const APP_BUILD_TIME = '09/05/2026 10:30';
-const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
+const APP_VERSION = 'v2.33.61';
+const APP_BUILD_TIME = '02/06/2026 14:30';
+const APP_NOTES = '🔙 כפתור Back אנדרואיד | 🗺️ Waze URL ישיר';
 
 
 // ===== הרשאות מנהל =====
@@ -128,6 +128,7 @@ const GALLERY_STORAGE_KEY = 'poker_gallery_state_v1';
 const REGISTRATION_KEY = 'poker_next_session_registration_v1';
 // 🔒 הפעלת/כיבוי טאב הרישום (אדמין בלבד) - גלובלי לכולם
 const REGISTRATION_ENABLED_KEY = 'poker_registration_feature_enabled_v1';
+const RANDOM_TIME_KEY = 'poker_daily_random_time_v1';
 // 📌 רישום ברזל - שחקנים שמסומנים מראש להצטרף אוטומטית (סופר אדמין בלבד)
 const IRON_REGISTRATION_KEY = 'poker_iron_registration_v1';
 // 📅 תזכורות מארחים - מי אישר, מי דחה, מי לא ענה
@@ -366,6 +367,21 @@ const flushAnalytics = async () => {
   const hasSeconds = analyticsBuffer.secondsAccumulated > 0;
   if (!hasScreens && !hasActions && !hasSession && !hasSeconds) return;
   
+  // שמירה מיידית ל-localStorage כגיבוי (לפני Firestore שהוא async)
+  try {
+    const lsKey = `analytics_pending_${analyticsCurrentUser}`;
+    const pending = JSON.parse(localStorage.getItem(lsKey) || '{}');
+    const buf = analyticsBuffer;
+    // מיזוג עם מה שיש
+    Object.entries(buf.screens || {}).forEach(([s,c]) => { pending.screens = pending.screens||{}; pending.screens[s] = (pending.screens[s]||0)+c; });
+    Object.entries(buf.actions || {}).forEach(([a,c]) => { pending.actions = pending.actions||{}; pending.actions[a] = (pending.actions[a]||0)+c; });
+    pending.sessions = (pending.sessions||0) + buf.sessionsAdded;
+    pending.totalSeconds = (pending.totalSeconds||0) + buf.secondsAccumulated;
+    pending.lastSeen = buf.lastSeenTime;
+    pending.date = getAnalyticsDateKey();
+    localStorage.setItem(lsKey, JSON.stringify(pending));
+  } catch {}
+
   try {
     const dateKey = getAnalyticsDateKey();
     const docKey = `${ANALYTICS_KEY_PREFIX}::${dateKey}`;
@@ -436,6 +452,20 @@ const startAnalyticsSession = (userName) => {
   
   if (!analyticsBuffer) initAnalyticsBuffer();
   analyticsBuffer.sessionsAdded += 1; // ספירת כניסה חדשה
+
+  // העלאת נתונים pending מ-localStorage (מכניסות קודמות שלא הועלו)
+  try {
+    const lsKey = `analytics_pending_${userName}`;
+    const pending = JSON.parse(localStorage.getItem(lsKey) || 'null');
+    if (pending && pending.sessions > 0) {
+      // מיזוג לbuffer הנוכחי
+      Object.entries(pending.screens || {}).forEach(([s,c]) => { analyticsBuffer.screens[s] = (analyticsBuffer.screens[s]||0)+c; });
+      Object.entries(pending.actions || {}).forEach(([a,c]) => { analyticsBuffer.actions[a] = (analyticsBuffer.actions[a]||0)+c; });
+      analyticsBuffer.sessionsAdded += pending.sessions;
+      analyticsBuffer.secondsAccumulated += pending.totalSeconds || 0;
+      localStorage.removeItem(lsKey); // נוקה — יועלה ב-flush הבא
+    }
+  } catch {}
   
   // Flush אוטומטי כל 60 שניות
   if (analyticsFlushTimer) clearInterval(analyticsFlushTimer);
@@ -579,6 +609,14 @@ const getTodayIsrael = () => {
   } catch (e) {
     return new Date().toISOString().split('T')[0];
   }
+};
+
+// 🗺️ בונה URL לניווט ב-Waze — אם הכתובת היא URL מלא (מתחיל ב-http) משתמש בו ישירות,
+// אחרת בונה URL חיפוש מהטקסט
+const buildWazeUrl = (address) => {
+  if (!address) return null;
+  if (address.startsWith('http')) return address;
+  return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
 };
 
 // 🖼️ אווטר שחקן - תמונה אמיתית או אות ראשונה עם רקע צבעוני
@@ -2072,10 +2110,10 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
   };
   
   return (
-    <div dir="rtl" className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-2 md:p-4 overflow-y-auto" onClick={onClose}>
-      <div className="bg-stone-950 rounded-2xl border-2 border-amber-700/50 w-full max-w-3xl my-4" onClick={e => e.stopPropagation()}>
+    <div dir="rtl" className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-sm flex items-center justify-center p-2 md:p-4" onClick={onClose}>
+      <div className="bg-stone-950 rounded-2xl border-2 border-amber-700/50 w-full max-w-3xl my-4 flex flex-col" style={{ maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
         {/* כותרת */}
-        <div className="sticky top-0 z-10 flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-amber-950/40 to-stone-950 rounded-t-2xl">
+        <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-stone-800 bg-gradient-to-l from-amber-950/40 to-stone-950 rounded-t-2xl">
           <div className="flex items-center gap-2">
             <span className="text-2xl">📊</span>
             <div>
@@ -2088,7 +2126,7 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
           </button>
         </div>
         
-        <div className="p-4 space-y-4">
+        <div className="overflow-y-auto flex-1 p-4 space-y-4">
           {/* בורר טווח */}
           <div className="flex flex-wrap gap-2">
             {[7, 30, 90, 180].map(d => (
@@ -2154,38 +2192,30 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
                 </div>
               )}
               
-              {/* גרף עמודות אופקי - מסכים פופולריים */}
+              {/* מסכים פופולריים - progress bars */}
               {screenPieData.length > 0 && (
-                <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3">
-                  <div className="text-xs text-stone-400 font-bold mb-2">📊 מסכים פופולריים</div>
-                  <div style={{ width: '100%', height: Math.max(180, screenPieData.length * 32 + 20) }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart 
-                        data={screenPieData} 
-                        layout="vertical"
-                        margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke="#292524" horizontal={false} />
-                        <XAxis type="number" stroke="#78716c" style={{ fontSize: '10px' }} />
-                        <YAxis 
-                          type="category" 
-                          dataKey="name" 
-                          stroke="#d6d3d1" 
-                          style={{ fontSize: '11px', fontFamily: 'Assistant' }} 
-                          width={110}
-                          interval={0}
-                        />
-                        <Tooltip 
-                          contentStyle={{ backgroundColor: '#1c1917', border: '1px solid #44403c', borderRadius: '8px', fontFamily: 'Assistant', fontSize: '11px' }}
-                          cursor={{ fill: 'rgba(251, 191, 36, 0.1)' }}
-                        />
-                        <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                          {screenPieData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                <div className="rounded-lg bg-stone-900/50 border border-stone-700 p-3 mt-2">
+                  <div className="text-xs text-stone-400 font-bold mb-3">📊 מסכים פופולריים</div>
+                  <div className="space-y-2">
+                    {screenPieData.map((item, index) => {
+                      const maxVal = screenPieData[0]?.value || 1;
+                      const pct = Math.round((item.value / maxVal) * 100);
+                      const medals = ['🥇','🥈','🥉'];
+                      return (
+                        <div key={index} className="flex items-center gap-2">
+                          <span className="text-sm w-5 text-center flex-shrink-0">{medals[index] || ''}</span>
+                          <span className="text-xs text-stone-300 flex-shrink-0" style={{ width: '90px', textAlign: 'right' }}>{item.name}</span>
+                          <div className="flex-1 bg-stone-800 rounded-full h-5 overflow-hidden">
+                            <div
+                              className="h-5 rounded-full flex items-center justify-end pr-2"
+                              style={{ width: `${Math.max(pct, 15)}%`, backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }}
+                            >
+                              <span className="text-[11px] font-bold text-white">{item.value}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -3659,7 +3689,7 @@ const UserSelectScreen = ({ players, onSelect, deviceLocks = {}, currentDeviceId
 };
 
 // ===== כרטיסי תובנות אישיות =====
-const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
+const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule, hiddenPlayers = [] }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
   const scrollRef = useRef(null);
   
@@ -3673,7 +3703,9 @@ const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
     );
   }
 
-  const myRank = stats.findIndex(s => s.name === playerName) + 1;
+  // סינון שחקנים מוסתרים - כדי שהדירוג יתאים לטבלה הראשית
+  const visibleStats = stats.filter(s => !hiddenPlayers.includes(s.name));
+  const myRank = visibleStats.findIndex(s => s.name === playerName) + 1;
   
   // המארח האהוב עליי
   const hostStats = {};
@@ -3957,7 +3989,7 @@ const PersonalInsights = ({ playerName, sessions, stats, hostingSchedule }) => {
       label: 'המקום שלך בדירוג',
       value: `#${myRank}`,
       valueClass: 'text-amber-300',
-      sub: `מתוך ${stats.length} שחקנים בעונה`,
+      sub: `מתוך ${visibleStats.length} שחקנים בעונה`,
       bgClass: 'from-amber-900/40 to-stone-900/50',
       borderClass: 'border-amber-700/50',
     },
@@ -4459,6 +4491,26 @@ const RegistrationTab = ({
   onIronUpdate
 }) => {
   const MAX_SLOTS = 11; // מספר מקומות רשמיים
+  const randomOpenTimeRef = React.useRef(null); // זמן פתיחה אקראי מ-Cloud Function
+  const [, forceUpdate] = React.useState(0); // re-render כשהזמן מתעדכן
+  
+  // טעינת זמן פתיחה אקראי מ-Firestore + polling כל דקה
+  React.useEffect(() => {
+    const checkRandomTime = () => {
+      loadState(RANDOM_TIME_KEY).then(data => {
+        if (data?.targetTimestamp) {
+          const t = new Date(data.targetTimestamp);
+          if (!randomOpenTimeRef.current || randomOpenTimeRef.current.getTime() !== t.getTime()) {
+            randomOpenTimeRef.current = t;
+            forceUpdate(n => n + 1);
+          }
+        }
+      }).catch(() => {});
+    };
+    checkRandomTime();
+    const interval = setInterval(checkRandomTime, 60000);
+    return () => clearInterval(interval);
+  }, []);
   
   // 🗓️ זיהוי המפגש הבא מ-hostingSchedule - גם אם אין מארח עדיין
   const today = getTodayIsrael();
@@ -4490,15 +4542,18 @@ const RegistrationTab = ({
       return { isOpen: false, opensAt: null, reason: 'המפגש הסתיים' };
     }
     
-    // הרישום נפתח 12:00 ביום אחרי המפגש הקודם
+    // הרישום נפתח ביום אחרי המפגש הקודם - בשעה האקראית מ-Cloud Function
     let opensAt;
     if (lastSessionDate && lastSessionDate < nextSession.date) {
-      const lastDate = new Date(lastSessionDate + 'T00:00:00');
-      opensAt = new Date(lastDate);
-      opensAt.setDate(opensAt.getDate() + 1);
-      opensAt.setHours(12, 0, 0, 0);
+      if (randomOpenTimeRef.current) {
+        opensAt = randomOpenTimeRef.current;
+      } else {
+        const lastDate = new Date(lastSessionDate + 'T00:00:00');
+        opensAt = new Date(lastDate);
+        opensAt.setDate(opensAt.getDate() + 1);
+        opensAt.setHours(12, 0, 0, 0);
+      }
     } else {
-      // אין מפגש קודם - פתוח מיד
       opensAt = new Date(now.getTime() - 1000);
     }
     
@@ -4766,7 +4821,7 @@ const RegistrationTab = ({
                     {nextSession.address}
                   </span>
                   <a
-                    href={`https://waze.com/ul?q=${encodeURIComponent(nextSession.address)}&navigate=yes`}
+                    href={buildWazeUrl(nextSession.address)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-md bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-600/40 hover:border-cyan-500 px-2 py-0.5 text-cyan-300 hover:text-cyan-200 transition text-[11px] font-bold"
@@ -5452,7 +5507,7 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
           const dateObj = new Date(h.date);
           const dayNum = dateObj.getDate();
           const monthShort = dateObj.toLocaleDateString('he-IL', { month: 'short' });
-          const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address)}&navigate=yes` : null;
+          const wazeUrl = buildWazeUrl(h.address);
           const isHolidayConflict = h.notes && h.notes.includes('לטיפול');
           return (
             <div key={h.date} className={`border-b border-stone-900 p-4 ${isFuture ? '' : 'opacity-60'} ${
@@ -5862,7 +5917,7 @@ const calculateStreakHelper = (playerName, sessions) => {
 // 🦢 תובנות אישיות - על המשתמש המחובר בלבד
 // ============================================================
 // תובנות מעולם המשחק, מגמה, והשוואה לקבוצה
-const PersonalInsightsBox = ({ sessions, allSessions, stats, currentUser }) => {
+const PersonalInsightsBox = ({ sessions, allSessions, stats, currentUser, hiddenPlayers = [] }) => {
   const insights = useMemo(() => {
     if (!currentUser || !sessions || sessions.length === 0 || !stats) return [];
     
@@ -6046,7 +6101,7 @@ const PersonalInsightsBox = ({ sessions, allSessions, stats, currentUser }) => {
     // ========================================================
     
     // המקום שלך בדירוג
-    const sortedStats = [...stats].sort((a, b) => b.total - a.total);
+    const sortedStats = [...stats].filter(s => !hiddenPlayers.includes(s.name)).sort((a, b) => b.total - a.total);
     const myRank = sortedStats.findIndex(s => s.name === currentUser) + 1;
     const totalActive = sortedStats.length;
     
@@ -11195,7 +11250,7 @@ const PaymentArchive = ({ playerName, reminders, onUpdateReminders }) => {
 };
 
 // ===== דשבורד קומפקטי =====
-const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders, isSuperAdmin, handledReminders, onUpdateHandled }) => {
+const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingSchedule, onGoToHosting, onFullscreenToggle, selectedChartPlayers, setSelectedChartPlayers, isMobile, paymentReminders, phones, onUpdateReminders, isSuperAdmin, handledReminders, onUpdateHandled, hiddenPlayers = [] }) => {
   // 🎉 Confetti בכניסה - אם המשתמש ניצח בערב האחרון ועוד לא ראה
   const [confettiActive, setConfettiActive] = useState(false);
   const [confettiMessage, setConfettiMessage] = useState('');
@@ -11232,7 +11287,7 @@ const DashboardCarousel = ({ currentUser, sessions, allSessions, stats, hostingS
         onUpdateHandled={onUpdateHandled || (() => {})}
       />
       <EveningSummaryCard playerName={currentUser} isSuperAdmin={isSuperAdmin} />
-      <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} />
+      <PersonalInsights playerName={currentUser} sessions={sessions} stats={stats} hostingSchedule={hostingSchedule} hiddenPlayers={hiddenPlayers} />
       {/* 📈 הגרף המצטבר - אחרי המיקום שלך בדירוג */}
       <div className="rounded-2xl border border-stone-800 bg-stone-950/40 backdrop-blur p-2">
         <CumulativeChart sessions={sessions} stats={stats} fullscreen={false}
@@ -11323,7 +11378,7 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
           {upcoming.map((h, i) => {
             const date = new Date(h.date);
             const isFirst = i === 0;
-            const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address)}&navigate=yes` : null;
+            const wazeUrl = buildWazeUrl(h.address);
             return (
               <div key={h.date} className="min-w-full snap-center px-1">
                 <div className={`rounded-2xl border ${
@@ -12845,6 +12900,7 @@ export default function PokerApp() {
   const [ironRegistration, setIronRegistration] = useState({ players: [], refused: [] });
   // 🔒 הפעלת/כיבוי הטאב גלובלית (אדמין)
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
+
   // 🔐 נעילות מכשירים: {playerName: {deviceId, lockedAt, userAgent}}
   const [deviceLocks, setDeviceLocks] = useState({});
   // 🆔 מזהה המכשיר הנוכחי (קבוע)
@@ -12871,6 +12927,7 @@ export default function PokerApp() {
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false); // תפריט המבורגר
+
   // 📊 ניתוח שימוש - תיעוד מעבר בין טאבים
   useEffect(() => {
     if (!currentUser || !tab) return;
@@ -12882,6 +12939,53 @@ export default function PokerApp() {
   // 🆕 רשימה נפרדת לגרף בלשונית תובנות - כדי שלא תושפע משינויים בדשבורד
   const [insightsChartPlayers, setInsightsChartPlayers] = useState([]);
   const [chartFullscreen, setChartFullscreen] = useState(false);
+
+  // 🔙 ניהול כפתור Back של אנדרואיד
+  // חייב להיות אחרי הגדרת chartFullscreen ו-menuOpen
+  const tabHistoryStack = useRef(['dashboard']);
+
+  // פונקציה שמחליפה setTab ישיר — מוסיפה רשומה ל-browser history
+  const navigateTo = (newTab) => {
+    if (newTab === tab) return;
+    history.pushState({ pokerTab: newTab }, '');
+    tabHistoryStack.current.push(newTab);
+    setTab(newTab);
+  };
+
+  // מאזין לכפתור Back
+  useEffect(() => {
+    const handlePop = () => {
+      // עדיפות 1: אם המבורגר פתוח — סגור אותו
+      if (menuOpen) {
+        setMenuOpen(false);
+        history.pushState({ pokerTab: tab }, '');
+        return;
+      }
+      // עדיפות 2: אם fullscreen פעיל — צא ממנו
+      if (chartFullscreen) {
+        setChartFullscreen(false);
+        history.pushState({ pokerTab: tab }, '');
+        return;
+      }
+      // עדיפות 3: חזור לטאב הקודם ב-stack
+      const stack = tabHistoryStack.current;
+      if (stack.length > 1) {
+        stack.pop();
+        const prev = stack[stack.length - 1];
+        setTab(prev);
+      } else {
+        // כבר בדשבורד — שאל אם לצאת
+        if (window.confirm('לצאת מהאפליקציה?')) {
+          history.back();
+        } else {
+          history.pushState({ pokerTab: 'dashboard' }, '');
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, [menuOpen, chartFullscreen, tab]);
   
   // 📡 שידור חי - מצב מקומי
   const [liveBroadcast, setLiveBroadcast] = useState(null);
@@ -13077,6 +13181,9 @@ export default function PokerApp() {
   // אם לא - מחשב ושומר. ה-Cloud Function תקרא את הנתונים האלה ותשלח התראה.
   useEffect(() => {
     if (!allSessions || allSessions.length === 0) return;
+    // הגנה: אם נטענו מעט מדי ערבים, הנתונים כנראה עוד לא הגיעו במלואם מ-Firestore
+    // (מונע חישוב MVP חלקי שגוי כמו שקרה עם מאי 2026)
+    if (allSessions.length < 10) return;
     
     const calculateAndSaveMVPs = async () => {
       try {
@@ -13132,6 +13239,22 @@ export default function PokerApp() {
               };
               updated = true;
               console.log(`🏆 MVP חודשי נוסף: ${monthName} ${lastMonthYear} - ${mvp.name} (+${mvp.profit})`);
+            }
+          }
+        } else if (existing[monthKey] && !existing[monthKey].notificationSent) {
+          // כבר חושב אבל ההתראה עוד לא נשלחה - בדוק אם מספר הערבים גדל (חישוב חלקי קודם)
+          const lastMonthSessions = allSessions.filter(s => {
+            if (!s.date) return false;
+            const d = new Date(s.date);
+            return d.getFullYear() === lastMonthYear && d.getMonth() === lastMonth;
+          });
+          if (lastMonthSessions.length > (existing[monthKey].sessionsCount || 0)) {
+            // יש יותר ערבים עכשיו - מחשבים מחדש (החישוב הקודם היה חלקי)
+            const mvp = computeMVPLocal(lastMonthSessions);
+            if (mvp) {
+              existing[monthKey] = { ...existing[monthKey], ...mvp, computedAt: new Date().toISOString() };
+              updated = true;
+              console.log(`🔄 MVP חודשי עודכן (היה חלקי): ${existing[monthKey].monthName} - ${mvp.name} (+${mvp.profit}) ב-${mvp.sessionsCount} ערבים`);
             }
           }
         }
@@ -13453,6 +13576,7 @@ export default function PokerApp() {
         if (savedReg) setRegistration(savedReg);
         const savedRegEnabled = await loadState(REGISTRATION_ENABLED_KEY);
         if (savedRegEnabled?.enabled) setRegistrationEnabled(true);
+
         // 📌 טעינת רישום ברזל
         const savedIron = await loadState(IRON_REGISTRATION_KEY);
         if (savedIron && typeof savedIron === 'object') {
@@ -14305,8 +14429,18 @@ export default function PokerApp() {
       // שלב 3: הפעלה מחדש - זה הטריגר להתראה
       await saveState({ enabled: true, toggledAt: new Date().toISOString(), toggledBy: adminName, manualTrigger: true }, REGISTRATION_ENABLED_KEY);
       setRegistrationEnabled(true);
-      
-      alert("✅ ההתראה נשלחה!\nהיא אמורה להגיע לכל המכשירים תוך 5-15 שניות.\n\n⚠️ שים לב: הפיצ'ר עכשיו מופעל לכולם.");
+      const manualOpenTime = new Date();
+      const manualTimeData = {
+        targetTimestamp: manualOpenTime.toISOString(),
+        sessionDate: computedNext.date,
+        sessionHost: computedNext.host,
+        sentNotification: true,
+        createdAt: manualOpenTime.toISOString(),
+        manualTrigger: true,
+      };
+      await saveState(manualTimeData, RANDOM_TIME_KEY);
+      randomOpenTimeRef.current = manualOpenTime;
+      alert("✅ ההתראה נשלחה והרישום נפתח!\nהיא אמורה להגיע לכל המכשירים תוך 5-15 שניות.");
     } catch (e) {
       console.error('Failed to send manual notification:', e);
       alert('❌ שגיאה בשליחת ההתראה');
@@ -14854,7 +14988,7 @@ export default function PokerApp() {
 
           {/* ניווט ראשי */}
           <div className="mt-5">
-            <nav className="relative rounded-2xl border-2 border-amber-900/40 p-1.5 flex gap-1 overflow-x-auto shadow-2xl"
+            <nav className="relative rounded-2xl border-2 border-amber-500/70 p-1.5 flex gap-1 overflow-x-auto shadow-2xl"
               style={{
                 background: 'linear-gradient(180deg, rgba(12, 10, 8, 0.85) 0%, rgba(20, 15, 10, 0.9) 100%)',
                 boxShadow: 'inset 0 1px 3px rgba(251, 191, 36, 0.1), 0 10px 40px rgba(0, 0, 0, 0.5)',
@@ -14867,7 +15001,7 @@ export default function PokerApp() {
                 const isSpecial = t.special;
                 const showLiveDot = t.id === 'registration' && registrationOpenNow;
                 return (
-                  <button key={t.id} onClick={() => setTab(t.id)}
+                  <button key={t.id} onClick={() => navigateTo(t.id)}
                     className={`relative flex-1 min-w-fit px-3 md:px-5 py-2.5 text-xs md:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 whitespace-nowrap ${
                       active 
                         ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/50' 
@@ -14993,7 +15127,7 @@ export default function PokerApp() {
               allSessions={allSessions}
               stats={stats} 
               hostingSchedule={hostingSchedule}
-              onGoToHosting={() => setTab('hosting')}
+              onGoToHosting={() => navigateTo('hosting')}
               onFullscreenToggle={() => setChartFullscreen(true)}
               selectedChartPlayers={selectedChartPlayers}
               setSelectedChartPlayers={setSelectedChartPlayers}
@@ -15003,6 +15137,7 @@ export default function PokerApp() {
               onUpdateReminders={handleUpdateReminders}
               isSuperAdmin={isSuperAdmin}
               handledReminders={handledReminders}
+              hiddenPlayers={hiddenPlayers}
               onUpdateHandled={async (newHandled) => {
                 setHandledReminders(newHandled);
                 await saveHandledToFirestore(currentUser, newHandled);
@@ -15023,7 +15158,8 @@ export default function PokerApp() {
               sessions={sessions} 
               allSessions={allSessions}
               stats={stats} 
-              currentUser={currentUser} />
+              currentUser={currentUser}
+              hiddenPlayers={hiddenPlayers} />
             <CumulativeChart sessions={sessions} allSessions={allSessions} stats={stats} fullscreen={false}
               onFullscreenToggle={() => setChartFullscreen(true)}
               selectedPlayers={insightsChartPlayers}
@@ -15400,7 +15536,7 @@ export default function PokerApp() {
                 const isSpecial = t.special;
                 const showLiveDot = t.id === 'registration' && registrationOpenNow;
                 return (
-                  <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false); }}
+                  <button key={t.id} onClick={() => { navigateTo(t.id); setMenuOpen(false); }}
                     className={`relative w-full flex items-center gap-3 rounded-lg px-4 py-3 text-right font-bold transition ${
                       active 
                         ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/30' 
