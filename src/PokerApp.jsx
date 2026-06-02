@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.77';
-const APP_BUILD_TIME = '02/06/2026 23:10';
-const APP_NOTES = '🔙 Back — pushState סינכרוני לפני render';
+const APP_VERSION = 'v2.33.78';
+const APP_BUILD_TIME = '02/06/2026 23:20';
+const APP_NOTES = '🔙 Back — backInitDone ref';
 
 
 // ===== הרשאות מנהל =====
@@ -12936,13 +12936,8 @@ export default function PokerApp() {
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const exitingRef = useRef(false);
   const exitConfirmOpenRef = useRef(false);
+  const backInitDone = useRef(false);
   useEffect(() => { exitConfirmOpenRef.current = exitConfirmOpen; }, [exitConfirmOpen]);
-
-  // דחוף entry סינכרונית לפני ה-render הראשון
-  const [_backInit] = useState(() => {
-    history.pushState({ poker: 'guard' }, '');
-    return true;
-  });
 
   // refs — תמיד מחזיקים את הערך הנוכחי בתוך ה-handler
   const menuOpenRef = useRef(false);
@@ -12958,29 +12953,32 @@ export default function PokerApp() {
   useEffect(() => {
     const handlePop = () => {
       if (exitingRef.current) return;
-      // עדיפות 1: המבורגר פתוח — סגור
       if (menuOpenRef.current) {
         setMenuOpen(false);
         history.pushState({}, '');
         return;
       }
-      // עדיפות 2: fullscreen — צא
       if (chartFullscreenRef.current) {
         setChartFullscreen(false);
         history.pushState({}, '');
         return;
       }
-      // עדיפות 3: dialog כבר פתוח — Back שני, צא
       if (exitConfirmOpenRef.current) {
         exitingRef.current = true;
         setExitConfirmOpen(false);
-        return; // לא דוחפים — הדפדפן יוצא
+        return;
       }
-      // פתח dialog — לא דוחפים entry, כך שה-Back הבא יצא
       setExitConfirmOpen(true);
     };
 
+    // 1. listener קודם
     window.addEventListener('popstate', handlePop);
+
+    // 2. entry אחד בלבד — רק בפעם הראשונה
+    if (!backInitDone.current) {
+      backInitDone.current = true;
+      history.pushState({ poker: 'guard' }, '');
+    }
 
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
