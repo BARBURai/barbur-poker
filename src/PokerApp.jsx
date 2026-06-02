@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.60';
-const APP_BUILD_TIME = '02/06/2026 02:42';
-const APP_NOTES = '📋 ניהול רישום הועבר להמבורגר - מסך ראשי נקי יותר';
+const APP_VERSION = 'v2.33.61';
+const APP_BUILD_TIME = '02/06/2026 14:30';
+const APP_NOTES = '🔙 כפתור Back אנדרואיד | 🗺️ Waze URL ישיר';
 
 
 // ===== הרשאות מנהל =====
@@ -609,6 +609,14 @@ const getTodayIsrael = () => {
   } catch (e) {
     return new Date().toISOString().split('T')[0];
   }
+};
+
+// 🗺️ בונה URL לניווט ב-Waze — אם הכתובת היא URL מלא (מתחיל ב-http) משתמש בו ישירות,
+// אחרת בונה URL חיפוש מהטקסט
+const buildWazeUrl = (address) => {
+  if (!address) return null;
+  if (address.startsWith('http')) return address;
+  return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
 };
 
 // 🖼️ אווטר שחקן - תמונה אמיתית או אות ראשונה עם רקע צבעוני
@@ -4813,7 +4821,7 @@ const RegistrationTab = ({
                     {nextSession.address}
                   </span>
                   <a
-                    href={`https://waze.com/ul?q=${encodeURIComponent(nextSession.address)}&navigate=yes`}
+                    href={buildWazeUrl(nextSession.address)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-md bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-600/40 hover:border-cyan-500 px-2 py-0.5 text-cyan-300 hover:text-cyan-200 transition text-[11px] font-bold"
@@ -5499,7 +5507,7 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
           const dateObj = new Date(h.date);
           const dayNum = dateObj.getDate();
           const monthShort = dateObj.toLocaleDateString('he-IL', { month: 'short' });
-          const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address)}&navigate=yes` : null;
+          const wazeUrl = buildWazeUrl(h.address);
           const isHolidayConflict = h.notes && h.notes.includes('לטיפול');
           return (
             <div key={h.date} className={`border-b border-stone-900 p-4 ${isFuture ? '' : 'opacity-60'} ${
@@ -11370,7 +11378,7 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
           {upcoming.map((h, i) => {
             const date = new Date(h.date);
             const isFirst = i === 0;
-            const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address)}&navigate=yes` : null;
+            const wazeUrl = buildWazeUrl(h.address);
             return (
               <div key={h.date} className="min-w-full snap-center px-1">
                 <div className={`rounded-2xl border ${
@@ -12919,6 +12927,52 @@ export default function PokerApp() {
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false); // תפריט המבורגר
+
+  // 🔙 ניהול כפתור Back של אנדרואיד
+  const tabHistoryStack = useRef(['dashboard']);
+
+  // פונקציה שמחליפה setTab ישיר — מוסיפה רשומה ל-browser history
+  const navigateTo = (newTab) => {
+    if (newTab === tab) return;
+    history.pushState({ pokerTab: newTab }, '');
+    tabHistoryStack.current.push(newTab);
+    setTab(newTab);
+  };
+
+  // מאזין לכפתור Back
+  useEffect(() => {
+    const handlePop = () => {
+      // עדיפות 1: אם המבורגר פתוח — סגור אותו
+      if (menuOpen) {
+        setMenuOpen(false);
+        history.pushState({ pokerTab: tab }, ''); // שמור מיקום נוכחי
+        return;
+      }
+      // עדיפות 2: אם fullscreen פעיל — צא ממנו
+      if (chartFullscreen) {
+        setChartFullscreen(false);
+        history.pushState({ pokerTab: tab }, '');
+        return;
+      }
+      // עדיפות 3: חזור לטאב הקודם ב-stack
+      const stack = tabHistoryStack.current;
+      if (stack.length > 1) {
+        stack.pop();
+        const prev = stack[stack.length - 1];
+        setTab(prev);
+      } else {
+        // כבר בדשבורד — שאל אם לצאת
+        if (window.confirm('לצאת מהאפליקציה?')) {
+          history.back();
+        } else {
+          history.pushState({ pokerTab: 'dashboard' }, '');
+        }
+      }
+    };
+
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, [menuOpen, chartFullscreen, tab]);
   // 📊 ניתוח שימוש - תיעוד מעבר בין טאבים
   useEffect(() => {
     if (!currentUser || !tab) return;
@@ -14945,7 +14999,7 @@ export default function PokerApp() {
                 const isSpecial = t.special;
                 const showLiveDot = t.id === 'registration' && registrationOpenNow;
                 return (
-                  <button key={t.id} onClick={() => setTab(t.id)}
+                  <button key={t.id} onClick={() => navigateTo(t.id)}
                     className={`relative flex-1 min-w-fit px-3 md:px-5 py-2.5 text-xs md:text-sm font-bold rounded-xl transition flex items-center justify-center gap-2 whitespace-nowrap ${
                       active 
                         ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/50' 
@@ -15071,7 +15125,7 @@ export default function PokerApp() {
               allSessions={allSessions}
               stats={stats} 
               hostingSchedule={hostingSchedule}
-              onGoToHosting={() => setTab('hosting')}
+              onGoToHosting={() => navigateTo('hosting')}
               onFullscreenToggle={() => setChartFullscreen(true)}
               selectedChartPlayers={selectedChartPlayers}
               setSelectedChartPlayers={setSelectedChartPlayers}
@@ -15480,7 +15534,7 @@ export default function PokerApp() {
                 const isSpecial = t.special;
                 const showLiveDot = t.id === 'registration' && registrationOpenNow;
                 return (
-                  <button key={t.id} onClick={() => { setTab(t.id); setMenuOpen(false); }}
+                  <button key={t.id} onClick={() => { navigateTo(t.id); setMenuOpen(false); }}
                     className={`relative w-full flex items-center gap-3 rounded-lg px-4 py-3 text-right font-bold transition ${
                       active 
                         ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/30' 
