@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.69';
-const APP_BUILD_TIME = '02/06/2026 20:30';
-const APP_NOTES = '🔙 יציאה עם window.close';
+const APP_VERSION = 'v2.33.70';
+const APP_BUILD_TIME = '02/06/2026 21:00';
+const APP_NOTES = '🔙 Back פעמיים לצאת — dialog פשוט';
 
 
 // ===== הרשאות מנהל =====
@@ -12934,7 +12934,9 @@ export default function PokerApp() {
 
   // 🔙 ניהול כפתור Back של אנדרואיד — תמיד מציג dialog יציאה
   const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
-  const exitingRef = useRef(false); // מונע פתיחת dialog חוזרת בזמן יציאה
+  const exitingRef = useRef(false);
+  const exitConfirmOpenRef = useRef(false);
+  useEffect(() => { exitConfirmOpenRef.current = exitConfirmOpen; }, [exitConfirmOpen]);
 
   // refs — תמיד מחזיקים את הערך הנוכחי בתוך ה-handler
   const menuOpenRef = useRef(false);
@@ -12962,7 +12964,13 @@ export default function PokerApp() {
         history.pushState({}, '');
         return;
       }
-      // dialog יציאה — לא דוחפים entry חדש, כך שלחיצת "יציאה" תצא ישירות
+      // עדיפות 3: dialog פתוח — Back שני, סגור dialog ותן לדפדפן לצאת
+      if (exitConfirmOpenRef.current) {
+        exitingRef.current = true;
+        setExitConfirmOpen(false);
+        return; // לא דוחפים entry — הדפדפן ימשיך לצאת
+      }
+      // dialog יציאה — לא דוחפים entry
       setExitConfirmOpen(true);
     };
 
@@ -15912,25 +15920,18 @@ export default function PokerApp() {
         </div>
       )}
 
-      {/* 🔙 Dialog יציאה מהאפליקציה (כפתור Back מהדשבורד) */}
+      {/* 🔙 Dialog יציאה מהאפליקציה */}
       {exitConfirmOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" dir="rtl">
           <div className="w-full max-w-xs rounded-2xl border-2 border-stone-700 bg-stone-950 p-6 shadow-2xl text-center">
             <div className="text-4xl mb-3">🃏</div>
             <div className="text-lg font-extrabold text-stone-100 mb-2">לצאת מהאפליקציה?</div>
-            <div className="text-sm text-stone-400 mb-5">תוכל לחזור בכל זמן</div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => { setExitConfirmOpen(false); history.pushState({}, ''); }}
-                className="flex-1 rounded-xl border border-stone-700 bg-stone-900 py-3 font-bold text-stone-300 hover:bg-stone-800 transition">
-                ביטול
-              </button>
-              <button
-                onClick={() => { exitingRef.current = true; setExitConfirmOpen(false); window.close(); }}
-                className="flex-1 rounded-xl bg-rose-700 hover:bg-rose-600 py-3 font-bold text-white transition">
-                יציאה
-              </button>
-            </div>
+            <div className="text-sm text-stone-400 mb-5">לחץ שוב על כפתור החזרה לסגירה</div>
+            <button
+              onClick={() => { setExitConfirmOpen(false); history.pushState({}, ''); }}
+              className="w-full rounded-xl border border-stone-700 bg-stone-900 py-3 font-bold text-stone-300 hover:bg-stone-800 transition">
+              סגור
+            </button>
           </div>
         </div>
       )}
