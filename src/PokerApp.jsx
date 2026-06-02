@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.78';
-const APP_BUILD_TIME = '02/06/2026 23:20';
-const APP_NOTES = '🔙 Back — backInitDone ref';
+const APP_VERSION = 'v2.33.79';
+const APP_BUILD_TIME = '02/06/2026 23:35';
+const APP_NOTES = '🔔 תיקון באג פתיחת רישום — randomOpenTime כ-state';
 
 
 // ===== הרשאות מנהל =====
@@ -4484,6 +4484,7 @@ const RegistrationTab = ({
 }) => {
   const MAX_SLOTS = 11; // מספר מקומות רשמיים
   const randomOpenTimeRef = React.useRef(null); // זמן פתיחה אקראי מ-Cloud Function
+  const [randomOpenTime, setRandomOpenTime] = React.useState(null); // state גרסה לuseMemo
   const [, forceUpdate] = React.useState(0); // re-render כשהזמן מתעדכן
   
   // טעינת זמן פתיחה אקראי מ-Firestore + polling כל דקה
@@ -4494,6 +4495,7 @@ const RegistrationTab = ({
           const t = new Date(data.targetTimestamp);
           if (!randomOpenTimeRef.current || randomOpenTimeRef.current.getTime() !== t.getTime()) {
             randomOpenTimeRef.current = t;
+            setRandomOpenTime(t); // מעדכן state כדי ש-useMemo יחושב מחדש
             forceUpdate(n => n + 1);
           }
         }
@@ -4537,8 +4539,8 @@ const RegistrationTab = ({
     // הרישום נפתח ביום אחרי המפגש הקודם - בשעה האקראית מ-Cloud Function
     let opensAt;
     if (lastSessionDate && lastSessionDate < nextSession.date) {
-      if (randomOpenTimeRef.current) {
-        opensAt = randomOpenTimeRef.current;
+      if (randomOpenTime) {
+        opensAt = randomOpenTime;
       } else {
         const lastDate = new Date(lastSessionDate + 'T00:00:00');
         opensAt = new Date(lastDate);
@@ -4554,7 +4556,7 @@ const RegistrationTab = ({
     }
     
     return { isOpen: true, opensAt, reason: null };
-  }, [nextSession, lastSessionDate]);
+  }, [nextSession, lastSessionDate, randomOpenTime]);
   
   // 🔄 איפוס אוטומטי ב-11:55 ביום אחרי המפגש - רק סופר אדמין מבצע
   // (כדי למנוע race condition של משתמשים מרובים שמאפסים בו זמנית)
