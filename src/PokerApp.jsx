@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.75';
-const APP_BUILD_TIME = '02/06/2026 22:45';
-const APP_NOTES = '🔙 Back — entry אחד בלבד';
+const APP_VERSION = 'v2.33.76';
+const APP_BUILD_TIME = '02/06/2026 22:55';
+const APP_NOTES = '🔙 Back דשבורד — replaceState+pushState';
 
 
 // ===== הרשאות מנהל =====
@@ -12975,8 +12975,9 @@ export default function PokerApp() {
     };
 
     window.addEventListener('popstate', handlePop);
-    // entry ראשוני עבור כניסה ישירה לדשבורד (ללא navigateTo)
-    history.pushState({}, '');
+    // סמן את ה-entry הנוכחי ודחוף אחד מעליו
+    history.replaceState({ poker: 'base' }, '');
+    history.pushState({ poker: 'top' }, '');
 
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
