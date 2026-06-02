@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.61';
-const APP_BUILD_TIME = '02/06/2026 14:30';
-const APP_NOTES = '🔙 כפתור Back אנדרואיד | 🗺️ Waze URL ישיר';
+const APP_VERSION = 'v2.33.62';
+const APP_BUILD_TIME = '02/06/2026 17:00';
+const APP_NOTES = '🔙 כפתור Back אנדרואיד + dialog יציאה';
 
 
 // ===== הרשאות מנהל =====
@@ -609,14 +609,6 @@ const getTodayIsrael = () => {
   } catch (e) {
     return new Date().toISOString().split('T')[0];
   }
-};
-
-// 🗺️ בונה URL לניווט ב-Waze — אם הכתובת היא URL מלא (מתחיל ב-http) משתמש בו ישירות,
-// אחרת בונה URL חיפוש מהטקסט
-const buildWazeUrl = (address) => {
-  if (!address) return null;
-  if (address.startsWith('http')) return address;
-  return `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
 };
 
 // 🖼️ אווטר שחקן - תמונה אמיתית או אות ראשונה עם רקע צבעוני
@@ -4821,7 +4813,7 @@ const RegistrationTab = ({
                     {nextSession.address}
                   </span>
                   <a
-                    href={buildWazeUrl(nextSession.address)}
+                    href={`https://waze.com/ul?q=${encodeURIComponent(nextSession.address)}&navigate=yes`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-md bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-600/40 hover:border-cyan-500 px-2 py-0.5 text-cyan-300 hover:text-cyan-200 transition text-[11px] font-bold"
@@ -5507,7 +5499,7 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
           const dateObj = new Date(h.date);
           const dayNum = dateObj.getDate();
           const monthShort = dateObj.toLocaleDateString('he-IL', { month: 'short' });
-          const wazeUrl = buildWazeUrl(h.address);
+          const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address)}&navigate=yes` : null;
           const isHolidayConflict = h.notes && h.notes.includes('לטיפול');
           return (
             <div key={h.date} className={`border-b border-stone-900 p-4 ${isFuture ? '' : 'opacity-60'} ${
@@ -11378,7 +11370,7 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
           {upcoming.map((h, i) => {
             const date = new Date(h.date);
             const isFirst = i === 0;
-            const wazeUrl = buildWazeUrl(h.address);
+            const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address)}&navigate=yes` : null;
             return (
               <div key={h.date} className="min-w-full snap-center px-1">
                 <div className={`rounded-2xl border ${
@@ -12941,30 +12933,46 @@ export default function PokerApp() {
   const [chartFullscreen, setChartFullscreen] = useState(false);
 
   // 🔙 ניהול כפתור Back של אנדרואיד
-  // חייב להיות אחרי הגדרת chartFullscreen ו-menuOpen
   const tabHistoryStack = useRef(['dashboard']);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
+
+  // refs שמשקפים תמיד את הערך הנוכחי בתוך popstate handler (פתרון closure)
+  const menuOpenRef = useRef(false);
+  const chartFullscreenRef = useRef(false);
+  const tabRef = useRef('dashboard');
+  useEffect(() => { menuOpenRef.current = menuOpen; }, [menuOpen]);
+  useEffect(() => { chartFullscreenRef.current = chartFullscreen; }, [chartFullscreen]);
+  useEffect(() => { tabRef.current = tab; }, [tab]);
+
+  // בטעינה ראשונה — מוסיפים entry לhistory כדי שה-popstate יורה לפני יציאה
+  useEffect(() => {
+    // replaceState על הentry הנוכחי (סימון שזה dashboard)
+    history.replaceState({ pokerTab: 'dashboard', isBase: true }, '');
+    // pushState נוסף — זה מה שה-Back ידרוס, ויגרום ל-popstate לירות
+    history.pushState({ pokerTab: 'dashboard' }, '');
+  }, []);
 
   // פונקציה שמחליפה setTab ישיר — מוסיפה רשומה ל-browser history
   const navigateTo = (newTab) => {
-    if (newTab === tab) return;
+    if (newTab === tabRef.current) return;
     history.pushState({ pokerTab: newTab }, '');
     tabHistoryStack.current.push(newTab);
     setTab(newTab);
   };
 
-  // מאזין לכפתור Back
+  // מאזין לכפתור Back — נרשם פעם אחת, קורא מ-refs
   useEffect(() => {
-    const handlePop = () => {
+    const handlePop = (e) => {
       // עדיפות 1: אם המבורגר פתוח — סגור אותו
-      if (menuOpen) {
+      if (menuOpenRef.current) {
         setMenuOpen(false);
-        history.pushState({ pokerTab: tab }, '');
+        history.pushState({ pokerTab: tabRef.current }, '');
         return;
       }
       // עדיפות 2: אם fullscreen פעיל — צא ממנו
-      if (chartFullscreen) {
+      if (chartFullscreenRef.current) {
         setChartFullscreen(false);
-        history.pushState({ pokerTab: tab }, '');
+        history.pushState({ pokerTab: tabRef.current }, '');
         return;
       }
       // עדיפות 3: חזור לטאב הקודם ב-stack
@@ -12973,19 +12981,18 @@ export default function PokerApp() {
         stack.pop();
         const prev = stack[stack.length - 1];
         setTab(prev);
+        // דחוף entry חדש כדי שה-Back הבא יירה שוב
+        history.pushState({ pokerTab: prev }, '');
       } else {
-        // כבר בדשבורד — שאל אם לצאת
-        if (window.confirm('לצאת מהאפליקציה?')) {
-          history.back();
-        } else {
-          history.pushState({ pokerTab: 'dashboard' }, '');
-        }
+        // כבר בדשבורד — הצג dialog יציאה
+        history.pushState({ pokerTab: 'dashboard' }, '');
+        setExitConfirmOpen(true);
       }
     };
 
     window.addEventListener('popstate', handlePop);
     return () => window.removeEventListener('popstate', handlePop);
-  }, [menuOpen, chartFullscreen, tab]);
+  }, []); // נרשם פעם אחת בלבד — קורא מ-refs
   
   // 📡 שידור חי - מצב מקומי
   const [liveBroadcast, setLiveBroadcast] = useState(null);
@@ -15920,6 +15927,29 @@ export default function PokerApp() {
               <button onClick={() => setPermissionsToast(null)}
                 className="text-stone-500 hover:text-white shrink-0">
                 <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔙 Dialog יציאה מהאפליקציה (כפתור Back מהדשבורד) */}
+      {exitConfirmOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" dir="rtl">
+          <div className="w-full max-w-xs rounded-2xl border-2 border-stone-700 bg-stone-950 p-6 shadow-2xl text-center">
+            <div className="text-4xl mb-3">🃏</div>
+            <div className="text-lg font-extrabold text-stone-100 mb-2">לצאת מהאפליקציה?</div>
+            <div className="text-sm text-stone-400 mb-5">תוכל לחזור בכל זמן</div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setExitConfirmOpen(false); }}
+                className="flex-1 rounded-xl border border-stone-700 bg-stone-900 py-3 font-bold text-stone-300 hover:bg-stone-800 transition">
+                ביטול
+              </button>
+              <button
+                onClick={() => { setExitConfirmOpen(false); history.back(); }}
+                className="flex-1 rounded-xl bg-rose-700 hover:bg-rose-600 py-3 font-bold text-white transition">
+                יציאה
               </button>
             </div>
           </div>
