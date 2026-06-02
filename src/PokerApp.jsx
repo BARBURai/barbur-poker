@@ -12928,7 +12928,20 @@ export default function PokerApp() {
   const [tab, setTab] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false); // תפריט המבורגר
 
+  // 📊 ניתוח שימוש - תיעוד מעבר בין טאבים
+  useEffect(() => {
+    if (!currentUser || !tab) return;
+    try {
+      trackScreen(tab);
+    } catch {}
+  }, [tab, currentUser]);
+  const [selectedChartPlayers, setSelectedChartPlayers] = useState([]);
+  // 🆕 רשימה נפרדת לגרף בלשונית תובנות - כדי שלא תושפע משינויים בדשבורד
+  const [insightsChartPlayers, setInsightsChartPlayers] = useState([]);
+  const [chartFullscreen, setChartFullscreen] = useState(false);
+
   // 🔙 ניהול כפתור Back של אנדרואיד
+  // חייב להיות אחרי הגדרת chartFullscreen ו-menuOpen
   const tabHistoryStack = useRef(['dashboard']);
 
   // פונקציה שמחליפה setTab ישיר — מוסיפה רשומה ל-browser history
@@ -12945,7 +12958,7 @@ export default function PokerApp() {
       // עדיפות 1: אם המבורגר פתוח — סגור אותו
       if (menuOpen) {
         setMenuOpen(false);
-        history.pushState({ pokerTab: tab }, ''); // שמור מיקום נוכחי
+        history.pushState({ pokerTab: tab }, '');
         return;
       }
       // עדיפות 2: אם fullscreen פעיל — צא ממנו
@@ -12973,17 +12986,6 @@ export default function PokerApp() {
     window.addEventListener('popstate', handlePop);
     return () => window.removeEventListener('popstate', handlePop);
   }, [menuOpen, chartFullscreen, tab]);
-  // 📊 ניתוח שימוש - תיעוד מעבר בין טאבים
-  useEffect(() => {
-    if (!currentUser || !tab) return;
-    try {
-      trackScreen(tab);
-    } catch {}
-  }, [tab, currentUser]);
-  const [selectedChartPlayers, setSelectedChartPlayers] = useState([]);
-  // 🆕 רשימה נפרדת לגרף בלשונית תובנות - כדי שלא תושפע משינויים בדשבורד
-  const [insightsChartPlayers, setInsightsChartPlayers] = useState([]);
-  const [chartFullscreen, setChartFullscreen] = useState(false);
   
   // 📡 שידור חי - מצב מקומי
   const [liveBroadcast, setLiveBroadcast] = useState(null);
