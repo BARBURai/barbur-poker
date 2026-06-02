@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.67';
-const APP_BUILD_TIME = '02/06/2026 19:30';
-const APP_NOTES = '🔙 Back — dialog יציאה + יציאה תקינה';
+const APP_VERSION = 'v2.33.68';
+const APP_BUILD_TIME = '02/06/2026 20:00';
+const APP_NOTES = '🔙 Back — יציאה תקינה מ-PWA';
 
 
 // ===== הרשאות מנהל =====
@@ -12962,8 +12962,7 @@ export default function PokerApp() {
         history.pushState({}, '');
         return;
       }
-      // אחרת — dialog יציאה, ודחוף entry כדי לעצור את היציאה
-      history.pushState({}, '');
+      // dialog יציאה — לא דוחפים entry חדש, כך שלחיצת "יציאה" תצא ישירות
       setExitConfirmOpen(true);
     };
 
@@ -15922,7 +15921,7 @@ export default function PokerApp() {
             <div className="text-sm text-stone-400 mb-5">תוכל לחזור בכל זמן</div>
             <div className="flex gap-3">
               <button
-                onClick={() => { setExitConfirmOpen(false); }}
+                onClick={() => { setExitConfirmOpen(false); history.pushState({}, ''); }}
                 className="flex-1 rounded-xl border border-stone-700 bg-stone-900 py-3 font-bold text-stone-300 hover:bg-stone-800 transition">
                 ביטול
               </button>
