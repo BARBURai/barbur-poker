@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.72';
-const APP_BUILD_TIME = '02/06/2026 22:10';
-const APP_NOTES = '🔙 Back עובד מכל טאב כולל דשבורד';
+const APP_VERSION = 'v2.33.73';
+const APP_BUILD_TIME = '02/06/2026 22:20';
+const APP_NOTES = '🔙 Back — dialog בכל מקום כולל דשבורד';
 
 
 // ===== הרשאות מנהל =====
@@ -12947,7 +12947,6 @@ export default function PokerApp() {
   // פונקציה שמחליפה setTab ישיר
   const navigateTo = (newTab) => {
     setTab(newTab);
-    history.pushState({}, '');
   };
 
   useEffect(() => {
@@ -12969,9 +12968,10 @@ export default function PokerApp() {
       if (exitConfirmOpenRef.current) {
         exitingRef.current = true;
         setExitConfirmOpen(false);
-        return; // לא דוחפים entry — הדפדפן ימשיך לצאת
+        return;
       }
-      // dialog יציאה — לא דוחפים entry
+      // dialog יציאה — דוחף entry כדי שה-Back הבא (לסגירת dialog) יירה
+      history.pushState({}, '');
       setExitConfirmOpen(true);
     };
 
@@ -15929,7 +15929,7 @@ export default function PokerApp() {
             <div className="text-lg font-extrabold text-stone-100 mb-2">לצאת מהאפליקציה?</div>
             <div className="text-sm text-stone-400 mb-5">לחץ שוב על כפתור החזרה לסגירה</div>
             <button
-              onClick={() => { setExitConfirmOpen(false); }}
+              onClick={() => { setExitConfirmOpen(false); history.pushState({}, ''); }}
               className="w-full rounded-xl border border-stone-700 bg-stone-900 py-3 font-bold text-stone-300 hover:bg-stone-800 transition">
               סגור
             </button>
