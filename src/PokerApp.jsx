@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.76';
-const APP_BUILD_TIME = '02/06/2026 22:55';
-const APP_NOTES = '🔙 Back דשבורד — replaceState+pushState';
+const APP_VERSION = 'v2.33.77';
+const APP_BUILD_TIME = '02/06/2026 23:10';
+const APP_NOTES = '🔙 Back — pushState סינכרוני לפני render';
 
 
 // ===== הרשאות מנהל =====
@@ -12938,6 +12938,12 @@ export default function PokerApp() {
   const exitConfirmOpenRef = useRef(false);
   useEffect(() => { exitConfirmOpenRef.current = exitConfirmOpen; }, [exitConfirmOpen]);
 
+  // דחוף entry סינכרונית לפני ה-render הראשון
+  const [_backInit] = useState(() => {
+    history.pushState({ poker: 'guard' }, '');
+    return true;
+  });
+
   // refs — תמיד מחזיקים את הערך הנוכחי בתוך ה-handler
   const menuOpenRef = useRef(false);
   const chartFullscreenRef = useRef(false);
@@ -12975,9 +12981,6 @@ export default function PokerApp() {
     };
 
     window.addEventListener('popstate', handlePop);
-    // סמן את ה-entry הנוכחי ודחוף אחד מעליו
-    history.replaceState({ poker: 'base' }, '');
-    history.pushState({ poker: 'top' }, '');
 
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
