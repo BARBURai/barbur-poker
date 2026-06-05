@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.82';
-const APP_BUILD_TIME = '05/06/2026 09:40';
-const APP_NOTES = '🔔 תיקון סדר hooks — nextSessionRef אחרי nextSession';
+const APP_VERSION = 'v2.33.83';
+const APP_BUILD_TIME = '05/06/2026 09:50';
+const APP_NOTES = '👑 כפתור בדיקת שעת פתיחה לסופר אדמין';
 
 
 // ===== הרשאות מנהל =====
@@ -4867,6 +4867,31 @@ const RegistrationTab = ({
               <div className="text-xs text-stone-500 mt-1">
                 ⏰ הרישום נפתח: <span className="text-amber-400 font-bold">{opensAtFormatted}</span>
               </div>
+            )}
+            {isSuperAdmin && (
+              <button
+                onClick={() => {
+                  loadState(RANDOM_TIME_KEY).then(data => {
+                    if (data?.targetTimestamp && data?.sessionDate) {
+                      const t = new Date(data.targetTimestamp);
+                      const now = new Date();
+                      const diff = t - now;
+                      if (diff > 0) {
+                        const mins = Math.floor(diff / 60000);
+                        const secs = Math.floor((diff % 60000) / 1000);
+                        alert('⏳ נפתח בעוד ' + mins + ' דקות ו-' + secs + ' שניות\n🕐 שעת פתיחה: ' + t.toLocaleTimeString('he-IL') + '\n📅 סשן: ' + data.sessionDate);
+                      } else {
+                        alert('✅ זמן הפתיחה עבר\n🕐 נפתח ב: ' + t.toLocaleTimeString('he-IL') + '\n📅 סשן: ' + data.sessionDate);
+                      }
+                    } else {
+                      alert('⚠️ עדיין לא נקבעה שעת פתיחה ב-Firestore');
+                    }
+                  }).catch(() => alert('❌ שגיאה בטעינה'));
+                }}
+                className="mt-2 text-xs text-stone-500 hover:text-amber-400 underline transition"
+              >
+                👑 בדוק שעת פתיחה
+              </button>
             )}
           </div>
         ) : (
