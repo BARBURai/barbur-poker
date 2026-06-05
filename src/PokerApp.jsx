@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.80';
-const APP_BUILD_TIME = '05/06/2026 09:20';
-const APP_NOTES = '🔔 תיקון פתיחת רישום מוקדמת — בדיקת sessionDate';
+const APP_VERSION = 'v2.33.81';
+const APP_BUILD_TIME = '05/06/2026 09:30';
+const APP_NOTES = '🔔 תיקון מסך ירוק — nextSessionRef';
 
 
 // ===== הרשאות מנהל =====
@@ -4487,13 +4487,17 @@ const RegistrationTab = ({
   const [randomOpenTime, setRandomOpenTime] = React.useState(null); // state גרסה לuseMemo
   const [, forceUpdate] = React.useState(0); // re-render כשהזמן מתעדכן
   
+  const nextSessionRef = React.useRef(null);
+  React.useEffect(() => { nextSessionRef.current = nextSession; }, [nextSession]);
+
   // טעינת זמן פתיחה אקראי מ-Firestore + polling כל דקה
   React.useEffect(() => {
     const checkRandomTime = () => {
       loadState(RANDOM_TIME_KEY).then(data => {
         if (data?.targetTimestamp && data?.sessionDate) {
           // בדוק שהזמן שייך למפגש הבא — לא לישן
-          if (nextSession && data.sessionDate !== nextSession.date) {
+          const ns = nextSessionRef.current;
+          if (ns && data.sessionDate !== ns.date) {
             // זמן ישן — אפס
             if (randomOpenTimeRef.current !== null) {
               randomOpenTimeRef.current = null;
@@ -4513,7 +4517,7 @@ const RegistrationTab = ({
     checkRandomTime();
     const interval = setInterval(checkRandomTime, 60000);
     return () => clearInterval(interval);
-  }, [nextSession]);
+  }, []);
   
   // 🗓️ זיהוי המפגש הבא מ-hostingSchedule - גם אם אין מארח עדיין
   const today = getTodayIsrael();
