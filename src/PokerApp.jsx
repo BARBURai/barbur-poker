@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.88';
-const APP_BUILD_TIME = '14/06/2026 12:45';
-const APP_NOTES = '🔧 תיקון loop אינסופי — rebalance עם refs';
+const APP_VERSION = 'v2.33.89';
+const APP_BUILD_TIME = '14/06/2026 13:00';
+const APP_NOTES = '🔧 חזרה לגרסה יציבה — הסרת קוד בעייתי';
 
 
 // ===== הרשאות מנהל =====
@@ -5720,58 +5720,14 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
 
 // ===== טאב אירוחים עם בורר תצוגה =====
 const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, isAdmin, onUpdate, adminName, registration, onRegistrationUpdate }) => {
-  const [view, setView] = useState('upcoming'); // upcoming | history | stats
-  const today = getTodayIsrael();
-
-  // חישוב סטטיסטיקת אירוח בזמן אמת
-  const hostingStats = useMemo(() => {
-    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    const recentSessions = (allSessions || []).filter(s => s.date >= sixMonthsAgo && s.date < today);
-    const totalGames = recentSessions.length;
-    if (totalGames === 0) return [];
-
-    const attendance = {};
-    const hostActual = {};
-    for (const s of recentSessions) {
-      for (const p of Object.keys(s.results || {})) {
-        attendance[p] = (attendance[p] || 0) + 1;
-      }
-      if (s.host) hostActual[s.host] = (hostActual[s.host] || 0) + 1;
-    }
-
-    const futureCounts = {};
-    for (const h of (hostingSchedule || [])) {
-      if (h.date >= today && h.host && !['אלון','אילון'].includes(h.host)) {
-        futureCounts[h.host] = (futureCounts[h.host] || 0) + 1;
-      }
-    }
-
-    const activePlayers = Object.keys(attendance).filter(p => attendance[p] >= 2);
-    const totalAtt = activePlayers.reduce((s, p) => s + attendance[p], 0);
-    const n_past = (hostingSchedule || []).filter(h => h.date >= sixMonthsAgo && h.date < today && h.host && !['אלון','אילון'].includes(h.host)).length;
-    const n_future = (hostingSchedule || []).filter(h => h.date >= today && h.host && !['אלון','אילון'].includes(h.host)).length;
-    const n_total = n_past + n_future;
-
-    return activePlayers
-      .map(p => {
-        const att = attendance[p] || 0;
-        const share = att / totalAtt;
-        const hosted = hostActual[p] || 0;
-        const future = futureCounts[p] || 0;
-        const total = hosted + future;
-        const expected = Math.round(share * n_total * 10) / 10;
-        const diff = total - expected;
-        return { name: p, att, share, hosted, future, total, expected, diff };
-      })
-      .sort((a, b) => b.att - a.att);
-  }, [allSessions, hostingSchedule, today]);
-
+  const [view, setView] = useState('upcoming'); // upcoming | history
+  
   return (
     <div className="space-y-4">
       {/* בורר תצוגה */}
       <div className="flex rounded-2xl border border-stone-800 bg-stone-950/70 p-1.5 backdrop-blur">
         <button onClick={() => setView('upcoming')}
-          className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-bold transition flex items-center justify-center gap-1.5 ${
+          className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-bold transition flex items-center justify-center gap-2 ${
             view === 'upcoming'
               ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/40'
               : 'text-stone-400 hover:text-amber-200'
@@ -5779,20 +5735,12 @@ const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, 
           🏠 מארחים הבאים
         </button>
         <button onClick={() => setView('history')}
-          className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-bold transition flex items-center justify-center gap-1.5 ${
+          className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-bold transition flex items-center justify-center gap-2 ${
             view === 'history'
               ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/40'
               : 'text-stone-400 hover:text-amber-200'
           }`}>
           📜 היסטוריה
-        </button>
-        <button onClick={() => setView('stats')}
-          className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-bold transition flex items-center justify-center gap-1.5 ${
-            view === 'stats'
-              ? 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg shadow-emerald-900/40'
-              : 'text-stone-400 hover:text-emerald-300'
-          }`}>
-          📊 סטטיסטיקה
         </button>
       </div>
 
@@ -5801,72 +5749,16 @@ const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, 
         <HostingTab hostingSchedule={hostingSchedule} isAdmin={isAdmin}
           onUpdate={onUpdate} players={sortedPlayers} addedBy={adminName} defaultFilter="upcoming"
           registration={registration} onRegistrationUpdate={onRegistrationUpdate} />
-      ) : view === 'history' ? (
+      ) : (
         <div className="space-y-4">
           <HostingSummaryTable allSessions={allSessions} players={players} />
           <HostingTab hostingSchedule={hostingSchedule} isAdmin={isAdmin}
             onUpdate={onUpdate} players={sortedPlayers} addedBy={adminName} defaultFilter="past" />
         </div>
-      ) : (
-        // סטטיסטיקת אירוח
-        <div className="rounded-2xl border border-stone-800 bg-stone-950/60 overflow-hidden">
-          <div className="px-4 py-3 border-b border-stone-800 bg-stone-900/40">
-            <div className="text-sm font-bold text-emerald-300">📊 סטטיסטיקת אירוח</div>
-            <div className="text-xs text-stone-500 mt-0.5">בסיס: 6 חודשים אחורה | % נוכחות מול % אירוח</div>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs" dir="rtl">
-              <thead>
-                <tr className="bg-stone-900/60 text-stone-400 border-b border-stone-800">
-                  <th className="px-3 py-2.5 text-right font-bold">שחקן</th>
-                  <th className="px-3 py-2.5 text-center font-bold">נוכחות</th>
-                  <th className="px-3 py-2.5 text-center font-bold">% נוכחות</th>
-                  <th className="px-3 py-2.5 text-center font-bold">ארח</th>
-                  <th className="px-3 py-2.5 text-center font-bold">עתיד</th>
-                  <th className="px-3 py-2.5 text-center font-bold">סה"כ</th>
-                  <th className="px-3 py-2.5 text-center font-bold">צפוי</th>
-                  <th className="px-3 py-2.5 text-center font-bold">הפרש</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hostingStats.map((row, i) => {
-                  const isOver = row.diff > 1;
-                  const isUnder = row.diff < -1;
-                  return (
-                    <tr key={row.name} className={`border-b border-stone-900 ${i % 2 === 0 ? 'bg-stone-950' : 'bg-stone-900/30'}`}>
-                      <td className="px-3 py-2.5 font-bold text-stone-100 whitespace-nowrap">{row.name}</td>
-                      <td className="px-3 py-2.5 text-center text-stone-300 tabular-nums">{row.att}</td>
-                      <td className="px-3 py-2.5 text-center text-stone-400 tabular-nums">{Math.round(row.share * 100)}%</td>
-                      <td className="px-3 py-2.5 text-center text-stone-300 tabular-nums">{row.hosted}</td>
-                      <td className="px-3 py-2.5 text-center text-stone-400 tabular-nums">{row.future}</td>
-                      <td className="px-3 py-2.5 text-center font-bold text-stone-100 tabular-nums">{row.total}</td>
-                      <td className="px-3 py-2.5 text-center text-stone-400 tabular-nums">{row.expected}</td>
-                      <td className="px-3 py-2.5 text-center tabular-nums font-bold">
-                        <span className={`px-1.5 py-0.5 rounded text-xs ${
-                          isOver ? 'bg-rose-900/50 text-rose-300' :
-                          isUnder ? 'bg-blue-900/50 text-blue-300' :
-                          'bg-emerald-900/50 text-emerald-300'
-                        }`}>
-                          {row.diff > 0 ? '+' : ''}{Math.round(row.diff * 10) / 10}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="px-4 py-2.5 border-t border-stone-800 flex gap-4 text-xs text-stone-500">
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500 inline-block"></span> מארח יותר מדי</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span> מארח פחות מדי</span>
-            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> מאוזן</span>
-          </div>
-        </div>
       )}
     </div>
   );
 };
-
 // ===== מודל ניהול חי של ערב =====
 const LIVE_SESSION_KEY = 'poker_live_session_v1';
 
@@ -14228,101 +14120,6 @@ export default function PokerApp() {
     setHostingSchedule(newSchedule);
     await persistSessions(allSessions, players, newSchedule);
   };
-
-  // 🔄 ===== איזון אוטומטי של לוח אירוחים (סופר אדמין בלבד) =====
-  const REBALANCE_KEY = 'poker_hosting_rebalance_v1';
-  const allSessionsRef = useRef(allSessions);
-  const hostingScheduleRef = useRef(hostingSchedule);
-  const handleHostingUpdateRef = useRef(handleHostingUpdate);
-  useEffect(() => { allSessionsRef.current = allSessions; }, [allSessions]);
-  useEffect(() => { hostingScheduleRef.current = hostingSchedule; }, [hostingSchedule]);
-  useEffect(() => { handleHostingUpdateRef.current = handleHostingUpdate; });
-
-  useEffect(() => {
-    if (!isSuperAdmin) return;
-
-    const runRebalance = async () => {
-      try {
-        const sessions = allSessionsRef.current;
-        const schedule = hostingScheduleRef.current;
-        if (!sessions?.length || !schedule?.length) return;
-
-        const lastRunData = await loadState(REBALANCE_KEY);
-        if (lastRunData?.lastRun) {
-          const daysSince = (Date.now() - new Date(lastRunData.lastRun).getTime()) / (1000 * 60 * 60 * 24);
-          if (daysSince < 30) return;
-        }
-
-        const today = new Date().toISOString().split('T')[0];
-        const cutoffDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-        const recentSessions = sessions.filter(s => s.date >= sixMonthsAgo && s.date < today);
-        if (recentSessions.length === 0) return;
-
-        const attendance = {};
-        const hostActual = {};
-        for (const s of recentSessions) {
-          for (const p of Object.keys(s.results || {})) attendance[p] = (attendance[p] || 0) + 1;
-          if (s.host) hostActual[s.host] = (hostActual[s.host] || 0) + 1;
-        }
-
-        const farFuture = schedule.filter(h => h.date > cutoffDate && h.host && !['אלון','אילון'].includes(h.host));
-        if (farFuture.length === 0) { await saveState({ lastRun: new Date().toISOString() }, REBALANCE_KEY); return; }
-
-        const activePlayers = Object.keys(attendance).filter(p => attendance[p] >= 2);
-        const totalAtt = activePlayers.reduce((s, p) => s + (attendance[p] || 0), 0);
-        const playerAddresses = {};
-        for (const h of schedule) { if (h.host && h.address) playerAddresses[h.host] = h.address; }
-
-        const n_past = schedule.filter(h => h.date >= sixMonthsAgo && h.date < today && h.host && !['אלון','אילון'].includes(h.host)).length;
-        const n_future = schedule.filter(h => h.date >= today && h.host && !['אלון','אילון'].includes(h.host)).length;
-        const n_total = n_past + n_future;
-
-        const quotas = {};
-        for (const p of activePlayers) {
-          const share = (attendance[p] || 0) / totalAtt;
-          quotas[p] = Math.max(0, Math.round(share * n_total - (hostActual[p] || 0)));
-        }
-
-        const currentFutureCounts = {};
-        for (const h of schedule) {
-          if (h.date >= today && h.host && !['אלון','אילון'].includes(h.host))
-            currentFutureCounts[h.host] = (currentFutureCounts[h.host] || 0) + 1;
-        }
-
-        const overHosts = new Set(farFuture.map(h => h.host).filter(p => (currentFutureCounts[p] || 0) > (quotas[p] || 0) + 1));
-        const underHosts = activePlayers.filter(p => (currentFutureCounts[p] || 0) < (quotas[p] || 0) - 1 && playerAddresses[p]);
-
-        if (overHosts.size === 0 || underHosts.length === 0) {
-          await saveState({ lastRun: new Date().toISOString() }, REBALANCE_KEY);
-          return;
-        }
-
-        const newSchedule = schedule.map(h => ({...h}));
-        let changed = false;
-        for (const slot of newSchedule) {
-          if (slot.date <= cutoffDate || ['אלון','אילון'].includes(slot.host) || !overHosts.has(slot.host)) continue;
-          const replacement = underHosts.find(p => p !== slot.host && (currentFutureCounts[p] || 0) < (quotas[p] || 0));
-          if (!replacement) continue;
-          overHosts.delete(slot.host);
-          currentFutureCounts[slot.host] = (currentFutureCounts[slot.host] || 1) - 1;
-          slot.host = replacement;
-          slot.address = playerAddresses[replacement] || '';
-          currentFutureCounts[replacement] = (currentFutureCounts[replacement] || 0) + 1;
-          changed = true;
-        }
-
-        if (changed) await handleHostingUpdateRef.current(newSchedule);
-        await saveState({ lastRun: new Date().toISOString() }, REBALANCE_KEY);
-      } catch (e) {
-        console.warn('hosting rebalance error:', e);
-      }
-    };
-
-    const timer = setTimeout(runRebalance, 5000);
-    return () => clearTimeout(timer);
-  }, [isSuperAdmin]); // רץ רק כשסטטוס הסופר אדמין משתנה — קורא מ-refs
 
   const handleUserSelect = async (name) => {
     // 👑 סופר אדמין - דורש סיסמה כדי להזדהות (אלא אם המכשיר הזה כבר נעול אליו)
