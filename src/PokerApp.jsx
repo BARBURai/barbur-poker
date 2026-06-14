@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.86';
-const APP_BUILD_TIME = '14/06/2026 11:45';
-const APP_NOTES = '🔧 תיקון סדר פונקציות — איזון אוטומטי';
+const APP_VERSION = 'v2.33.87';
+const APP_BUILD_TIME = '14/06/2026 12:15';
+const APP_NOTES = '🔧 תיקון infinite loop ב-useMemo';
 
 
 // ===== הרשאות מנהל =====
@@ -5722,10 +5722,10 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
 const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, isAdmin, onUpdate, adminName, registration, onRegistrationUpdate }) => {
   const [view, setView] = useState('upcoming'); // upcoming | history | stats
   const today = getTodayIsrael();
-  const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   // חישוב סטטיסטיקת אירוח בזמן אמת
   const hostingStats = useMemo(() => {
+    const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const recentSessions = (allSessions || []).filter(s => s.date >= sixMonthsAgo && s.date < today);
     const totalGames = recentSessions.length;
     if (totalGames === 0) return [];
@@ -5764,7 +5764,7 @@ const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, 
         return { name: p, att, share, hosted, future, total, expected, diff };
       })
       .sort((a, b) => b.att - a.att);
-  }, [allSessions, hostingSchedule, today, sixMonthsAgo]);
+  }, [allSessions, hostingSchedule, today]);
 
   return (
     <div className="space-y-4">
