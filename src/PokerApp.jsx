@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.89';
-const APP_BUILD_TIME = '14/06/2026 13:00';
-const APP_NOTES = '🔧 חזרה לגרסה יציבה — הסרת קוד בעייתי';
+const APP_VERSION = 'v2.33.90';
+const APP_BUILD_TIME = '14/06/2026 13:15';
+const APP_NOTES = '📊 סטטיסטיקת אירוח';
 
 
 // ===== הרשאות מנהל =====
@@ -5718,16 +5718,110 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
   );
 };
 
+// ===== סטטיסטיקת אירוח =====
+const HostingStats = ({ allSessions, hostingSchedule }) => {
+  const today = getTodayIsrael();
+  const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const recentSessions = (allSessions || []).filter(s => s.date >= sixMonthsAgo && s.date < today);
+  if (recentSessions.length === 0) return (
+    <div className="text-center text-stone-500 py-8 text-sm">אין נתונים מ-6 חודשים אחרונים</div>
+  );
+
+  const attendance = {};
+  const hostActual = {};
+  for (const s of recentSessions) {
+    for (const p of Object.keys(s.results || {})) attendance[p] = (attendance[p] || 0) + 1;
+    if (s.host) hostActual[s.host] = (hostActual[s.host] || 0) + 1;
+  }
+
+  const futureCounts = {};
+  for (const h of (hostingSchedule || [])) {
+    if (h.date >= today && h.host && !['אלון','אילון'].includes(h.host))
+      futureCounts[h.host] = (futureCounts[h.host] || 0) + 1;
+  }
+
+  const n_past = (hostingSchedule || []).filter(h => h.date >= sixMonthsAgo && h.date < today && h.host && !['אלון','אילון'].includes(h.host)).length;
+  const n_future = (hostingSchedule || []).filter(h => h.date >= today && h.host && !['אלון','אילון'].includes(h.host)).length;
+  const n_total = n_past + n_future;
+
+  const activePlayers = Object.keys(attendance).filter(p => attendance[p] >= 2);
+  const totalAtt = activePlayers.reduce((sum, p) => sum + attendance[p], 0);
+
+  const rows = activePlayers.map(p => {
+    const att = attendance[p] || 0;
+    const share = att / totalAtt;
+    const hosted = hostActual[p] || 0;
+    const future = futureCounts[p] || 0;
+    const total = hosted + future;
+    const expected = Math.round(share * n_total * 10) / 10;
+    const diff = Math.round((total - expected) * 10) / 10;
+    return { name: p, att, share, hosted, future, total, expected, diff };
+  }).sort((a, b) => b.att - a.att);
+
+  return (
+    <div className="rounded-2xl border border-stone-800 bg-stone-950/60 overflow-hidden">
+      <div className="px-4 py-3 border-b border-stone-800 bg-stone-900/40">
+        <div className="text-sm font-bold text-emerald-300">📊 סטטיסטיקת אירוח</div>
+        <div className="text-xs text-stone-500 mt-0.5">בסיס: 6 חודשים אחורה | % נוכחות מול % אירוח</div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs" dir="rtl">
+          <thead>
+            <tr className="bg-stone-900/60 text-stone-400 border-b border-stone-800">
+              <th className="px-3 py-2.5 text-right font-bold">שחקן</th>
+              <th className="px-3 py-2.5 text-center font-bold">נוכח</th>
+              <th className="px-3 py-2.5 text-center font-bold">%</th>
+              <th className="px-3 py-2.5 text-center font-bold">ארח</th>
+              <th className="px-3 py-2.5 text-center font-bold">עתיד</th>
+              <th className="px-3 py-2.5 text-center font-bold">סה"כ</th>
+              <th className="px-3 py-2.5 text-center font-bold">צפוי</th>
+              <th className="px-3 py-2.5 text-center font-bold">הפרש</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={row.name} className={`border-b border-stone-900 ${i % 2 === 0 ? 'bg-stone-950' : 'bg-stone-900/30'}`}>
+                <td className="px-3 py-2 font-bold text-stone-100 whitespace-nowrap">{row.name}</td>
+                <td className="px-3 py-2 text-center text-stone-300 tabular-nums">{row.att}</td>
+                <td className="px-3 py-2 text-center text-stone-400 tabular-nums">{Math.round(row.share * 100)}%</td>
+                <td className="px-3 py-2 text-center text-stone-300 tabular-nums">{row.hosted}</td>
+                <td className="px-3 py-2 text-center text-stone-400 tabular-nums">{row.future}</td>
+                <td className="px-3 py-2 text-center font-bold text-stone-100 tabular-nums">{row.total}</td>
+                <td className="px-3 py-2 text-center text-stone-400 tabular-nums">{row.expected}</td>
+                <td className="px-3 py-2 text-center tabular-nums">
+                  <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
+                    row.diff > 1 ? 'bg-rose-900/50 text-rose-300' :
+                    row.diff < -1 ? 'bg-blue-900/50 text-blue-300' :
+                    'bg-emerald-900/50 text-emerald-300'
+                  }`}>
+                    {row.diff > 0 ? '+' : ''}{row.diff}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="px-4 py-2 border-t border-stone-800 flex gap-4 text-xs text-stone-500">
+        <span><span className="inline-block w-2 h-2 rounded-full bg-rose-500 mr-1"></span>יותר מדי</span>
+        <span><span className="inline-block w-2 h-2 rounded-full bg-blue-500 mr-1"></span>פחות מדי</span>
+        <span><span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span>מאוזן</span>
+      </div>
+    </div>
+  );
+};
+
 // ===== טאב אירוחים עם בורר תצוגה =====
 const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, isAdmin, onUpdate, adminName, registration, onRegistrationUpdate }) => {
-  const [view, setView] = useState('upcoming'); // upcoming | history
+  const [view, setView] = useState('upcoming'); // upcoming | history | stats
   
   return (
     <div className="space-y-4">
       {/* בורר תצוגה */}
       <div className="flex rounded-2xl border border-stone-800 bg-stone-950/70 p-1.5 backdrop-blur">
         <button onClick={() => setView('upcoming')}
-          className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-bold transition flex items-center justify-center gap-2 ${
             view === 'upcoming'
               ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/40'
               : 'text-stone-400 hover:text-amber-200'
@@ -5735,12 +5829,20 @@ const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, 
           🏠 מארחים הבאים
         </button>
         <button onClick={() => setView('history')}
-          className={`flex-1 rounded-xl px-4 py-2.5 text-sm font-bold transition flex items-center justify-center gap-2 ${
+          className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-bold transition flex items-center justify-center gap-2 ${
             view === 'history'
               ? 'bg-gradient-to-br from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-900/40'
               : 'text-stone-400 hover:text-amber-200'
           }`}>
           📜 היסטוריה
+        </button>
+        <button onClick={() => setView('stats')}
+          className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-bold transition flex items-center justify-center gap-2 ${
+            view === 'stats'
+              ? 'bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg shadow-emerald-900/40'
+              : 'text-stone-400 hover:text-emerald-300'
+          }`}>
+          📊 סטטיסטיקה
         </button>
       </div>
 
@@ -5749,12 +5851,14 @@ const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, 
         <HostingTab hostingSchedule={hostingSchedule} isAdmin={isAdmin}
           onUpdate={onUpdate} players={sortedPlayers} addedBy={adminName} defaultFilter="upcoming"
           registration={registration} onRegistrationUpdate={onRegistrationUpdate} />
-      ) : (
+      ) : view === 'history' ? (
         <div className="space-y-4">
           <HostingSummaryTable allSessions={allSessions} players={players} />
           <HostingTab hostingSchedule={hostingSchedule} isAdmin={isAdmin}
             onUpdate={onUpdate} players={sortedPlayers} addedBy={adminName} defaultFilter="past" />
         </div>
+      ) : (
+        <HostingStats allSessions={allSessions} hostingSchedule={hostingSchedule} />
       )}
     </div>
   );
