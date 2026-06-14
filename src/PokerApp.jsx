@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.83';
-const APP_BUILD_TIME = '05/06/2026 09:50';
-const APP_NOTES = '👑 כפתור בדיקת שעת פתיחה לסופר אדמין';
+const APP_VERSION = 'v2.33.84';
+const APP_BUILD_TIME = '14/06/2026 10:30';
+const APP_NOTES = '🔄 איזון אוטומטי לוח אירוחים | 👑 בדיקת שעת פתיחה';
 
 
 // ===== הרשאות מנהל =====
@@ -13856,6 +13856,140 @@ export default function PokerApp() {
     }
     await persistPhones(newPhones);
   };
+
+  // 🔄 ===== איזון אוטומטי של לוח אירוחים (סופר אדמין בלבד) =====
+  const REBALANCE_KEY = 'poker_hosting_rebalance_v1';
+  const REBALANCE_INTERVAL_DAYS = 30;
+  const REBALANCE_FUTURE_MIN_DAYS = 60; // לא נוגע בערבים קרובים מ-60 יום
+
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    if (!allSessions || allSessions.length === 0) return;
+    if (!hostingSchedule || hostingSchedule.length === 0) return;
+
+    const runRebalance = async () => {
+      try {
+        // בדוק מתי רצנו לאחרונה
+        const lastRunData = await loadState(REBALANCE_KEY);
+        if (lastRunData?.lastRun) {
+          const daysSince = (Date.now() - new Date(lastRunData.lastRun).getTime()) / (1000 * 60 * 60 * 24);
+          if (daysSince < REBALANCE_INTERVAL_DAYS) return; // עוד לא הגיע הזמן
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        const cutoffDate = new Date(Date.now() + REBALANCE_FUTURE_MIN_DAYS * 24 * 60 * 60 * 1000)
+          .toISOString().split('T')[0];
+
+        // נוכחות 6 חודשים אחורה
+        const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const recentSessions = allSessions.filter(s => s.date >= sixMonthsAgo && s.date < today);
+        const totalGames = recentSessions.length;
+        if (totalGames === 0) return;
+
+        const attendance = {};
+        const hostActual = {};
+        for (const s of recentSessions) {
+          for (const p of Object.keys(s.results || {})) {
+            attendance[p] = (attendance[p] || 0) + 1;
+          }
+          if (s.host) hostActual[s.host] = (hostActual[s.host] || 0) + 1;
+        }
+
+        // ערבים עתידיים — רק מעל 60 יום קדימה, לא אלון/אילון
+        const farFuture = hostingSchedule.filter(h =>
+          h.date > cutoffDate && h.host && !['אלון','אילון'].includes(h.host)
+        );
+        if (farFuture.length === 0) return;
+
+        // שחקנים פעילים (נוכחות ב-6 חודשים)
+        const activePlayers = Object.keys(attendance).filter(p => attendance[p] >= 2);
+        const totalAtt = activePlayers.reduce((s, p) => s + (attendance[p] || 0), 0);
+
+        // כתובות לכל שחקן מהלוח הקיים
+        const playerAddresses = {};
+        for (const h of hostingSchedule) {
+          if (h.host && h.address) playerAddresses[h.host] = h.address;
+        }
+
+        // חישוב מכסה עתידית לכל שחקן
+        const n_past_hosting = hostingSchedule.filter(h =>
+          h.date >= sixMonthsAgo && h.date < today && h.host && !['אלון','אילון'].includes(h.host)
+        ).length;
+        const n_future_hosting = hostingSchedule.filter(h =>
+          h.date >= today && h.host && !['אלון','אילון'].includes(h.host)
+        ).length;
+        const n_total = n_past_hosting + n_future_hosting;
+
+        const quotas = {};
+        for (const p of activePlayers) {
+          const share = (attendance[p] || 0) / totalAtt;
+          const expected = share * n_total;
+          const alreadyHosted = hostActual[p] || 0;
+          quotas[p] = Math.max(0, Math.round(expected - alreadyHosted));
+        }
+
+        // ספירת אירוחים עתידיים נוכחיים (כולל קרובים)
+        const currentFutureCounts = {};
+        for (const h of hostingSchedule) {
+          if (h.date >= today && h.host && !['אלון','אילון'].includes(h.host)) {
+            currentFutureCounts[h.host] = (currentFutureCounts[h.host] || 0) + 1;
+          }
+        }
+
+        // מי מארח יותר מדי ומי פחות מדי — רק בחלון הרחוק
+        const overHosts = farFuture
+          .map(h => h.host)
+          .filter(p => (currentFutureCounts[p] || 0) > (quotas[p] || 0) + 1);
+        const underHosts = activePlayers
+          .filter(p => (currentFutureCounts[p] || 0) < (quotas[p] || 0) - 1 && playerAddresses[p]);
+
+        if (overHosts.length === 0 || underHosts.length === 0) {
+          // הכל מאוזן — עדכן timestamp בלבד
+          await saveState({ lastRun: new Date().toISOString() }, REBALANCE_KEY);
+          return;
+        }
+
+        // בצע החלפות
+        let newSchedule = [...hostingSchedule];
+        let changed = false;
+
+        for (const slot of newSchedule) {
+          if (slot.date <= cutoffDate) continue;
+          if (['אלון','אילון'].includes(slot.host)) continue;
+          if (!overHosts.includes(slot.host)) continue;
+
+          // מצא מחליף — מי שמארח פחות מדי
+          const replacement = underHosts.find(p =>
+            p !== slot.host && playerAddresses[p] &&
+            (currentFutureCounts[p] || 0) < (quotas[p] || 0)
+          );
+          if (!replacement) continue;
+
+          // בצע החלפה
+          slot.host = replacement;
+          slot.address = playerAddresses[replacement] || '';
+          currentFutureCounts[replacement] = (currentFutureCounts[replacement] || 0) + 1;
+          currentFutureCounts[overHosts[overHosts.indexOf(slot.host)]] -= 1;
+          changed = true;
+        }
+
+        if (changed) {
+          await handleHostingUpdate(newSchedule);
+        }
+
+        // שמור timestamp
+        await saveState({ lastRun: new Date().toISOString() }, REBALANCE_KEY);
+
+      } catch (e) {
+        // שגיאה — לא עושים כלום, ננסה בחודש הבא
+        console.warn('hosting rebalance error:', e);
+      }
+    };
+
+    // המתן 5 שניות אחרי טעינה לפני הרצה
+    const timer = setTimeout(runRebalance, 5000);
+    return () => clearTimeout(timer);
+  }, [isSuperAdmin, allSessions, hostingSchedule]);
 
   // 🆕 ===== מערכת גיבויים =====
   
