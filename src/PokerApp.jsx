@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.87';
-const APP_BUILD_TIME = '14/06/2026 12:15';
-const APP_NOTES = '🔧 תיקון infinite loop ב-useMemo';
+const APP_VERSION = 'v2.33.88';
+const APP_BUILD_TIME = '14/06/2026 12:45';
+const APP_NOTES = '🔧 תיקון loop אינסופי — rebalance עם refs';
 
 
 // ===== הרשאות מנהל =====
@@ -14231,27 +14231,33 @@ export default function PokerApp() {
 
   // 🔄 ===== איזון אוטומטי של לוח אירוחים (סופר אדמין בלבד) =====
   const REBALANCE_KEY = 'poker_hosting_rebalance_v1';
-  const REBALANCE_INTERVAL_DAYS = 30;
-  const REBALANCE_FUTURE_MIN_DAYS = 60;
+  const allSessionsRef = useRef(allSessions);
+  const hostingScheduleRef = useRef(hostingSchedule);
+  const handleHostingUpdateRef = useRef(handleHostingUpdate);
+  useEffect(() => { allSessionsRef.current = allSessions; }, [allSessions]);
+  useEffect(() => { hostingScheduleRef.current = hostingSchedule; }, [hostingSchedule]);
+  useEffect(() => { handleHostingUpdateRef.current = handleHostingUpdate; });
 
   useEffect(() => {
     if (!isSuperAdmin) return;
-    if (!allSessions || allSessions.length === 0) return;
-    if (!hostingSchedule || hostingSchedule.length === 0) return;
 
     const runRebalance = async () => {
       try {
+        const sessions = allSessionsRef.current;
+        const schedule = hostingScheduleRef.current;
+        if (!sessions?.length || !schedule?.length) return;
+
         const lastRunData = await loadState(REBALANCE_KEY);
         if (lastRunData?.lastRun) {
           const daysSince = (Date.now() - new Date(lastRunData.lastRun).getTime()) / (1000 * 60 * 60 * 24);
-          if (daysSince < REBALANCE_INTERVAL_DAYS) return;
+          if (daysSince < 30) return;
         }
 
         const today = new Date().toISOString().split('T')[0];
-        const cutoffDate = new Date(Date.now() + REBALANCE_FUTURE_MIN_DAYS * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const cutoffDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-        const recentSessions = allSessions.filter(s => s.date >= sixMonthsAgo && s.date < today);
+        const recentSessions = sessions.filter(s => s.date >= sixMonthsAgo && s.date < today);
         if (recentSessions.length === 0) return;
 
         const attendance = {};
@@ -14261,16 +14267,16 @@ export default function PokerApp() {
           if (s.host) hostActual[s.host] = (hostActual[s.host] || 0) + 1;
         }
 
-        const farFuture = hostingSchedule.filter(h => h.date > cutoffDate && h.host && !['אלון','אילון'].includes(h.host));
+        const farFuture = schedule.filter(h => h.date > cutoffDate && h.host && !['אלון','אילון'].includes(h.host));
         if (farFuture.length === 0) { await saveState({ lastRun: new Date().toISOString() }, REBALANCE_KEY); return; }
 
         const activePlayers = Object.keys(attendance).filter(p => attendance[p] >= 2);
         const totalAtt = activePlayers.reduce((s, p) => s + (attendance[p] || 0), 0);
         const playerAddresses = {};
-        for (const h of hostingSchedule) { if (h.host && h.address) playerAddresses[h.host] = h.address; }
+        for (const h of schedule) { if (h.host && h.address) playerAddresses[h.host] = h.address; }
 
-        const n_past = hostingSchedule.filter(h => h.date >= sixMonthsAgo && h.date < today && h.host && !['אלון','אילון'].includes(h.host)).length;
-        const n_future = hostingSchedule.filter(h => h.date >= today && h.host && !['אלון','אילון'].includes(h.host)).length;
+        const n_past = schedule.filter(h => h.date >= sixMonthsAgo && h.date < today && h.host && !['אלון','אילון'].includes(h.host)).length;
+        const n_future = schedule.filter(h => h.date >= today && h.host && !['אלון','אילון'].includes(h.host)).length;
         const n_total = n_past + n_future;
 
         const quotas = {};
@@ -14280,7 +14286,7 @@ export default function PokerApp() {
         }
 
         const currentFutureCounts = {};
-        for (const h of hostingSchedule) {
+        for (const h of schedule) {
           if (h.date >= today && h.host && !['אלון','אילון'].includes(h.host))
             currentFutureCounts[h.host] = (currentFutureCounts[h.host] || 0) + 1;
         }
@@ -14293,7 +14299,7 @@ export default function PokerApp() {
           return;
         }
 
-        const newSchedule = [...hostingSchedule];
+        const newSchedule = schedule.map(h => ({...h}));
         let changed = false;
         for (const slot of newSchedule) {
           if (slot.date <= cutoffDate || ['אלון','אילון'].includes(slot.host) || !overHosts.has(slot.host)) continue;
@@ -14307,7 +14313,7 @@ export default function PokerApp() {
           changed = true;
         }
 
-        if (changed) await handleHostingUpdate(newSchedule);
+        if (changed) await handleHostingUpdateRef.current(newSchedule);
         await saveState({ lastRun: new Date().toISOString() }, REBALANCE_KEY);
       } catch (e) {
         console.warn('hosting rebalance error:', e);
@@ -14316,7 +14322,7 @@ export default function PokerApp() {
 
     const timer = setTimeout(runRebalance, 5000);
     return () => clearTimeout(timer);
-  }, [isSuperAdmin, allSessions, hostingSchedule]);
+  }, [isSuperAdmin]); // רץ רק כשסטטוס הסופר אדמין משתנה — קורא מ-refs
 
   const handleUserSelect = async (name) => {
     // 👑 סופר אדמין - דורש סיסמה כדי להזדהות (אלא אם המכשיר הזה כבר נעול אליו)
