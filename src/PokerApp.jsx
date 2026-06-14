@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.90';
-const APP_BUILD_TIME = '14/06/2026 13:15';
-const APP_NOTES = '📊 סטטיסטיקת אירוח';
+const APP_VERSION = 'v2.33.91';
+const APP_BUILD_TIME = '14/06/2026 13:30';
+const APP_NOTES = '⚖️ כפתור איזון תור ידני לסופר אדמין';
 
 
 // ===== הרשאות מנהל =====
@@ -5719,9 +5719,11 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
 };
 
 // ===== סטטיסטיקת אירוח =====
-const HostingStats = ({ allSessions, hostingSchedule }) => {
+const HostingStats = ({ allSessions, hostingSchedule, isSuperAdmin, onUpdate }) => {
   const today = getTodayIsrael();
   const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const [rebalancing, setRebalancing] = useState(false);
+  const [rebalanceMsg, setRebalanceMsg] = useState('');
 
   const recentSessions = (allSessions || []).filter(s => s.date >= sixMonthsAgo && s.date < today);
   if (recentSessions.length === 0) return (
@@ -5759,11 +5761,83 @@ const HostingStats = ({ allSessions, hostingSchedule }) => {
     return { name: p, att, share, hosted, future, total, expected, diff };
   }).sort((a, b) => b.att - a.att);
 
+  // איזון ידני — רק לסופר אדמין
+  const handleRebalance = () => {
+    if (!onUpdate) return;
+    setRebalancing(true);
+    setRebalanceMsg('');
+    try {
+      const cutoffDate = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+      const playerAddresses = {};
+      for (const h of (hostingSchedule || [])) { if (h.host && h.address) playerAddresses[h.host] = h.address; }
+
+      const quotas = {};
+      for (const p of activePlayers) {
+        const share = (attendance[p] || 0) / totalAtt;
+        quotas[p] = Math.max(0, Math.round(share * n_total - (hostActual[p] || 0)));
+      }
+
+      const currentFutureCounts = { ...futureCounts };
+      const overHosts = new Set(
+        (hostingSchedule || [])
+          .filter(h => h.date > cutoffDate && h.host && !['אלון','אילון'].includes(h.host))
+          .map(h => h.host)
+          .filter(p => (currentFutureCounts[p] || 0) > (quotas[p] || 0) + 1)
+      );
+      const underHosts = activePlayers.filter(p =>
+        (currentFutureCounts[p] || 0) < (quotas[p] || 0) - 1 && playerAddresses[p]
+      );
+
+      if (overHosts.size === 0 || underHosts.length === 0) {
+        setRebalanceMsg('✅ הלוח מאוזן — אין צורך בשינויים');
+        setRebalancing(false);
+        return;
+      }
+
+      const newSchedule = (hostingSchedule || []).map(h => ({ ...h }));
+      let changes = 0;
+      for (const slot of newSchedule) {
+        if (slot.date <= cutoffDate || ['אלון','אילון'].includes(slot.host) || !overHosts.has(slot.host)) continue;
+        const replacement = underHosts.find(p => p !== slot.host && (currentFutureCounts[p] || 0) < (quotas[p] || 0));
+        if (!replacement) continue;
+        overHosts.delete(slot.host);
+        currentFutureCounts[slot.host] = (currentFutureCounts[slot.host] || 1) - 1;
+        slot.host = replacement;
+        slot.address = playerAddresses[replacement] || '';
+        currentFutureCounts[replacement] = (currentFutureCounts[replacement] || 0) + 1;
+        changes++;
+      }
+
+      if (changes > 0) {
+        onUpdate(newSchedule);
+        setRebalanceMsg(`✅ בוצעו ${changes} החלפות`);
+      } else {
+        setRebalanceMsg('✅ הלוח מאוזן — אין צורך בשינויים');
+      }
+    } catch (e) {
+      setRebalanceMsg('❌ שגיאה: ' + e.message);
+    }
+    setRebalancing(false);
+  };
+
   return (
     <div className="rounded-2xl border border-stone-800 bg-stone-950/60 overflow-hidden">
-      <div className="px-4 py-3 border-b border-stone-800 bg-stone-900/40">
-        <div className="text-sm font-bold text-emerald-300">📊 סטטיסטיקת אירוח</div>
-        <div className="text-xs text-stone-500 mt-0.5">בסיס: 6 חודשים אחורה | % נוכחות מול % אירוח</div>
+      <div className="px-4 py-3 border-b border-stone-800 bg-stone-900/40 flex items-center justify-between">
+        <div>
+          <div className="text-sm font-bold text-emerald-300">📊 סטטיסטיקת אירוח</div>
+          <div className="text-xs text-stone-500 mt-0.5">בסיס: 6 חודשים אחורה | % נוכחות מול % אירוח</div>
+        </div>
+        {isSuperAdmin && (
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={handleRebalance}
+              disabled={rebalancing}
+              className="text-xs px-3 py-1.5 rounded-lg bg-emerald-900/50 hover:bg-emerald-800/60 text-emerald-300 border border-emerald-700/40 font-bold transition disabled:opacity-50">
+              {rebalancing ? '⏳ מאזן...' : '⚖️ איזן תור'}
+            </button>
+            {rebalanceMsg && <div className="text-xs text-stone-400">{rebalanceMsg}</div>}
+          </div>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs" dir="rtl">
@@ -5813,7 +5887,7 @@ const HostingStats = ({ allSessions, hostingSchedule }) => {
 };
 
 // ===== טאב אירוחים עם בורר תצוגה =====
-const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, isAdmin, onUpdate, adminName, registration, onRegistrationUpdate }) => {
+const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, isAdmin, isSuperAdmin, onUpdate, adminName, registration, onRegistrationUpdate }) => {
   const [view, setView] = useState('upcoming'); // upcoming | history | stats
   
   return (
@@ -5858,7 +5932,7 @@ const HostingWrapper = ({ allSessions, hostingSchedule, players, sortedPlayers, 
             onUpdate={onUpdate} players={sortedPlayers} addedBy={adminName} defaultFilter="past" />
         </div>
       ) : (
-        <HostingStats allSessions={allSessions} hostingSchedule={hostingSchedule} />
+        <HostingStats allSessions={allSessions} hostingSchedule={hostingSchedule} isSuperAdmin={isSuperAdmin} onUpdate={onUpdate} />
       )}
     </div>
   );
@@ -15342,7 +15416,7 @@ export default function PokerApp() {
             {/* תוכן הסאב-טאב הנבחר */}
             {registrationSubTab === 'hosting' ? (
               <HostingWrapper allSessions={allSessions} hostingSchedule={hostingSchedule}
-                players={activePlayers} sortedPlayers={sortedActivePlayers} isAdmin={isAdmin}
+                players={activePlayers} sortedPlayers={sortedActivePlayers} isAdmin={isAdmin} isSuperAdmin={isSuperAdmin}
                 onUpdate={handleHostingUpdate} adminName={adminName}
                 registration={registration} onRegistrationUpdate={handleUpdateRegistration} />
             ) : (
