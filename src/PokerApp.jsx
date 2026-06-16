@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.91';
-const APP_BUILD_TIME = '14/06/2026 13:30';
-const APP_NOTES = '⚖️ כפתור איזון תור ידני לסופר אדמין';
+const APP_VERSION = 'v2.33.92';
+const APP_BUILD_TIME = '14/06/2026 14:30';
+const APP_NOTES = '🏠 תיקון מארח תמיד ראשון ברישום';
 
 
 // ===== הרשאות מנהל =====
@@ -4655,8 +4655,10 @@ const RegistrationTab = ({
   
   // 📋 רשימת רשומים מסודרת לפי סדר ההצטרפות
   const entries = registration?.entries || [];
-  const myEntry = entries.find(e => e.name === currentUser);
-  const myPosition = myEntry ? entries.indexOf(myEntry) + 1 : null;
+  // וודא שהמארח (isHost) תמיד מופיע ראשון
+  const sortedEntries = [...entries].sort((a, b) => (b.isHost ? 1 : 0) - (a.isHost ? 1 : 0));
+  const myEntry = sortedEntries.find(e => e.name === currentUser);
+  const myPosition = myEntry ? sortedEntries.indexOf(myEntry) + 1 : null;
   const myStatus = myPosition ? (myPosition <= MAX_SLOTS ? 'registered' : 'standby') : null;
   
   // 📌 רשימת שמות הברזל הממתינים (שטרם נכנסו לרשימה ולא סורבו)
@@ -5066,7 +5068,7 @@ const RegistrationTab = ({
         )}
         
         {/* רשומים רשמיים (1-11) */}
-        {entries.length === 0 ? (
+        {sortedEntries.length === 0 ? (
           <div className="p-6 text-center text-stone-500 text-sm">
             עדיין אין רשומים
           </div>
@@ -5087,7 +5089,7 @@ const RegistrationTab = ({
                 </div>
               </div>
             )}
-            {entries.slice(0, MAX_SLOTS - (!nextSession.host ? 1 : 0)).map((entry, idx) => {
+            {sortedEntries.slice(0, MAX_SLOTS - (!nextSession.host ? 1 : 0)).map((entry, idx) => {
               const position = idx + 1 + (!nextSession.host ? 1 : 0);
               const isMe = entry.name === currentUser;
               return (
@@ -5120,12 +5122,12 @@ const RegistrationTab = ({
             })}
             
             {/* סטנד ביי (12+) */}
-            {entries.length > MAX_SLOTS && (
+            {sortedEntries.length > MAX_SLOTS && (
               <>
                 <div className="px-4 py-2 bg-amber-950/20 border-y border-amber-900/40">
                   <div className="text-xs font-bold text-amber-400 tracking-widest">סטנד ביי</div>
                 </div>
-                {entries.slice(MAX_SLOTS).map((entry, idx) => {
+                {sortedEntries.slice(MAX_SLOTS).map((entry, idx) => {
                   const standbyPos = idx + 1;
                   const isMe = entry.name === currentUser;
                   return (
