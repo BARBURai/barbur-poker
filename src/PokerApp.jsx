@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.92';
-const APP_BUILD_TIME = '14/06/2026 14:30';
-const APP_NOTES = '🏠 תיקון מארח תמיד ראשון ברישום';
+const APP_VERSION = 'v2.33.93';
+const APP_BUILD_TIME = '14/06/2026 23:30';
+const APP_NOTES = '🏠 מארח תמיד ראשון — לפי שם או isHost';
 
 
 // ===== הרשאות מנהל =====
@@ -4655,8 +4655,13 @@ const RegistrationTab = ({
   
   // 📋 רשימת רשומים מסודרת לפי סדר ההצטרפות
   const entries = registration?.entries || [];
-  // וודא שהמארח (isHost) תמיד מופיע ראשון
-  const sortedEntries = [...entries].sort((a, b) => (b.isHost ? 1 : 0) - (a.isHost ? 1 : 0));
+  // וודא שהמארח תמיד ראשון — לפי isHost או לפי שם המארח
+  const hostName = nextSession?.host || '';
+  const sortedEntries = [...entries].sort((a, b) => {
+    const aIsHost = a.isHost || a.name === hostName;
+    const bIsHost = b.isHost || b.name === hostName;
+    return (bIsHost ? 1 : 0) - (aIsHost ? 1 : 0);
+  });
   const myEntry = sortedEntries.find(e => e.name === currentUser);
   const myPosition = myEntry ? sortedEntries.indexOf(myEntry) + 1 : null;
   const myStatus = myPosition ? (myPosition <= MAX_SLOTS ? 'registered' : 'standby') : null;
