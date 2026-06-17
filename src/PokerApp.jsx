@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.93';
-const APP_BUILD_TIME = '14/06/2026 23:30';
-const APP_NOTES = '🏠 מארח תמיד ראשון — לפי שם או isHost';
+const APP_VERSION = 'v2.33.94';
+const APP_BUILD_TIME = '14/06/2026 23:45';
+const APP_NOTES = '🏠 תיקון מארח כשהלוח השתנה באותו תאריך';
 
 
 // ===== הרשאות מנהל =====
@@ -4607,6 +4607,24 @@ const RegistrationTab = ({
       // 📌 איפוס רישום ברזל יחד עם איפוס המפגש
       if (onIronUpdate && (ironRegistration?.players?.length || ironRegistration?.refused?.length)) {
         onIronUpdate({ players: [], refused: [] });
+      }
+      return;
+    }
+
+    // 🔧 תיקון מארח: אותו תאריך אבל המארח השתנה (למשל אחרי עדכון לוח אירוחים)
+    // מוודא שהמארח הנכון מסומן isHost ונמצא במקום הראשון, בלי לאפס את שאר הרשומים
+    if (registration.sessionDate === nextSession.date && nextSession.host) {
+      const currentHostEntry = (registration.entries || []).find(e => e.isHost);
+      const hostMismatch = !currentHostEntry || currentHostEntry.name !== nextSession.host;
+      if (hostMismatch) {
+        // הסר isHost מכל הרשומים, הסר את המארח החדש אם קיים, הכנס אותו ראשון
+        let updatedEntries = (registration.entries || []).map(e => ({ ...e, isHost: false }));
+        updatedEntries = updatedEntries.filter(e => e.name !== nextSession.host);
+        updatedEntries = [
+          { name: nextSession.host, addedAt: new Date().toISOString(), isHost: true },
+          ...updatedEntries
+        ];
+        onUpdate({ ...registration, host: nextSession.host, entries: updatedEntries });
       }
     }
   }, [nextSession, registration, onUpdate, isSuperAdmin]);
