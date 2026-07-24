@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.94';
-const APP_BUILD_TIME = '14/06/2026 23:45';
-const APP_NOTES = '🏠 תיקון מארח כשהלוח השתנה באותו תאריך';
+const APP_VERSION = 'v2.33.98';
+const APP_BUILD_TIME = '20/07/2026 03:30';
+const APP_NOTES = '🔓 פתיחה/סגירה ידנית של רישום | 🗺️ Maps | 📷 תיקון גלריה';
 
 
 // ===== הרשאות מנהל =====
@@ -128,6 +128,7 @@ const GALLERY_STORAGE_KEY = 'poker_gallery_state_v1';
 const REGISTRATION_KEY = 'poker_next_session_registration_v1';
 // 🔒 הפעלת/כיבוי טאב הרישום (אדמין בלבד) - גלובלי לכולם
 const REGISTRATION_ENABLED_KEY = 'poker_registration_feature_enabled_v1';
+const REGISTRATION_OVERRIDE_KEY = 'poker_registration_override_v1'; // דריסה ידנית של סופר אדמין
 const RANDOM_TIME_KEY = 'poker_daily_random_time_v1';
 // 📌 רישום ברזל - שחקנים שמסומנים מראש להצטרף אוטומטית (סופר אדמין בלבד)
 const IRON_REGISTRATION_KEY = 'poker_iron_registration_v1';
@@ -4526,6 +4527,25 @@ const RegistrationTab = ({
   // nextSessionRef — מעודכן תמיד, בטוח לשימוש ב-handlers
   const nextSessionRef = React.useRef(null);
   React.useEffect(() => { nextSessionRef.current = nextSession; }, [nextSession]);
+
+  // 🔓 טעינת דריסה ידנית (סופר אדמין) + polling
+  const [manualOverride, setManualOverride] = React.useState(null);
+  React.useEffect(() => {
+    const checkOverride = () => {
+      loadState(REGISTRATION_OVERRIDE_KEY).then(data => {
+        const ns = nextSessionRef.current;
+        // הדריסה תקפה רק למפגש שהיא נשמרה עבורו
+        if (data && data.sessionDate && ns && data.sessionDate === ns.date) {
+          setManualOverride(data.open === true ? 'open' : (data.open === false ? 'closed' : null));
+        } else {
+          setManualOverride(null);
+        }
+      }).catch(() => setManualOverride(null));
+    };
+    checkOverride();
+    const interval = setInterval(checkOverride, 30000);
+    return () => clearInterval(interval);
+  }, []);
   
   // 🕐 חישוב מצב פתיחה: 
   // - הרשימה מתאפסת ב-10:00 בבוקר למחרת המפגש האחרון
@@ -4547,12 +4567,31 @@ const RegistrationTab = ({
     if (now > new Date(nextSession.date + 'T23:59:59')) {
       return { isOpen: false, opensAt: null, reason: 'המפגש הסתיים' };
     }
+
+    // 🔓 דריסה ידנית של סופר אדמין - גוברת על הלוגיקה האוטומטית
+    if (manualOverride === 'open') {
+      return { isOpen: true, opensAt: null, reason: null, isManual: true };
+    }
+    if (manualOverride === 'closed') {
+      return { isOpen: false, opensAt: null, reason: 'הרישום נסגר ידנית', isManual: true };
+    }
     
     // הרישום נפתח ביום אחרי המפגש הקודם - בשעה האקראית מ-Cloud Function
     let opensAt;
     if (lastSessionDate && lastSessionDate < nextSession.date) {
       if (randomOpenTime) {
-        opensAt = randomOpenTime;
+        // 🔒 בדיקה: השעה האקראית חייבת להיות אחרי המפגש האחרון
+        // (מונע פתיחה מוקדמת כשה-Cloud Function עוד לא עדכנה)
+        const lastSessionEnd = new Date(lastSessionDate + 'T23:59:59');
+        if (randomOpenTime > lastSessionEnd) {
+          opensAt = randomOpenTime;
+        } else {
+          // השעה השמורה ישנה - חשב ברירת מחדל
+          const lastDate = new Date(lastSessionDate + 'T00:00:00');
+          opensAt = new Date(lastDate);
+          opensAt.setDate(opensAt.getDate() + 1);
+          opensAt.setHours(12, 0, 0, 0);
+        }
       } else {
         const lastDate = new Date(lastSessionDate + 'T00:00:00');
         opensAt = new Date(lastDate);
@@ -4568,7 +4607,7 @@ const RegistrationTab = ({
     }
     
     return { isOpen: true, opensAt, reason: null };
-  }, [nextSession, lastSessionDate, randomOpenTime]);
+  }, [nextSession, lastSessionDate, randomOpenTime, manualOverride]);
   
   // 🔄 איפוס אוטומטי ב-11:55 ביום אחרי המפגש - רק סופר אדמין מבצע
   // (כדי למנוע race condition של משתמשים מרובים שמאפסים בו זמנית)
@@ -4852,13 +4891,13 @@ const RegistrationTab = ({
                     {nextSession.address}
                   </span>
                   <a
-                    href={`https://waze.com/ul?q=${encodeURIComponent(nextSession.address.split('(')[0].trim())}&navigate=yes`}
+                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nextSession.address.split('(')[0].trim())}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-md bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-600/40 hover:border-cyan-500 px-2 py-0.5 text-cyan-300 hover:text-cyan-200 transition text-[11px] font-bold"
-                    title="פתח ב-Waze"
+                    title="פתח במפות"
                   >
-                    🚗 Waze
+                    🗺️ Maps
                   </a>
                 </div>
               )}
@@ -5563,7 +5602,7 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
           const dateObj = new Date(h.date);
           const dayNum = dateObj.getDate();
           const monthShort = dateObj.toLocaleDateString('he-IL', { month: 'short' });
-          const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address.split('(')[0].trim())}&navigate=yes` : null;
+          const wazeUrl = h.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.address.split('(')[0].trim())}` : null;
           const isHolidayConflict = h.notes && h.notes.includes('לטיפול');
           return (
             <div key={h.date} className={`border-b border-stone-900 p-4 ${isFuture ? '' : 'opacity-60'} ${
@@ -5679,7 +5718,7 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
                           {wazeUrl && (
                             <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
                               className="flex-shrink-0 inline-flex items-center gap-1 rounded-md bg-cyan-600 hover:bg-cyan-500 px-2 py-0.5 text-[10px] font-bold text-white transition">
-                              Waze 🚗
+                              Maps 🗺️
                             </a>
                           )}
                         </div>
@@ -11611,7 +11650,7 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
           {upcoming.map((h, i) => {
             const date = new Date(h.date);
             const isFirst = i === 0;
-            const wazeUrl = h.address ? `https://waze.com/ul?q=${encodeURIComponent(h.address.split('(')[0].trim())}&navigate=yes` : null;
+            const wazeUrl = h.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.address.split('(')[0].trim())}` : null;
             return (
               <div key={h.date} className="min-w-full snap-center px-1">
                 <div className={`rounded-2xl border ${
@@ -11645,7 +11684,7 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
                       {wazeUrl && (
                         <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 rounded-md bg-cyan-600 hover:bg-cyan-500 px-2 py-0.5 text-[10px] font-bold text-white transition">
-                          Waze 🚗
+                          Maps 🗺️
                         </a>
                       )}
                     </div>
@@ -12015,7 +12054,7 @@ const GalleryUploadModal = ({ isOpen, onClose, currentUser, onUpload }) => {
     reader.readAsDataURL(selected);
   };
 
-  const compressImage = (file, maxWidth = 1200, quality = 0.82) => {
+  const compressImage = (file, maxWidth = 800, quality = 0.7) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -12058,7 +12097,15 @@ const GalleryUploadModal = ({ isOpen, onClose, currentUser, onUpload }) => {
     try {
       // דחיסה
       const compressed = await compressImage(file);
-      
+
+      // 🔒 בדיקת גודל — Firestore מגביל מסמך ל-1MB
+      const sizeKB = Math.round(compressed.length * 0.75 / 1024);
+      if (sizeKB > 400) {
+        setError(`התמונה גדולה מדי (${sizeKB}KB). נסה תמונה קטנה יותר.`);
+        setUploading(false);
+        return;
+      }
+
       const newImage = {
         id: `img_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         dataUrl: compressed,
@@ -12066,9 +12113,14 @@ const GalleryUploadModal = ({ isOpen, onClose, currentUser, onUpload }) => {
         uploadedBy: currentUser,
         createdAt: new Date().toISOString()
       };
-      
-      await onUpload(newImage);
-      
+
+      const result = await onUpload(newImage);
+      if (result === false) {
+        setError('השמירה נכשלה - ייתכן שהגלריה מלאה. מחק תמונות ישנות ונסה שוב.');
+        setUploading(false);
+        return;
+      }
+
       // איפוס
       setFile(null);
       setPreview(null);
@@ -12077,7 +12129,7 @@ const GalleryUploadModal = ({ isOpen, onClose, currentUser, onUpload }) => {
       onClose();
     } catch (e) {
       console.error('Upload error:', e);
-      setError('שגיאה בהעלאה. נסה שוב.');
+      setError('שגיאה בהעלאה: ' + (e.message || 'נסה שוב'));
       setUploading(false);
     }
   };
@@ -13076,6 +13128,8 @@ export default function PokerApp() {
   const [liveModalOpen, setLiveModalOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [adminName, setAdminName] = useState(null); // null = לא מחובר כמנהל
+  // 🔓 דריסה ידנית של רישום - פתיחה/סגירה (סופר אדמין)
+  const [regOverride, setRegOverride] = useState(null); // null | 'open' | 'closed'
   // 👑 רמת אדמין: 'super' (סופר אדמין) או 'admin' (אדמין רגיל) או null
   const [adminRole, setAdminRole] = useState(null);
   // ⚙️ הרשאות לאדמין רגיל - {liveSession: true, photoSession: true, ...}
@@ -14491,8 +14545,14 @@ export default function PokerApp() {
 
   const handleAddImage = async (newImage) => {
     const updated = [newImage, ...galleryImages]; // חדשים ראשונים
-    setGalleryImages(updated);
-    await persistGallery(updated, galleryLikes);
+    try {
+      await persistGallery(updated, galleryLikes);
+      setGalleryImages(updated);
+      return true;
+    } catch (e) {
+      console.error('Gallery save failed:', e);
+      return false; // השמירה נכשלה - לא מעדכנים state
+    }
   };
 
   const handleDeleteImage = async (id) => {
@@ -14635,6 +14695,45 @@ export default function PokerApp() {
     }
   };
   
+  const handleToggleRegistrationOverride = async () => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const upcoming = (hostingSchedule || [])
+      .filter(h => h.date >= todayStr)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    const next = upcoming[0];
+    if (!next) {
+      alert('⚠️ אין מפגש מתוכנן');
+      return;
+    }
+
+    // מחזוריות: null -> open -> closed -> null
+    let newState;
+    if (regOverride === 'open') newState = 'closed';
+    else if (regOverride === 'closed') newState = null;
+    else newState = 'open';
+
+    try {
+      if (newState === null) {
+        await saveState({ open: null, sessionDate: null, clearedAt: new Date().toISOString() }, REGISTRATION_OVERRIDE_KEY);
+        setRegOverride(null);
+        alert('↩️ חזרה למצב אוטומטי');
+      } else {
+        await saveState({
+          open: newState === 'open',
+          sessionDate: next.date,
+          setBy: adminName,
+          setAt: new Date().toISOString()
+        }, REGISTRATION_OVERRIDE_KEY);
+        setRegOverride(newState);
+        alert(newState === 'open'
+          ? `🔓 הרישום נפתח ידנית למפגש ${next.date}`
+          : `🔒 הרישום נסגר ידנית למפגש ${next.date}`);
+      }
+    } catch (e) {
+      alert('❌ שגיאה: ' + e.message);
+    }
+  };
+
   const handleManualSendNotification = async () => {
     // מחשבים את המפגש הבא מתוך לוח האירוחים
     const todayStr = new Date().toISOString().split('T')[0];
@@ -14969,6 +15068,23 @@ export default function PokerApp() {
   const isAdmin = impersonating ? impersonatedIsAdmin : !!adminName;
   // 👑 האם המשתמש הנוכחי הוא סופר אדמין?
   const isSuperAdmin = impersonating ? impersonatedIsSuper : (isAdmin && adminRole === 'super');
+
+  // 🔓 טעינת מצב הדריסה הידנית של הרישום (חייב להיות אחרי הגדרת isSuperAdmin)
+  useEffect(() => {
+    if (!isSuperAdmin) return;
+    loadState(REGISTRATION_OVERRIDE_KEY).then(data => {
+      const todayStr = new Date().toISOString().split('T')[0];
+      const upcoming = (hostingSchedule || [])
+        .filter(h => h.date >= todayStr)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const next = upcoming[0];
+      if (data && next && data.sessionDate === next.date) {
+        setRegOverride(data.open === true ? 'open' : (data.open === false ? 'closed' : null));
+      } else {
+        setRegOverride(null);
+      }
+    }).catch(() => setRegOverride(null));
+  }, [isSuperAdmin, hostingSchedule]);
   
   // 🔐 פונקציה מרכזית לבדיקת הרשאה לפיצ'ר
   // can('liveSession') -> true/false
@@ -16111,6 +16227,24 @@ export default function PokerApp() {
                 >
                   <span>🔄</span>
                   <span>אפס רישום</span>
+                </button>
+                <button
+                  onClick={() => { handleToggleRegistrationOverride(); }}
+                  className={`w-full rounded-lg px-3 py-2.5 text-sm font-bold border transition flex items-center justify-center gap-2 ${
+                    regOverride === 'open'
+                      ? 'bg-emerald-900/40 hover:bg-emerald-900/60 border-emerald-700 text-emerald-200'
+                      : regOverride === 'closed'
+                      ? 'bg-rose-900/40 hover:bg-rose-900/60 border-rose-700 text-rose-200'
+                      : 'bg-stone-800/60 hover:bg-stone-800 border-stone-700 text-stone-300'
+                  }`}
+                  title="דורס את הלוגיקה האוטומטית עד המפגש הבא"
+                >
+                  <span>{regOverride === 'open' ? '🔓' : regOverride === 'closed' ? '🔒' : '⚙️'}</span>
+                  <span>
+                    {regOverride === 'open' ? 'פתוח ידנית — לחץ לסגירה'
+                     : regOverride === 'closed' ? 'סגור ידנית — לחץ לאוטומטי'
+                     : 'פתח רישום ידנית'}
+                  </span>
                 </button>
                 <button
                   onClick={() => { handleManualSendNotification(); }}
