@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.33.98';
-const APP_BUILD_TIME = '20/07/2026 03:30';
-const APP_NOTES = '🔓 פתיחה/סגירה ידנית של רישום | 🗺️ Maps | 📷 תיקון גלריה';
+const APP_VERSION = 'v2.34.01';
+const APP_BUILD_TIME = '27/07/2026 16:30';
+const APP_NOTES = '🔒 גיבויים+דגלי בדיקה לסופר אדמין | 🗑️ איפוס אנליטיקה';
 
 
 // ===== הרשאות מנהל =====
@@ -45,7 +45,7 @@ const PERMISSIONS_REGISTRY = [
   { key: 'hostingEdit',       label: '📅 עריכת לוח אירוחים',                defaultEnabled: true,  superOnly: false },
   { key: 'quotesDelete',      label: '📜 מחיקת ציטוטים מהגלריה',            defaultEnabled: false, superOnly: false },
   { key: 'managePlayers',     label: '👥 ניהול משתמשים (טלפונים, הסתרה)',     defaultEnabled: false, superOnly: false },
-  { key: 'backupRestore',     label: '💾 גיבוי ושחזור נתונים',              defaultEnabled: false, superOnly: false },
+  { key: 'backupRestore',     label: '💾 גיבוי ושחזור נתונים',              defaultEnabled: false, superOnly: true },
   { key: 'deviceLocks',       label: '🔒 ניהול נעילות מכשירים',             defaultEnabled: false, superOnly: false },
   { key: 'impersonate',       label: '🎭 התחזות למשתמש אחר',                defaultEnabled: false, superOnly: false },
   { key: 'registrationToggle',label: '📝 הפעלת/כיבוי טאב הרישום',           defaultEnabled: false, superOnly: false },
@@ -529,6 +529,28 @@ const trackAction = (actionName) => {
   if (!analyticsBuffer) initAnalyticsBuffer();
   analyticsBuffer.actions[actionName] = (analyticsBuffer.actions[actionName] || 0) + 1;
   analyticsBuffer.lastSeenTime = new Date().toISOString();
+};
+
+// 🗑️ איפוס כל נתוני האנליטיקה - מוחק את כל המסמכים היומיים
+const resetAllAnalytics = async () => {
+  let deleted = 0;
+  const today = new Date();
+  for (let i = 0; i < 400; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const key = getAnalyticsDateKey(date);
+    const docKey = `${ANALYTICS_KEY_PREFIX}::${key}`;
+    try {
+      const data = await fbLoadState(docKey);
+      if (data) {
+        await fbSaveState(null, docKey);
+        deleted++;
+      }
+    } catch {
+      // ממשיכים גם אם יום בודד נכשל
+    }
+  }
+  return deleted;
 };
 
 // טעינת היסטוריה לתצוגת הדוח (וגם מחיקה אוטומטית של ישנים מעל 180 יום)
@@ -1874,6 +1896,23 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedUser, setExpandedUser] = useState(null);
+  const [resetting, setResetting] = useState(false);
+
+  // 🗑️ איפוס כל נתוני האנליטיקה
+  const handleResetAnalytics = async () => {
+    if (!confirm('⚠️ למחוק את כל נתוני האנליטיקה?\n\nכל ההיסטוריה תימחק לצמיתות והספירה תתחיל מאפס.')) return;
+    const confirmText = prompt('כדי לאשר מחיקת כל נתוני האנליטיקה, הקלד: אפס');
+    if (confirmText !== 'אפס') { alert('המחיקה בוטלה'); return; }
+    setResetting(true);
+    try {
+      const deleted = await resetAllAnalytics();
+      setHistory([]);
+      alert(`🗑️ נמחקו ${deleted} מסמכי אנליטיקה. הספירה תתחיל מחדש.`);
+    } catch (e) {
+      alert('❌ שגיאה במחיקה: ' + (e.message || 'נסה שוב'));
+    }
+    setResetting(false);
+  };
   
   useEffect(() => {
     if (!isOpen) return;
@@ -2350,7 +2389,16 @@ const AnalyticsModal = ({ isOpen, onClose, isSuperAdmin, activePlayers = [] }) =
           )}
         </div>
         
-        <div className="p-4 border-t border-stone-800">
+        <div className="p-4 border-t border-stone-800 space-y-2">
+          {isSuperAdmin && (
+            <button
+              onClick={handleResetAnalytics}
+              disabled={resetting}
+              className="w-full rounded-lg bg-rose-900/40 hover:bg-rose-900/60 border border-rose-800 px-4 py-2.5 text-rose-200 font-bold text-sm transition disabled:opacity-50"
+            >
+              {resetting ? '⏳ מוחק...' : '🗑️ אפס אנליטיקה'}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="w-full rounded-lg bg-stone-800 hover:bg-stone-700 px-4 py-2.5 text-stone-300 font-bold text-sm transition"
@@ -9716,8 +9764,8 @@ const LiveSessionModal = ({ isOpen, onClose, onSave, players, currentSeason, adm
                 </div>
               </div>
 
-              {/* 🧪 דגלי בדיקה */}
-              {participants.length > 0 && (
+              {/* 🧪 דגלי בדיקה - סופר אדמין בלבד */}
+              {participants.length > 0 && SUPER_ADMINS.includes(adminName) && (
                 <div className="space-y-2">
                   <div className={`rounded-xl border p-3 transition ${isTestEvening ? 'border-yellow-700/70 bg-yellow-950/30' : 'border-stone-800 bg-stone-900/30'}`}>
                     <label className="flex items-center gap-3 cursor-pointer">
@@ -14246,12 +14294,27 @@ export default function PokerApp() {
 
   // שחזור מגיבוי
   const handleRestoreBackup = async (backupItem) => {
+    // 🔒 הגנה נוספת - רק סופר אדמין (מעבר להרשאת can)
+    if (!isSuperAdmin) {
+      alert('⛔ רק סופר אדמין יכול לשחזר גיבוי');
+      return;
+    }
+
     if (!confirm(
       `⚠️ האם אתה בטוח שברצונך לשחזר את הנתונים?\n\n` +
       `תאריך הגיבוי: ${new Date(backupItem.timestamp).toLocaleString('he-IL')}\n\n` +
       `כל הנתונים הנוכחיים יוחלפו! ההמלצה היא קודם ליצור גיבוי ידני.`
     )) return;
-    
+
+    // 🔒 אישור שני - למנוע שחזור בטעות שדורס הכל
+    const confirmText = prompt(
+      `⚠️ אישור אחרון!\n\nשחזור ידרוס את כל הנתונים הנוכחיים ויחליף אותם בגיבוי מ-${new Date(backupItem.timestamp).toLocaleString('he-IL')}.\n\nכדי לאשר, הקלד: שחזר`
+    );
+    if (confirmText !== 'שחזר') {
+      alert('השחזור בוטל');
+      return;
+    }
+
     try {
       const snapshot = await loadState(backupItem.id);
       if (!snapshot) { alert('הגיבוי לא נמצא'); return; }
@@ -14280,7 +14343,19 @@ export default function PokerApp() {
         setGalleryLikes(snapshot.gallery.likes || {});
         await saveState(snapshot.gallery, GALLERY_STORAGE_KEY);
       }
-      
+
+      // 📝 תיעוד: מי שיחזר, מתי, ומאיזה גיבוי
+      try {
+        await saveState({
+          restoredBy: adminName,
+          restoredAt: new Date().toISOString(),
+          backupTimestamp: backupItem.timestamp,
+          backupId: backupItem.id,
+        }, 'poker_restore_log_v1');
+      } catch (logErr) {
+        console.warn('Restore log failed:', logErr);
+      }
+
       alert(`✓ הנתונים שוחזרו בהצלחה מהגיבוי של ${new Date(backupItem.timestamp).toLocaleDateString('he-IL')}`);
       setBackupsModalOpen(false);
     } catch (e) {
@@ -16188,7 +16263,7 @@ export default function PokerApp() {
               <span className="text-2xl">📋</span>
               <div>
                 <div className="text-lg font-extrabold text-rose-200">ניהול רישום</div>
-                <div className="text-xs text-stone-400">פעולות אדמין על מערכת הרישום</div>
+                <div className="text-xs text-stone-400">פעולות סופר אדמין על מערכת הרישום</div>
               </div>
             </div>
             
