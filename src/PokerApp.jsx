@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.34.01';
-const APP_BUILD_TIME = '27/07/2026 16:30';
-const APP_NOTES = '🔒 גיבויים+דגלי בדיקה לסופר אדמין | 🗑️ איפוס אנליטיקה';
+const APP_VERSION = 'v2.34.03';
+const APP_BUILD_TIME = '06/08/2026 23:00';
+const APP_NOTES = '🗺️ תיקון Maps - נ"צ מדויקים | 🛡️ הגנת נתונים';
 
 
 // ===== הרשאות מנהל =====
@@ -122,6 +122,39 @@ const ALL_QUOTES = QUOTES_DATA;
 
 // ===== אחסון משותף - Firebase Firestore =====
 const STORAGE_KEY = 'poker_group_state_v4';
+
+// 🗺️ טבלת נ"צ מדויקים לכתובות המארחים (אומתו ידנית ע"י רון).
+// פותר את בעיית Google Maps ששלח לעיר שגויה בחיפוש טקסט חופשי.
+// המפתח = הכתובת עד הסוגריים, מנוקה מרווחים. כתובת שלא כאן - נופלת לחיפוש טקסט.
+const HOST_COORDS = {
+  'הערבה 19, תל מונד': '32.2500944,34.9128509',
+  'הדרור 23, תל מונד': '32.2510656,34.9242802',
+  'דרור 23, תל מונד': '32.2510656,34.9242802',
+  'גפונוב 7, רמת גן': '32.0515099,34.8447823',
+  'יער בארי 27, תל מונד': '32.2531967,34.9256847',
+  'בת חן 9, תל מונד': '32.2475166,34.9129503',
+  'שמיר 11, הוד השרון': '32.1679131,34.9025984',
+  'הדוכיפת 78, תל מונד': '32.2514786,34.9211119',
+  'היהלום 9, תל מונד': '32.2493685,34.9095583',
+  'האנפה 47, תל מונד': '32.2493023,34.9212484',
+  'דוד זהבי 8, כפר סבא': '32.1850428,34.8922924',
+  'השחף 19, תל מונד': '32.2496695,34.9245800',
+  'אנגל 35, כפר סבא': '32.1963540,34.8967790',
+  'הקשת 9, כפר סבא': '32.1828193,34.9030607',
+  'הפרדס 37, תל מונד': '32.2549627,34.9226604',
+  'הפרדס 37': '32.2549627,34.9226604',
+  'הלילך 3, תל מונד': '32.2504000,34.9151100',
+};
+
+// בונה קישור Google Maps: נ"צ מדויק אם קיים בטבלה, אחרת חיפוש טקסט (fallback)
+const getMapsUrl = (address) => {
+  if (!address) return null;
+  const key = address.split('(')[0].trim();
+  const coords = HOST_COORDS[key];
+  const query = coords ? coords : key;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+};
+
 const QUOTES_STORAGE_KEY = 'poker_quotes_state_v1';
 const GALLERY_STORAGE_KEY = 'poker_gallery_state_v1';
 // 🆕 רישום למפגש הבא - מצב מסונכרן ב-Firebase
@@ -4939,7 +4972,7 @@ const RegistrationTab = ({
                     {nextSession.address}
                   </span>
                   <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(nextSession.address.split('(')[0].trim())}`}
+                    href={getMapsUrl(nextSession.address)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-md bg-cyan-600/20 hover:bg-cyan-600/40 border border-cyan-600/40 hover:border-cyan-500 px-2 py-0.5 text-cyan-300 hover:text-cyan-200 transition text-[11px] font-bold"
@@ -5650,7 +5683,7 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
           const dateObj = new Date(h.date);
           const dayNum = dateObj.getDate();
           const monthShort = dateObj.toLocaleDateString('he-IL', { month: 'short' });
-          const wazeUrl = h.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.address.split('(')[0].trim())}` : null;
+          const wazeUrl = h.address ? getMapsUrl(h.address) : null;
           const isHolidayConflict = h.notes && h.notes.includes('לטיפול');
           return (
             <div key={h.date} className={`border-b border-stone-900 p-4 ${isFuture ? '' : 'opacity-60'} ${
@@ -11698,7 +11731,7 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
           {upcoming.map((h, i) => {
             const date = new Date(h.date);
             const isFirst = i === 0;
-            const wazeUrl = h.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(h.address.split('(')[0].trim())}` : null;
+            const wazeUrl = h.address ? getMapsUrl(h.address) : null;
             return (
               <div key={h.date} className="min-w-full snap-center px-1">
                 <div className={`rounded-2xl border ${
@@ -13259,6 +13292,10 @@ export default function PokerApp() {
   // 🆕 כניסה אחרונה לכל משתמש {שם: timestamp ISO}
   const [lastLogins, setLastLogins] = useState({});
   const [loading, setLoading] = useState(true);
+  // 🛡️ דגל הגנה: נהיה true רק אחרי שהטעינה מ-Firestore הצליחה והחזירה מפגשים.
+  // כל עוד false - persistSessions/persistPhones מסרבים לכתוב, כדי למנוע דריסת
+  // Firestore בנתוני ברירת המחדל הישנים (שורש באג "הנתונים חוזרים ל-4 במאי")
+  const dataLoadedOkRef = React.useRef(false);
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState('dashboard');
   const [menuOpen, setMenuOpen] = useState(false); // תפריט המבורגר
@@ -13837,6 +13874,8 @@ export default function PokerApp() {
     (async () => {
       const saved = await loadState(STORAGE_KEY);
       if (saved?.sessions) {
+        // ✅ הטעינה הצליחה והחזירה מפגשים - מעכשיו מותר לכתוב ל-Firestore
+        dataLoadedOkRef.current = true;
         // 🆕 מאחד את הסשנים מהקובץ (היסטוריה) עם הסשנים השמורים ב-Firebase
         // אם יש כפילויות לפי תאריך+עונה - הגרסה מ-Firebase מנצחת (עדכונים)
         const fileSessionsKey = (s) => `${s.date}_${s.season || 2026}`;
@@ -14127,6 +14166,12 @@ export default function PokerApp() {
   }, [currentUser]);
 
   const persistSessions = async (sessions, players, hostingScheduleParam, phonesParam) => {
+    // 🛡️ הגנה קריטית: אל תכתוב ל-Firestore אם הטעינה הראשונית לא הצליחה.
+    // מונע דריסת הנתונים החיים בנתוני ברירת המחדל הישנים (עד 4 במאי) כשהרשת נכשלה.
+    if (!dataLoadedOkRef.current) {
+      console.warn('⚠️ persistSessions נחסם: הנתונים עדיין לא נטענו בהצלחה מ-Firestore');
+      return;
+    }
     setSyncing(true);
     await saveState({ 
       sessions, 
@@ -14139,6 +14184,11 @@ export default function PokerApp() {
 
   // 🆕 שמירת פרטי תשלום של שחקן
   const persistPhones = async (newPhones) => {
+    // 🛡️ אותה הגנה: persistPhones כותב allSessions ל-STORAGE_KEY
+    if (!dataLoadedOkRef.current) {
+      console.warn('⚠️ persistPhones נחסם: הנתונים עדיין לא נטענו בהצלחה מ-Firestore');
+      return;
+    }
     setPhones(newPhones);
     setSyncing(true);
     await saveState({ 
@@ -14964,6 +15014,8 @@ export default function PokerApp() {
       if (data.sessions) {
         setAllSessions(data.sessions);
         if (data.players) setPlayers(data.players);
+        // ✅ שחזור מקובץ מביא נתונים תקינים חיצוניים - מסמן שמותר לכתוב ושומר
+        dataLoadedOkRef.current = true;
         await persistSessions(data.sessions, data.players || players);
       }
     } catch (err) { alert('קובץ לא תקין'); }
