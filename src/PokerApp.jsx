@@ -14,9 +14,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { Trophy, Upload, Users, TrendingUp, Calendar, Plus, X, Check, AlertCircle, Loader2, Download, RefreshCw, Crown, Skull, Flame, Target, HelpCircle, Maximize2, Filter, LayoutDashboard, Table, BarChart3, History, ChevronDown, ChevronLeft, ChevronRight, Lock, LogOut, Quote, Heart, Search, Trash2, MessageSquare, Sparkles, Image as ImageIcon, Camera, UserPlus, UserMinus, Clock, Bell, ClipboardList, MapPin } from 'lucide-react';
 
 // 🔖 גרסה - מוצגת בתחתית האפליקציה
-const APP_VERSION = 'v2.34.03';
-const APP_BUILD_TIME = '06/08/2026 23:00';
-const APP_NOTES = '🗺️ תיקון Maps - נ"צ מדויקים | 🛡️ הגנת נתונים';
+const APP_VERSION = 'v2.34.04';
+const APP_BUILD_TIME = '06/08/2026 23:30';
+const APP_NOTES = '🗺️ Maps + 🚗 Waze - שני כפתורים עם נ"צ מדויק';
 
 
 // ===== הרשאות מנהל =====
@@ -153,6 +153,17 @@ const getMapsUrl = (address) => {
   const coords = HOST_COORDS[key];
   const query = coords ? coords : key;
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+};
+
+// בונה קישור Waze: נ"צ מדויק (ll=) אם קיים בטבלה, אחרת חיפוש טקסט (q=)
+const getWazeUrl = (address) => {
+  if (!address) return null;
+  const key = address.split('(')[0].trim();
+  const coords = HOST_COORDS[key];
+  if (coords) {
+    return `https://waze.com/ul?ll=${coords}&navigate=yes`;
+  }
+  return `https://waze.com/ul?q=${encodeURIComponent(key)}&navigate=yes`;
 };
 
 const QUOTES_STORAGE_KEY = 'poker_quotes_state_v1';
@@ -4980,6 +4991,15 @@ const RegistrationTab = ({
                   >
                     🗺️ Maps
                   </a>
+                  <a
+                    href={getWazeUrl(nextSession.address)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md bg-blue-600/20 hover:bg-blue-600/40 border border-blue-600/40 hover:border-blue-500 px-2 py-0.5 text-blue-300 hover:text-blue-200 transition text-[11px] font-bold"
+                    title="פתח ב-Waze"
+                  >
+                    🚗 Waze
+                  </a>
                 </div>
               )}
               {nextSession.notes && (
@@ -5683,7 +5703,8 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
           const dateObj = new Date(h.date);
           const dayNum = dateObj.getDate();
           const monthShort = dateObj.toLocaleDateString('he-IL', { month: 'short' });
-          const wazeUrl = h.address ? getMapsUrl(h.address) : null;
+          const mapsUrl = h.address ? getMapsUrl(h.address) : null;
+          const wazeUrl = h.address ? getWazeUrl(h.address) : null;
           const isHolidayConflict = h.notes && h.notes.includes('לטיפול');
           return (
             <div key={h.date} className={`border-b border-stone-900 p-4 ${isFuture ? '' : 'opacity-60'} ${
@@ -5796,10 +5817,16 @@ const HostingTab = ({ hostingSchedule, isAdmin, onUpdate, players, addedBy, defa
                       {h.address && (
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-xs text-stone-400 truncate">📍 {h.address}</span>
-                          {wazeUrl && (
-                            <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
+                          {mapsUrl && (
+                            <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
                               className="flex-shrink-0 inline-flex items-center gap-1 rounded-md bg-cyan-600 hover:bg-cyan-500 px-2 py-0.5 text-[10px] font-bold text-white transition">
                               Maps 🗺️
+                            </a>
+                          )}
+                          {wazeUrl && (
+                            <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
+                              className="flex-shrink-0 inline-flex items-center gap-1 rounded-md bg-blue-600 hover:bg-blue-500 px-2 py-0.5 text-[10px] font-bold text-white transition">
+                              Waze 🚗
                             </a>
                           )}
                         </div>
@@ -11731,7 +11758,8 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
           {upcoming.map((h, i) => {
             const date = new Date(h.date);
             const isFirst = i === 0;
-            const wazeUrl = h.address ? getMapsUrl(h.address) : null;
+            const mapsUrl = h.address ? getMapsUrl(h.address) : null;
+            const wazeUrl = h.address ? getWazeUrl(h.address) : null;
             return (
               <div key={h.date} className="min-w-full snap-center px-1">
                 <div className={`rounded-2xl border ${
@@ -11762,10 +11790,16 @@ const NextHostsCarouselCompact = ({ hostingSchedule, onSeeAll }) => {
                   {h.address && (
                     <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
                       <span className="text-xs text-stone-400">📍 {h.address}</span>
-                      {wazeUrl && (
-                        <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
+                      {mapsUrl && (
+                        <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
                           className="inline-flex items-center gap-1 rounded-md bg-cyan-600 hover:bg-cyan-500 px-2 py-0.5 text-[10px] font-bold text-white transition">
                           Maps 🗺️
+                        </a>
+                      )}
+                      {wazeUrl && (
+                        <a href={wazeUrl} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md bg-blue-600 hover:bg-blue-500 px-2 py-0.5 text-[10px] font-bold text-white transition">
+                          Waze 🚗
                         </a>
                       )}
                     </div>
